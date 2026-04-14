@@ -125,6 +125,18 @@ body {
   box-shadow: var(--card-shadow);
 }
 
+.card-stack {
+  margin-bottom: 14px;
+}
+
+.card-stack:last-child {
+  margin-bottom: 0;
+}
+
+.scene .container > .card-stack:first-child {
+  margin-top: 2px;
+}
+
 .scene.dark .panel {
   background: #272729;
   color: #fff;
@@ -271,6 +283,12 @@ body {
   padding: 14px 0 2px;
 }
 
+.timeline-more-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+
 .tl-time {
   width: 46px;
   flex-shrink: 0;
@@ -315,6 +333,49 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 8px;
+}
+
+.stats-chart-wrap {
+  margin-top: 10px;
+  background: #fafafc;
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+
+.scene.dark .stats-chart-wrap {
+  background: #2a2a2d;
+}
+
+#stats-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 6px;
+}
+
+.chart-legend {
+  margin-top: 8px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  line-height: 1.33;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.dot.feed {
+  background: #ff9f0a;
+}
+
+.dot.sleep {
+  background: #0a84ff;
 }
 
 .stat-card {

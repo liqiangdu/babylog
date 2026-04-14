@@ -31,74 +31,99 @@
 
       <section class="scene light">
         <div class="container">
-          <div class="section-title">宝宝信息</div>
-          <section class="panel">
-        <form id="profile-form" class="inline-form" onsubmit="return false">
-          <input type="text" id="baby-name" placeholder="宝宝昵称" />
-          <input type="date" id="baby-birth" />
-          <select id="baby-gender">
-            <option value="">性别</option>
-            <option value="boy">男宝宝</option>
-            <option value="girl">女宝宝</option>
-            <option value="other">未设置</option>
-          </select>
-          <input type="text" id="baby-blood" placeholder="血型(可选)" />
-          <button type="button" class="btn btn-primary" id="btn-save-profile">保存信息</button>
-        </form>
-        <div id="profile-summary" class="muted-line">尚未填写宝宝信息</div>
+          <section class="panel card-stack">
+            <div class="section-title">宝宝信息</div>
+            <form id="profile-form" class="inline-form" onsubmit="return false">
+              <input type="text" id="baby-name" placeholder="宝宝昵称" />
+              <input type="date" id="baby-birth" />
+              <select id="baby-gender">
+                <option value="">性别</option>
+                <option value="boy">男宝宝</option>
+                <option value="girl">女宝宝</option>
+                <option value="other">未设置</option>
+              </select>
+              <input type="text" id="baby-blood" placeholder="血型(可选)" />
+              <button type="button" class="btn btn-primary" id="btn-save-profile">保存信息</button>
+            </form>
+            <div id="profile-summary" class="muted-line">尚未填写宝宝信息</div>
           </section>
         </div>
       </section>
 
       <section class="scene dark">
         <div class="container">
-          <div class="section-title">数据统计</div>
-          <section class="panel">
-        <div class="toolbar">
-          <input type="date" id="stats-start" />
-          <input type="date" id="stats-end" />
-          <select id="stats-preset" aria-label="统计快捷范围">
-            <option value="custom">自定义范围</option>
-            <option value="7d">最近7天</option>
-            <option value="30d">最近30天</option>
-            <option value="today">今天</option>
-            <option value="all">全部</option>
-          </select>
-          <button type="button" class="text-btn" id="btn-apply-stats">应用范围</button>
-        </div>
-        <div id="stats-grid" class="stats-grid"></div>
+          <section class="panel card-stack">
+            <div class="section-title">数据统计</div>
+            <div class="toolbar">
+              <input type="date" id="stats-start" />
+              <input type="date" id="stats-end" />
+              <select id="stats-preset" aria-label="统计快捷范围">
+                <option value="custom">自定义范围</option>
+                <option value="7d">最近7天</option>
+                <option value="30d">最近30天</option>
+                <option value="today">今天</option>
+                <option value="all">全部</option>
+              </select>
+              <button type="button" class="text-btn" id="btn-apply-stats">应用范围</button>
+            </div>
+            <div class="toolbar">
+              <select id="stats-mode" aria-label="统计展示模式">
+                <option value="cards">卡片模式</option>
+                <option value="chart">图表模式</option>
+              </select>
+              <select id="chart-days" aria-label="图表天数">
+                <option value="7">最近7天趋势</option>
+                <option value="30">最近30天趋势</option>
+              </select>
+            </div>
+            <div id="stats-grid" class="stats-grid"></div>
+            <div id="stats-chart-wrap" class="stats-chart-wrap hidden">
+              <canvas id="stats-chart" width="900" height="320"></canvas>
+              <div class="chart-legend">
+                <span><i class="dot feed"></i> 喂奶量 (ml)</span>
+                <span><i class="dot sleep"></i> 睡眠时长 (分钟)</span>
+              </div>
+            </div>
           </section>
         </div>
       </section>
 
       <section class="scene light">
         <div class="container">
-          <div class="section-title">疫苗计划</div>
-          <section class="panel">
-        <div class="toolbar">
-          <button type="button" id="btn-build-vaccine" class="text-btn">生成接种计划</button>
-        </div>
-        <ul id="vaccine-list" class="timeline"></ul>
+          <section class="panel card-stack">
+            <div class="section-title">疫苗计划</div>
+            <div class="toolbar">
+              <button type="button" id="btn-build-vaccine" class="text-btn">生成接种计划</button>
+            </div>
+            <ul id="vaccine-list" class="timeline"></ul>
           </section>
         </div>
       </section>
 
       <section class="scene light">
         <div class="container">
-          <div class="section-title">快速记录</div>
-          <div id="category-grid" class="category-grid"></div>
+          <section class="panel card-stack">
+            <div class="section-title">快速记录</div>
+            <div id="category-grid" class="category-grid"></div>
+          </section>
 
-          <div class="section-title">时间轴</div>
-          <div class="toolbar">
-        <select id="filter-category" aria-label="按类型筛选"></select>
-        <button type="button" id="btn-seed" class="text-btn">生成测试数据</button>
-        <button type="button" id="btn-export" class="text-btn">导出 JSON</button>
-        <label class="text-btn" style="cursor: pointer">
-          导入
-          <input type="file" id="import-file" accept="application/json" class="hidden" />
-        </label>
-      </div>
-          <ul id="timeline" class="timeline" aria-live="polite"></ul>
+          <section class="panel card-stack">
+            <div class="section-title">时间轴</div>
+            <div class="toolbar">
+              <select id="filter-category" aria-label="按类型筛选"></select>
+              <input type="date" id="filter-day" aria-label="按日期筛选" />
+              <button type="button" id="btn-seed" class="text-btn">生成测试数据</button>
+              <button type="button" id="btn-export" class="text-btn">导出 JSON</button>
+              <label class="text-btn" style="cursor: pointer">
+                导入
+                <input type="file" id="import-file" accept="application/json" class="hidden" />
+              </label>
+            </div>
+            <ul id="timeline" class="timeline" aria-live="polite"></ul>
+            <div id="timeline-more-wrap" class="timeline-more-wrap hidden">
+              <button type="button" id="btn-more-timeline" class="text-btn">更多</button>
+            </div>
+          </section>
         </div>
       </section>
     </main>

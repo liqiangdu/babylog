@@ -14,6 +14,11 @@ let profile = { name: "", birthDate: "", gender: "", blood: "" };
 let vaccines = [];
 /** @type {{start: string, end: string, preset: string}} */
 let statsRange = { start: "", end: "", preset: "7d" };
+let statsMode = "cards";
+let chartDays = 7;
+let timelineVisibleCount = 20;
+const FEED_CHART_COLOR = "#ff9f0a";
+const SLEEP_CHART_COLOR = "#0a84ff";
 
 const CATEGORIES = [
   { id: "feeding", label: "喝奶", emoji: "🍼", fields: [
@@ -193,6 +198,14 @@ function daysBetween(from, to) {
   a.setHours(0, 0, 0, 0);
   b.setHours(0, 0, 0, 0);
   return Math.floor((b - a) / (24 * 60 * 60 * 1000));
+}
+
+function toLocalDateKey(input) {
+  const d = new Date(input);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function getAgeText() {
@@ -407,6 +420,7 @@ function saveProfileFromForm() {
 
 function renderStats() {
   const grid = document.getElementById("stats-grid");
+  const chartWrap = document.getElementById("stats-chart-wrap");
   const inRangeEntries = getEntriesByRange(statsRange.start, statsRange.end);
   const feedMl = inRangeEntries
     .filter((e) => e.categoryId === "feeding")
@@ -432,16 +446,102 @@ function renderStats() {
     { k: "总记录数", v: `${entries.length} 条` },
   ];
   grid.innerHTML = cards.map((c) => `<div class="stat-card"><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`).join("");
+  if (statsMode === "chart") {
+    grid.classList.add("hidden");
+    chartWrap.classList.remove("hidden");
+    renderTrendChart(chartDays);
+  } else {
+    chartWrap.classList.add("hidden");
+    grid.classList.remove("hidden");
+  }
+}
+
+function renderTrendChart(days) {
+  const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById("stats-chart"));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = canvas.clientWidth || 900;
+  const cssHeight = 320;
+  canvas.width = Math.floor(cssWidth * dpr);
+  canvas.height = Math.floor(cssHeight * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const points = buildTrendData(days);
+  const feedVals = points.map((p) => p.feed);
+  const sleepVals = points.map((p) => p.sleep);
+  const maxY = Math.max(10, ...feedVals, ...sleepVals);
+  const left = 38;
+  const right = 12;
+  const top = 16;
+  const bottom = 30;
+  const pw = cssWidth - left - right;
+  const ph = cssHeight - top - bottom;
+
+  ctx.strokeStyle = "rgba(128,128,128,0.25)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i += 1) {
+    const y = top + (ph / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(left + pw, y);
+    ctx.stroke();
+  }
+
+  const mapX = (i) => left + (pw * i) / Math.max(1, points.length - 1);
+  const mapY = (v) => top + ph - (v / maxY) * ph;
+  const drawSeries = (vals, color) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    vals.forEach((v, i) => {
+      const x = mapX(i);
+      const y = mapY(v);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  };
+  drawSeries(feedVals, FEED_CHART_COLOR);
+  drawSeries(sleepVals, SLEEP_CHART_COLOR);
+
+  ctx.fillStyle = "rgba(255,255,255,0.86)";
+  ctx.font = '12px "SF Pro Text", "Helvetica Neue", Arial';
+  points.forEach((p, i) => {
+    if (i % Math.ceil(points.length / 6) !== 0 && i !== points.length - 1) return;
+    ctx.fillText(p.label, mapX(i) - 10, cssHeight - 8);
+  });
+}
+
+function buildTrendData(days) {
+  const data = [];
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    const key = toLocalDateKey(d);
+    const label = `${d.getMonth() + 1}/${d.getDate()}`;
+    const dayEntries = entries.filter((e) => toLocalDateKey(e.at) === key);
+    const feed = dayEntries
+      .filter((e) => e.categoryId === "feeding")
+      .reduce((sum, e) => sum + (Number(e.fields?.amountMl) || 0), 0);
+    const sleep = dayEntries
+      .filter((e) => e.categoryId === "sleep")
+      .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
+    data.push({ label, feed, sleep });
+  }
+  return data;
 }
 
 function getEntriesByRange(start, end) {
-  if (!start || !end) return [...entries];
-  const s = new Date(`${start}T00:00:00`).getTime();
-  const e = new Date(`${end}T23:59:59`).getTime();
-  if (Number.isNaN(s) || Number.isNaN(e) || s > e) return [...entries];
+  if (!start && !end) return [...entries];
+  const s = start || "0000-01-01";
+  const e = end || "9999-12-31";
+  if (s > e) return [];
   return entries.filter((x) => {
-    const t = new Date(x.at).getTime();
-    return t >= s && t <= e;
+    const key = toLocalDateKey(x.at);
+    return key >= s && key <= e;
   });
 }
 
@@ -479,6 +579,10 @@ function syncStatsRangeInputs() {
 function applyCustomStatsRange() {
   const start = /** @type {HTMLInputElement} */ (document.getElementById("stats-start")).value;
   const end = /** @type {HTMLInputElement} */ (document.getElementById("stats-end")).value;
+  if (start && end && start > end) {
+    alert("开始日期不能晚于结束日期");
+    return;
+  }
   statsRange = { start, end, preset: "custom" };
   syncStatsRangeInputs();
   renderStats();
@@ -558,18 +662,23 @@ function renderVaccines() {
 
 function renderTimeline() {
   const filter = /** @type {HTMLSelectElement} */ (document.getElementById("filter-category")).value;
+  const day = /** @type {HTMLInputElement} */ (document.getElementById("filter-day")).value;
   const list = document.getElementById("timeline");
+  const moreWrap = document.getElementById("timeline-more-wrap");
   let data = filter ? entries.filter((e) => e.categoryId === filter) : [...entries];
+  if (day) data = data.filter((e) => toLocalDateKey(e.at) === day);
 
   if (data.length === 0) {
     list.innerHTML = `<li class="empty-state">暂无记录，点上方图标快速添加。</li>`;
+    moreWrap.classList.add("hidden");
     return;
   }
 
+  const visible = data.slice(0, timelineVisibleCount);
   /** @type {string|null} */
   let lastHeader = null;
   const frag = document.createDocumentFragment();
-  for (const e of data) {
+  for (const e of visible) {
     const header = formatDateHeader(e.at);
     if (header !== lastHeader) {
       lastHeader = header;
@@ -605,6 +714,8 @@ function renderTimeline() {
   }
   list.innerHTML = "";
   list.appendChild(frag);
+  if (visible.length < data.length) moreWrap.classList.remove("hidden");
+  else moreWrap.classList.add("hidden");
 }
 
 function render() {
@@ -745,7 +856,18 @@ function init() {
   syncStatsRangeInputs();
   render();
 
-  document.getElementById("filter-category").addEventListener("change", render);
+  document.getElementById("filter-category").addEventListener("change", () => {
+    timelineVisibleCount = 20;
+    renderTimeline();
+  });
+  document.getElementById("filter-day").addEventListener("change", () => {
+    timelineVisibleCount = 20;
+    renderTimeline();
+  });
+  document.getElementById("btn-more-timeline").addEventListener("click", () => {
+    timelineVisibleCount += 20;
+    renderTimeline();
+  });
   document.getElementById("btn-save-profile").addEventListener("click", saveProfileFromForm);
   document.getElementById("btn-build-vaccine").addEventListener("click", buildVaccinePlan);
   document.getElementById("stats-preset").addEventListener("change", (ev) => {
@@ -754,6 +876,17 @@ function init() {
     applyPresetRange(preset);
   });
   document.getElementById("btn-apply-stats").addEventListener("click", applyCustomStatsRange);
+  document.getElementById("stats-mode").addEventListener("change", (ev) => {
+    statsMode = /** @type {HTMLSelectElement} */ (ev.target).value;
+    renderStats();
+  });
+  document.getElementById("chart-days").addEventListener("change", (ev) => {
+    chartDays = Number(/** @type {HTMLSelectElement} */ (ev.target).value) || 7;
+    if (statsMode === "chart") renderTrendChart(chartDays);
+  });
+  window.addEventListener("resize", () => {
+    if (statsMode === "chart") renderTrendChart(chartDays);
+  });
   document.getElementById("btn-seed").addEventListener("click", generateSampleData);
   document.getElementById("btn-export").addEventListener("click", exportData);
   document.getElementById("import-file").addEventListener("change", (ev) => {
