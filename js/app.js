@@ -5,6 +5,8 @@
 const STORAGE_KEY = "babylog_entries_v1";
 const STORAGE_PROFILE_KEY = "babylog_profile_v1";
 const STORAGE_VACCINES_KEY = "babylog_vaccines_v1";
+const STORAGE_VACCINE_SETTINGS_KEY = "babylog_vaccine_settings_v1";
+const STORAGE_VACCINE_CUSTOM_TEMPLATES_KEY = "babylog_vaccine_custom_templates_v1";
 
 /** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string}>} */
 let entries = [];
@@ -12,6 +14,8 @@ let entries = [];
 let profile = { name: "", birthDate: "", gender: "", blood: "" };
 /** @type {Array<{id: string, name: string, dose: string, dueDate: string, status: "todo"|"done", doneAt: string}>} */
 let vaccines = [];
+let vaccineSettings = { region: "cn", reminderDays: 3, notificationsEnabled: false, notifiedMap: {} };
+let customVaccineTemplates = {};
 /** @type {{start: string, end: string, preset: string}} */
 let statsRange = { start: "", end: "", preset: "7d" };
 let statsMode = "cards";
@@ -20,6 +24,45 @@ const TREND_LINE_COLOR = "#0a84ff";
 let chartRangeMode = "follow";
 let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
+
+const VACCINE_TEMPLATES = {
+  cn: [
+    { name: "乙肝疫苗", dose: "第1针", day: 0 },
+    { name: "卡介苗", dose: "第1针", day: 0 },
+    { name: "乙肝疫苗", dose: "第2针", day: 30 },
+    { name: "脊灰灭活疫苗", dose: "第1针", day: 60 },
+    { name: "五联/百白破", dose: "第1针", day: 90 },
+    { name: "乙肝疫苗", dose: "第3针", day: 180 },
+    { name: "流脑A疫苗", dose: "第1针", day: 180 },
+    { name: "麻腮风疫苗", dose: "第1针", day: 240 },
+    { name: "乙脑减毒活疫苗", dose: "第1针", day: 240 },
+  ],
+  who: [
+    { name: "BCG", dose: "Birth", day: 0 },
+    { name: "HepB", dose: "Birth", day: 0 },
+    { name: "DTP-HepB-Hib", dose: "6周", day: 42 },
+    { name: "PCV", dose: "6周", day: 42 },
+    { name: "DTP-HepB-Hib", dose: "10周", day: 70 },
+    { name: "PCV", dose: "10周", day: 70 },
+    { name: "DTP-HepB-Hib", dose: "14周", day: 98 },
+    { name: "MR", dose: "9月龄", day: 270 },
+  ],
+  us: [
+    { name: "HepB", dose: "Dose 1", day: 0 },
+    { name: "HepB", dose: "Dose 2", day: 30 },
+    { name: "DTaP", dose: "Dose 1", day: 60 },
+    { name: "IPV", dose: "Dose 1", day: 60 },
+    { name: "Hib", dose: "Dose 1", day: 60 },
+    { name: "PCV13", dose: "Dose 1", day: 60 },
+    { name: "DTaP", dose: "Dose 2", day: 120 },
+    { name: "MMR", dose: "Dose 1", day: 365 },
+  ],
+};
+const DEFAULT_VACCINE_TEMPLATE_LABELS = {
+  cn: "中国大陆计划",
+  who: "WHO扩展计划",
+  us: "美国CDC简版",
+};
 
 const CATEGORIES = [
   { id: "feeding", label: "喝奶", emoji: "🍼", fields: [
@@ -168,6 +211,49 @@ function loadVaccines() {
 
 function saveVaccines() {
   localStorage.setItem(STORAGE_VACCINES_KEY, JSON.stringify(vaccines));
+}
+
+function loadVaccineSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_VACCINE_SETTINGS_KEY);
+    const data = raw ? JSON.parse(raw) : {};
+    vaccineSettings = {
+      region: data?.region || "cn",
+      reminderDays: Number(data?.reminderDays ?? 3),
+      notificationsEnabled: Boolean(data?.notificationsEnabled),
+      notifiedMap: data?.notifiedMap && typeof data.notifiedMap === "object" ? data.notifiedMap : {},
+    };
+  } catch {
+    vaccineSettings = { region: "cn", reminderDays: 3, notificationsEnabled: false, notifiedMap: {} };
+  }
+}
+
+function saveVaccineSettings() {
+  localStorage.setItem(STORAGE_VACCINE_SETTINGS_KEY, JSON.stringify(vaccineSettings));
+}
+
+function loadCustomVaccineTemplates() {
+  try {
+    const raw = localStorage.getItem(STORAGE_VACCINE_CUSTOM_TEMPLATES_KEY);
+    const data = raw ? JSON.parse(raw) : {};
+    customVaccineTemplates = data && typeof data === "object" ? data : {};
+  } catch {
+    customVaccineTemplates = {};
+  }
+}
+
+function saveCustomVaccineTemplates() {
+  localStorage.setItem(STORAGE_VACCINE_CUSTOM_TEMPLATES_KEY, JSON.stringify(customVaccineTemplates));
+}
+
+function getAllVaccineTemplates() {
+  const merged = {};
+  for (const key of Object.keys(VACCINE_TEMPLATES)) merged[key] = VACCINE_TEMPLATES[key];
+  for (const key of Object.keys(customVaccineTemplates)) {
+    const tpl = customVaccineTemplates[key];
+    if (tpl && Array.isArray(tpl.items)) merged[key] = tpl.items;
+  }
+  return merged;
 }
 
 function getCategory(id) {
@@ -725,17 +811,8 @@ function buildVaccinePlan() {
   if (!shouldOverwrite) return;
 
   const base = new Date(profile.birthDate);
-  const template = [
-    { name: "乙肝疫苗", dose: "第1针", day: 0 },
-    { name: "卡介苗", dose: "第1针", day: 0 },
-    { name: "脊灰灭活疫苗", dose: "第1针", day: 60 },
-    { name: "五联/百白破", dose: "第1针", day: 90 },
-    { name: "乙肝疫苗", dose: "第2针", day: 30 },
-    { name: "乙肝疫苗", dose: "第3针", day: 180 },
-    { name: "麻腮风疫苗", dose: "第1针", day: 240 },
-    { name: "流脑A疫苗", dose: "第1针", day: 180 },
-    { name: "乙脑减毒活疫苗", dose: "第1针", day: 240 },
-  ];
+  const allTemplates = getAllVaccineTemplates();
+  const template = allTemplates[vaccineSettings.region] || allTemplates.cn;
   vaccines = template.map((v) => {
     const due = new Date(base);
     due.setDate(base.getDate() + v.day);
@@ -750,6 +827,174 @@ function buildVaccinePlan() {
   }).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   saveVaccines();
   render();
+}
+
+function getVaccineReminderState(v) {
+  if (v.status === "done") return { cls: "", text: "已完成", daysLeft: null };
+  const todayKey = toLocalDateKey(new Date());
+  const daysLeft = daysBetween(todayKey, v.dueDate);
+  if (daysLeft < 0) return { cls: "danger", text: `逾期 ${Math.abs(daysLeft)} 天`, daysLeft };
+  if (daysLeft <= vaccineSettings.reminderDays) return { cls: "warn", text: `${daysLeft} 天后到期`, daysLeft };
+  return { cls: "", text: `${daysLeft} 天后`, daysLeft };
+}
+
+function checkVaccineReminders(showToast) {
+  const summary = document.getElementById("vaccine-reminder-summary");
+  const dueItems = vaccines.filter((v) => v.status !== "done").filter((v) => {
+    const state = getVaccineReminderState(v);
+    return typeof state.daysLeft === "number" && state.daysLeft <= vaccineSettings.reminderDays;
+  });
+  if (summary) {
+    summary.textContent = dueItems.length
+      ? `提醒：${dueItems.length} 项接种在提醒范围内（提前 ${vaccineSettings.reminderDays} 天）`
+      : "当前无接种提醒";
+  }
+
+  if (vaccineSettings.notificationsEnabled && "Notification" in window && Notification.permission === "granted") {
+    const today = toLocalDateKey(new Date());
+    for (const item of dueItems) {
+      const key = `${item.id}_${today}`;
+      if (vaccineSettings.notifiedMap[key]) continue;
+      const state = getVaccineReminderState(item);
+      new Notification("BabyLog 疫苗提醒", {
+        body: `${item.name} ${item.dose} · ${state.text}`,
+      });
+      vaccineSettings.notifiedMap[key] = true;
+    }
+    saveVaccineSettings();
+  }
+
+  if (showToast) alert(dueItems.length ? `发现 ${dueItems.length} 条疫苗提醒` : "当前没有需要提醒的疫苗");
+}
+
+function syncVaccineSettingControls() {
+  const regionEl = /** @type {HTMLSelectElement} */ (document.getElementById("vaccine-region"));
+  const reminderEl = /** @type {HTMLSelectElement} */ (document.getElementById("vaccine-reminder-days"));
+  if (regionEl) regionEl.value = vaccineSettings.region;
+  if (reminderEl) reminderEl.value = String(vaccineSettings.reminderDays);
+}
+
+function populateVaccineRegionOptions() {
+  const sel = /** @type {HTMLSelectElement} */ (document.getElementById("vaccine-region"));
+  if (!sel) return;
+  sel.innerHTML = "";
+  for (const id of Object.keys(VACCINE_TEMPLATES)) {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = DEFAULT_VACCINE_TEMPLATE_LABELS[id] || id;
+    sel.appendChild(opt);
+  }
+  for (const id of Object.keys(customVaccineTemplates)) {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = `自定义 · ${customVaccineTemplates[id].name || id}`;
+    sel.appendChild(opt);
+  }
+  if (!sel.querySelector(`option[value="${vaccineSettings.region}"]`)) {
+    vaccineSettings.region = "cn";
+    saveVaccineSettings();
+  }
+  sel.value = vaccineSettings.region;
+}
+
+function serializeTemplateItems(items) {
+  return items.map((x) => `${x.name}|${x.dose}|${x.day}`).join("\n");
+}
+
+function parseTemplateLines(text) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name, dose, dayRaw] = line.split("|").map((x) => (x || "").trim());
+      const day = Number(dayRaw);
+      return { name, dose, day: Number.isFinite(day) ? day : NaN };
+    })
+    .filter((x) => x.name && x.dose && Number.isFinite(x.day));
+}
+
+function getCurrentTemplateMeta() {
+  const region = vaccineSettings.region;
+  if (customVaccineTemplates[region]) {
+    return { id: region, name: customVaccineTemplates[region].name, items: customVaccineTemplates[region].items, isCustom: true };
+  }
+  return {
+    id: region,
+    name: DEFAULT_VACCINE_TEMPLATE_LABELS[region] || region,
+    items: VACCINE_TEMPLATES[region] || [],
+    isCustom: false,
+  };
+}
+
+function loadCurrentTemplateToEditor() {
+  const meta = getCurrentTemplateMeta();
+  const nameEl = /** @type {HTMLInputElement} */ (document.getElementById("vaccine-template-name"));
+  const linesEl = /** @type {HTMLTextAreaElement} */ (document.getElementById("vaccine-template-lines"));
+  nameEl.value = meta.name || "";
+  linesEl.value = serializeTemplateItems(meta.items || []);
+}
+
+function toggleVaccineTemplateEditor() {
+  const box = document.getElementById("vaccine-template-editor");
+  box.classList.toggle("hidden");
+  if (!box.classList.contains("hidden")) loadCurrentTemplateToEditor();
+}
+
+function saveCustomTemplateFromEditor() {
+  const name = /** @type {HTMLInputElement} */ (document.getElementById("vaccine-template-name")).value.trim();
+  const lines = /** @type {HTMLTextAreaElement} */ (document.getElementById("vaccine-template-lines")).value;
+  const items = parseTemplateLines(lines);
+  if (!name) {
+    alert("请填写模板名称");
+    return;
+  }
+  if (items.length === 0) {
+    alert("请至少填写一条有效模板：疫苗名|剂次|天数");
+    return;
+  }
+  const current = getCurrentTemplateMeta();
+  const key = current.isCustom ? current.id : `custom_${Date.now()}`;
+  customVaccineTemplates[key] = { name, items };
+  vaccineSettings.region = key;
+  saveCustomVaccineTemplates();
+  saveVaccineSettings();
+  populateVaccineRegionOptions();
+  syncVaccineSettingControls();
+  alert("模板已保存");
+}
+
+function deleteCurrentCustomTemplate() {
+  const current = getCurrentTemplateMeta();
+  if (!current.isCustom) {
+    alert("当前是系统模板，不能删除");
+    return;
+  }
+  const ok = confirm(`确定删除自定义模板“${current.name}”？`);
+  if (!ok) return;
+  delete customVaccineTemplates[current.id];
+  vaccineSettings.region = "cn";
+  saveCustomVaccineTemplates();
+  saveVaccineSettings();
+  populateVaccineRegionOptions();
+  syncVaccineSettingControls();
+  loadCurrentTemplateToEditor();
+}
+
+async function enableVaccineNotification() {
+  if (!("Notification" in window)) {
+    alert("当前浏览器不支持通知");
+    return;
+  }
+  const permission = await Notification.requestPermission();
+  if (permission === "granted") {
+    vaccineSettings.notificationsEnabled = true;
+    saveVaccineSettings();
+    alert("通知已启用");
+    checkVaccineReminders(false);
+  } else {
+    alert("通知权限未授予");
+  }
 }
 
 function toggleVaccineDone(id) {
@@ -773,11 +1018,12 @@ function renderVaccines() {
   for (const v of vaccines) {
     const li = document.createElement("li");
     li.className = "vaccine-row";
-    const dueTag = v.dueDate < today && v.status !== "done" ? "（已到期）" : "";
+    const state = getVaccineReminderState(v);
+    const badge = state.text ? `<span class="vaccine-badge ${state.cls}">${state.text}</span>` : "";
     li.innerHTML = `
       <div class="tl-body">
-        <div class="tl-label">${v.name} · ${v.dose}</div>
-        <div class="tl-meta">计划日期: ${v.dueDate} ${dueTag} ${v.doneAt ? `· 完成: ${v.doneAt}` : ""}</div>
+        <div class="tl-label">${v.name} · ${v.dose} ${badge}</div>
+        <div class="tl-meta">计划日期: ${v.dueDate} ${v.doneAt ? `· 完成: ${v.doneAt}` : ""}</div>
       </div>
       <div class="tl-actions">
         <button type="button" class="icon-btn" data-vdone>${v.status === "done" ? "↺" : "✓"}</button>
@@ -786,6 +1032,7 @@ function renderVaccines() {
     li.querySelector("[data-vdone]").addEventListener("click", () => toggleVaccineDone(v.id));
     list.appendChild(li);
   }
+  checkVaccineReminders(false);
 }
 
 function renderTimeline() {
@@ -992,9 +1239,13 @@ function init() {
   load();
   loadProfile();
   loadVaccines();
+  loadVaccineSettings();
+  loadCustomVaccineTemplates();
   renderCategories();
   populateFilter();
   populateChartMetricOptions();
+  populateVaccineRegionOptions();
+  syncVaccineSettingControls();
   applyPresetRange("7d");
   syncStatsRangeInputs();
   render();
@@ -1013,6 +1264,23 @@ function init() {
   });
   document.getElementById("btn-save-profile").addEventListener("click", saveProfileFromForm);
   document.getElementById("btn-build-vaccine").addEventListener("click", buildVaccinePlan);
+  document.getElementById("vaccine-region").addEventListener("change", (ev) => {
+    vaccineSettings.region = /** @type {HTMLSelectElement} */ (ev.target).value;
+    saveVaccineSettings();
+    const editor = document.getElementById("vaccine-template-editor");
+    if (!editor.classList.contains("hidden")) loadCurrentTemplateToEditor();
+  });
+  document.getElementById("vaccine-reminder-days").addEventListener("change", (ev) => {
+    vaccineSettings.reminderDays = Number(/** @type {HTMLSelectElement} */ (ev.target).value) || 0;
+    saveVaccineSettings();
+    renderVaccines();
+  });
+  document.getElementById("btn-check-vaccine-reminder").addEventListener("click", () => checkVaccineReminders(true));
+  document.getElementById("btn-enable-vaccine-notice").addEventListener("click", enableVaccineNotification);
+  document.getElementById("btn-toggle-vaccine-editor").addEventListener("click", toggleVaccineTemplateEditor);
+  document.getElementById("btn-load-vaccine-template").addEventListener("click", loadCurrentTemplateToEditor);
+  document.getElementById("btn-save-vaccine-template").addEventListener("click", saveCustomTemplateFromEditor);
+  document.getElementById("btn-delete-vaccine-template").addEventListener("click", deleteCurrentCustomTemplate);
   document.getElementById("stats-preset").addEventListener("change", (ev) => {
     const preset = /** @type {HTMLSelectElement} */ (ev.target).value;
     if (preset === "custom") return;

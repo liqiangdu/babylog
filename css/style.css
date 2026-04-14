@@ -315,6 +315,36 @@ body {
   color: rgba(0, 0, 0, 0.8);
 }
 
+.vaccine-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.4;
+  background: rgba(10, 132, 255, 0.16);
+  color: #0a84ff;
+}
+
+.vaccine-badge.warn {
+  background: rgba(255, 159, 10, 0.2);
+  color: #ff9f0a;
+}
+
+.vaccine-badge.danger {
+  background: rgba(255, 69, 58, 0.2);
+  color: #ff453a;
+}
+
+#vaccine-template-editor {
+  margin-top: 10px;
+  background: rgba(250, 250, 252, 0.7);
+}
+
+.scene.dark #vaccine-template-editor {
+  background: rgba(42, 42, 45, 0.8);
+}
+
 .tl-actions {
   margin-left: auto;
 }

@@ -96,8 +96,38 @@
           <section class="panel card-stack">
             <div class="section-title">疫苗计划</div>
             <div class="toolbar">
+              <select id="vaccine-region" aria-label="疫苗地区模板">
+                <option value="cn">中国大陆计划</option>
+                <option value="who">WHO扩展计划</option>
+                <option value="us">美国CDC简版</option>
+              </select>
+              <select id="vaccine-reminder-days" aria-label="提前提醒天数">
+                <option value="0">当天提醒</option>
+                <option value="1">提前1天</option>
+                <option value="3">提前3天</option>
+                <option value="7">提前7天</option>
+              </select>
               <button type="button" id="btn-build-vaccine" class="text-btn">生成接种计划</button>
+              <button type="button" id="btn-check-vaccine-reminder" class="text-btn">检查提醒</button>
+              <button type="button" id="btn-enable-vaccine-notice" class="text-btn">启用通知</button>
+              <button type="button" id="btn-toggle-vaccine-editor" class="text-btn">编辑模板</button>
             </div>
+            <div id="vaccine-template-editor" class="panel hidden">
+              <div class="section-title">自定义模板编辑</div>
+              <div class="toolbar">
+                <input type="text" id="vaccine-template-name" placeholder="模板名称（如 上海儿童接种）" />
+              </div>
+              <div class="form-row">
+                <label for="vaccine-template-lines">条目（每行：疫苗名|剂次|天数）</label>
+                <textarea id="vaccine-template-lines" placeholder="乙肝疫苗|第1针|0"></textarea>
+              </div>
+              <div class="toolbar">
+                <button type="button" id="btn-load-vaccine-template" class="text-btn">载入当前模板</button>
+                <button type="button" id="btn-save-vaccine-template" class="text-btn">保存模板</button>
+                <button type="button" id="btn-delete-vaccine-template" class="text-btn">删除当前自定义</button>
+              </div>
+            </div>
+            <div id="vaccine-reminder-summary" class="muted-line"></div>
             <ul id="vaccine-list" class="timeline"></ul>
           </section>
         </div>
