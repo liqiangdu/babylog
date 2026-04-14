@@ -118,10 +118,21 @@
                 <input type="text" id="vaccine-template-name" placeholder="模板名称（如 上海儿童接种）" />
               </div>
               <div class="form-row">
-                <label for="vaccine-template-lines">条目（每行：疫苗名|剂次|天数）</label>
-                <textarea id="vaccine-template-lines" placeholder="乙肝疫苗|第1针|0"></textarea>
+                <label>条目（表格化编辑）</label>
+                <table id="vaccine-template-table" class="vaccine-table">
+                  <thead>
+                    <tr>
+                      <th>疫苗名</th>
+                      <th>剂次</th>
+                      <th>天数</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="vaccine-template-tbody"></tbody>
+                </table>
               </div>
               <div class="toolbar">
+                <button type="button" id="btn-add-vaccine-row" class="text-btn">新增一行</button>
                 <button type="button" id="btn-load-vaccine-template" class="text-btn">载入当前模板</button>
                 <button type="button" id="btn-save-vaccine-template" class="text-btn">保存模板</button>
                 <button type="button" id="btn-delete-vaccine-template" class="text-btn">删除当前自定义</button>
@@ -145,7 +156,6 @@
             <div class="toolbar">
               <select id="filter-category" aria-label="按类型筛选"></select>
               <input type="date" id="filter-day" aria-label="按日期筛选" />
-              <button type="button" id="btn-seed" class="text-btn">生成测试数据</button>
               <button type="button" id="btn-export" class="text-btn">导出 JSON</button>
               <label class="text-btn" style="cursor: pointer">
                 导入

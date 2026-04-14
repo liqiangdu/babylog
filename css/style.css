@@ -345,6 +345,34 @@ body {
   background: rgba(42, 42, 45, 0.8);
 }
 
+.vaccine-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.vaccine-table th,
+.vaccine-table td {
+  padding: 6px;
+  text-align: left;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.scene.dark .vaccine-table th,
+.scene.dark .vaccine-table td {
+  border-bottom-color: rgba(255, 255, 255, 0.18);
+}
+
+.vaccine-table input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #fafafc;
+  font: inherit;
+}
+
 .tl-actions {
   margin-left: auto;
 }

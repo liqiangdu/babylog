@@ -914,6 +914,78 @@ function parseTemplateLines(text) {
     .filter((x) => x.name && x.dose && Number.isFinite(x.day));
 }
 
+function getTemplateRowsFromTable() {
+  const tbody = document.getElementById("vaccine-template-tbody");
+  const rows = Array.from(tbody.querySelectorAll("tr"));
+  return rows
+    .map((tr) => {
+      const name = tr.querySelector('[data-k="name"]')?.value?.trim() || "";
+      const dose = tr.querySelector('[data-k="dose"]')?.value?.trim() || "";
+      const dayRaw = tr.querySelector('[data-k="day"]')?.value?.trim() || "";
+      const day = Number(dayRaw);
+      return { name, dose, day };
+    })
+    .filter((x) => x.name && x.dose && Number.isFinite(x.day));
+}
+
+function appendTemplateRow(item = { name: "", dose: "", day: 0 }) {
+  const tbody = document.getElementById("vaccine-template-tbody");
+  const tr = document.createElement("tr");
+  const tdName = document.createElement("td");
+  const inName = document.createElement("input");
+  inName.setAttribute("data-k", "name");
+  inName.type = "text";
+  inName.placeholder = "如 乙肝疫苗";
+  inName.value = String(item.name ?? "");
+  tdName.appendChild(inName);
+
+  const tdDose = document.createElement("td");
+  const inDose = document.createElement("input");
+  inDose.setAttribute("data-k", "dose");
+  inDose.type = "text";
+  inDose.placeholder = "如 第1针";
+  inDose.value = String(item.dose ?? "");
+  tdDose.appendChild(inDose);
+
+  const tdDay = document.createElement("td");
+  const inDay = document.createElement("input");
+  inDay.setAttribute("data-k", "day");
+  inDay.type = "number";
+  inDay.placeholder = "0";
+  inDay.value = String(item.day ?? 0);
+  tdDay.appendChild(inDay);
+
+  const tdOp = document.createElement("td");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "text-btn";
+  btn.setAttribute("data-del-row", "1");
+  btn.textContent = "删除";
+  tdOp.appendChild(btn);
+
+  tr.appendChild(tdName);
+  tr.appendChild(tdDose);
+  tr.appendChild(tdDay);
+  tr.appendChild(tdOp);
+  btn.addEventListener("click", () => {
+    const ok = confirm("确定删除这一行模板条目？");
+    if (!ok) return;
+    tr.remove();
+    if (!tbody.querySelector("tr")) appendTemplateRow();
+  });
+  tbody.appendChild(tr);
+}
+
+function renderTemplateTable(items) {
+  const tbody = document.getElementById("vaccine-template-tbody");
+  tbody.innerHTML = "";
+  if (!items || items.length === 0) {
+    appendTemplateRow();
+    return;
+  }
+  for (const item of items) appendTemplateRow(item);
+}
+
 function getCurrentTemplateMeta() {
   const region = vaccineSettings.region;
   if (customVaccineTemplates[region]) {
@@ -930,9 +1002,8 @@ function getCurrentTemplateMeta() {
 function loadCurrentTemplateToEditor() {
   const meta = getCurrentTemplateMeta();
   const nameEl = /** @type {HTMLInputElement} */ (document.getElementById("vaccine-template-name"));
-  const linesEl = /** @type {HTMLTextAreaElement} */ (document.getElementById("vaccine-template-lines"));
   nameEl.value = meta.name || "";
-  linesEl.value = serializeTemplateItems(meta.items || []);
+  renderTemplateTable(meta.items || []);
 }
 
 function toggleVaccineTemplateEditor() {
@@ -943,14 +1014,13 @@ function toggleVaccineTemplateEditor() {
 
 function saveCustomTemplateFromEditor() {
   const name = /** @type {HTMLInputElement} */ (document.getElementById("vaccine-template-name")).value.trim();
-  const lines = /** @type {HTMLTextAreaElement} */ (document.getElementById("vaccine-template-lines")).value;
-  const items = parseTemplateLines(lines);
+  const items = getTemplateRowsFromTable();
   if (!name) {
     alert("请填写模板名称");
     return;
   }
   if (items.length === 0) {
-    alert("请至少填写一条有效模板：疫苗名|剂次|天数");
+    alert("请至少填写一条有效条目（疫苗名、剂次、天数）");
     return;
   }
   const current = getCurrentTemplateMeta();
@@ -966,12 +1036,12 @@ function saveCustomTemplateFromEditor() {
 
 function deleteCurrentCustomTemplate() {
   const current = getCurrentTemplateMeta();
+  const ok = window.confirm(`将尝试删除模板“${current.name}”。是否继续？`);
+  if (!ok) return;
   if (!current.isCustom) {
-    alert("当前是系统模板，不能删除");
+    alert("当前是系统模板，不能删除。请先切换到“自定义 · ...”模板后再删除。");
     return;
   }
-  const ok = confirm(`确定删除自定义模板“${current.name}”？`);
-  if (!ok) return;
   delete customVaccineTemplates[current.id];
   vaccineSettings.region = "cn";
   saveCustomVaccineTemplates();
@@ -1153,88 +1223,6 @@ function importData(file) {
   reader.readAsText(file);
 }
 
-function makeSampleFields(categoryId, index) {
-  switch (categoryId) {
-    case "feeding":
-      return { subtype: index % 2 ? "breast" : "bottle", amountMl: 70 + index * 5, side: "both" };
-    case "sleep":
-      return { subtype: index % 2 ? "nap" : "end", durationMin: 35 + index * 10 };
-    case "diaper":
-      return { subtype: index % 3 === 0 ? "wet" : index % 3 === 1 ? "dirty" : "both" };
-    case "temperature":
-      return { celsius: 36.6 + (index % 4) * 0.1, place: "armpit" };
-    case "bath":
-      return { durationMin: 10 + index * 2 };
-    case "medicine":
-      return { name: "退烧药", dose: "2.5ml" };
-    case "supplement":
-      return { name: index % 2 ? "vd" : "dha", dose: index % 2 ? "1滴" : "1粒" };
-    case "tummy_time":
-      return { durationMin: 8 + index * 3, subtype: index % 2 ? "tummy" : "grip" };
-    case "growth":
-      return { weightKg: 5.3 + index * 0.15, heightCm: 58.5 + index * 0.6, headCm: 39 + index * 0.2 };
-    case "spitup":
-      return { subtype: index % 2 ? "light" : "moderate" };
-    case "cry":
-      return { durationMin: 6 + index * 4, soothe: index % 2 ? "抱哄+拍嗝" : "白噪音+奶嘴" };
-    case "outdoor":
-      return { durationMin: 20 + index * 10, place: index % 2 ? "小区散步" : "阳台晒太阳" };
-    case "pump":
-      return { durationMin: 12 + index * 3, amountMl: 90 + index * 20, side: "both" };
-    case "solid":
-      return { food: index % 2 ? "米粉" : "南瓜泥", amount: index % 2 ? "3勺" : "半小碗" };
-    case "custom":
-      return {};
-    default:
-      return {};
-  }
-}
-
-function generateSampleData() {
-  const shouldContinue = confirm("将为每个类别生成测试记录，是否继续？");
-  if (!shouldContinue) return;
-  const now = Date.now();
-  const noteMap = {
-    feeding: "状态不错，吃奶节奏稳定",
-    sleep: "入睡较快",
-    diaper: "皮肤状态正常",
-    temperature: "无发热表现",
-    bath: "洗澡后情绪平稳",
-    medicine: "按医嘱服用",
-    supplement: "每日固定时间补充",
-    tummy_time: "抬头比昨天更稳",
-    growth: "本周复测数据",
-    spitup: "拍嗝后缓解",
-    cry: "安抚后平静",
-    outdoor: "天气好，短时外出",
-    pump: "夜间泵奶记录",
-    solid: "尝试新口味",
-    custom: "今天整体状态良好",
-  };
-
-  const samples = [];
-  for (let i = 0; i < CATEGORIES.length; i += 1) {
-    const cat = CATEGORIES[i];
-    const count = cat.id === "feeding" || cat.id === "sleep" || cat.id === "diaper" ? 3 : 2;
-    for (let j = 0; j < count; j += 1) {
-      const offsetHours = i * 3 + j * 7;
-      const at = new Date(now - offsetHours * 60 * 60 * 1000).toISOString();
-      samples.push({
-        id: crypto.randomUUID(),
-        categoryId: cat.id,
-        at,
-        fields: makeSampleFields(cat.id, j),
-        note: noteMap[cat.id] || "测试记录",
-      });
-    }
-  }
-
-  entries = [...entries, ...samples].sort((a, b) => new Date(b.at) - new Date(a.at));
-  save();
-  render();
-  alert(`已生成 ${samples.length} 条测试记录`);
-}
-
 function init() {
   load();
   loadProfile();
@@ -1279,6 +1267,7 @@ function init() {
   document.getElementById("btn-enable-vaccine-notice").addEventListener("click", enableVaccineNotification);
   document.getElementById("btn-toggle-vaccine-editor").addEventListener("click", toggleVaccineTemplateEditor);
   document.getElementById("btn-load-vaccine-template").addEventListener("click", loadCurrentTemplateToEditor);
+  document.getElementById("btn-add-vaccine-row").addEventListener("click", () => appendTemplateRow());
   document.getElementById("btn-save-vaccine-template").addEventListener("click", saveCustomTemplateFromEditor);
   document.getElementById("btn-delete-vaccine-template").addEventListener("click", deleteCurrentCustomTemplate);
   document.getElementById("stats-preset").addEventListener("change", (ev) => {
@@ -1305,7 +1294,6 @@ function init() {
   const chartCanvas = document.getElementById("stats-chart");
   chartCanvas.addEventListener("mousemove", onChartHover);
   chartCanvas.addEventListener("mouseleave", hideChartTooltip);
-  document.getElementById("btn-seed").addEventListener("click", generateSampleData);
   document.getElementById("btn-export").addEventListener("click", exportData);
   document.getElementById("import-file").addEventListener("change", (ev) => {
     const f = /** @type {HTMLInputElement} */ (ev.target).files?.[0];
