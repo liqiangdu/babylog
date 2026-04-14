@@ -15,10 +15,10 @@ let vaccines = [];
 /** @type {{start: string, end: string, preset: string}} */
 let statsRange = { start: "", end: "", preset: "7d" };
 let statsMode = "cards";
-let chartDays = 7;
 let timelineVisibleCount = 20;
-const FEED_CHART_COLOR = "#ff9f0a";
-const SLEEP_CHART_COLOR = "#0a84ff";
+const TREND_LINE_COLOR = "#0a84ff";
+let chartRangeMode = "follow";
+let chartMetricId = "feeding.amountMl";
 
 const CATEGORIES = [
   { id: "feeding", label: "喝奶", emoji: "🍼", fields: [
@@ -238,6 +238,35 @@ function summarizeFields(cat, fields) {
   return parts.join(" · ");
 }
 
+function getNumericMetricOptions() {
+  /** @type {Array<{id: string, label: string, categoryId: string, fieldKey: string}>} */
+  const opts = [];
+  for (const c of CATEGORIES) {
+    for (const f of c.fields) {
+      if (f.type !== "number") continue;
+      opts.push({
+        id: `${c.id}.${f.key}`,
+        label: `${c.emoji} ${c.label} · ${f.label}`,
+        categoryId: c.id,
+        fieldKey: f.key,
+        unit: inferMetricUnit(f),
+      });
+    }
+  }
+  return opts;
+}
+
+function inferMetricUnit(field) {
+  const key = String(field.key || "");
+  const label = String(field.label || "");
+  if (key.includes("amountMl") || label.includes("ml")) return "ml";
+  if (key.includes("durationMin") || label.includes("分钟")) return "分钟";
+  if (key.includes("celsius") || label.includes("°C")) return "°C";
+  if (key.includes("weightKg") || label.includes("kg")) return "kg";
+  if (key.includes("heightCm") || key.includes("headCm") || label.includes("cm")) return "cm";
+  return "数值";
+}
+
 let editingId = null;
 let pendingCategoryId = null;
 
@@ -449,14 +478,26 @@ function renderStats() {
   if (statsMode === "chart") {
     grid.classList.add("hidden");
     chartWrap.classList.remove("hidden");
-    renderTrendChart(chartDays);
+    renderTrendChart();
   } else {
     chartWrap.classList.add("hidden");
     grid.classList.remove("hidden");
   }
 }
 
-function renderTrendChart(days) {
+function getChartDateRange() {
+  if (chartRangeMode === "follow") {
+    return { start: statsRange.start, end: statsRange.end };
+  }
+  const days = Number(chartRangeMode) || 7;
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(end.getDate() - (days - 1));
+  const fmt = (d) => toLocalDateKey(d);
+  return { start: fmt(start), end: fmt(end) };
+}
+
+function renderTrendChart() {
   const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById("stats-chart"));
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -468,34 +509,46 @@ function renderTrendChart(days) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-  const points = buildTrendData(days);
-  const feedVals = points.map((p) => p.feed);
-  const sleepVals = points.map((p) => p.sleep);
-  const maxY = Math.max(10, ...feedVals, ...sleepVals);
-  const left = 38;
+  const trend = buildTrendData();
+  const points = trend.points;
+  const vals = points.map((p) => p.value);
+  if (points.length === 0) {
+    ctx.fillStyle = "rgba(255,255,255,0.86)";
+    ctx.font = '14px "SF Pro Text", "Helvetica Neue", Arial';
+    ctx.fillText("当前范围暂无可绘制数据", 16, 28);
+    return;
+  }
+  const maxY = Math.max(10, ...vals);
+  const left = 56;
   const right = 12;
-  const top = 16;
+  const top = 22;
   const bottom = 30;
   const pw = cssWidth - left - right;
   const ph = cssHeight - top - bottom;
+  const unit = trend.unit || "数值";
 
   ctx.strokeStyle = "rgba(128,128,128,0.25)";
   ctx.lineWidth = 1;
+  ctx.fillStyle = "rgba(255,255,255,0.86)";
+  ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
   for (let i = 0; i <= 4; i += 1) {
     const y = top + (ph / 4) * i;
     ctx.beginPath();
     ctx.moveTo(left, y);
     ctx.lineTo(left + pw, y);
     ctx.stroke();
+    const v = Math.round(maxY - (maxY / 4) * i);
+    ctx.fillText(String(v), 8, y + 4);
   }
+  ctx.fillText(unit, 8, 12);
 
   const mapX = (i) => left + (pw * i) / Math.max(1, points.length - 1);
   const mapY = (v) => top + ph - (v / maxY) * ph;
-  const drawSeries = (vals, color) => {
+  const drawSeries = (seriesVals, color) => {
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    vals.forEach((v, i) => {
+    seriesVals.forEach((v, i) => {
       const x = mapX(i);
       const y = mapY(v);
       if (i === 0) ctx.moveTo(x, y);
@@ -503,8 +556,16 @@ function renderTrendChart(days) {
     });
     ctx.stroke();
   };
-  drawSeries(feedVals, FEED_CHART_COLOR);
-  drawSeries(sleepVals, SLEEP_CHART_COLOR);
+  // 点线图: 先画线，再画点
+  drawSeries(vals, TREND_LINE_COLOR);
+  ctx.fillStyle = TREND_LINE_COLOR;
+  points.forEach((p, i) => {
+    const x = mapX(i);
+    const y = mapY(p.value);
+    ctx.beginPath();
+    ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+  });
 
   ctx.fillStyle = "rgba(255,255,255,0.86)";
   ctx.font = '12px "SF Pro Text", "Helvetica Neue", Arial';
@@ -514,24 +575,44 @@ function renderTrendChart(days) {
   });
 }
 
-function buildTrendData(days) {
+function buildTrendData() {
+  const metrics = getNumericMetricOptions();
+  const metric = metrics.find((m) => m.id === chartMetricId) || metrics[0];
+  if (!metric) return { mode: "range-line", points: [], unit: "数值" };
+  const legend = document.getElementById("chart-legend-text");
+  if (legend) legend.textContent = metric.label;
+
+  const range = getChartDateRange();
+  const source = getEntriesByRange(range.start, range.end);
   const data = [];
-  const now = new Date();
-  for (let i = days - 1; i >= 0; i -= 1) {
-    const d = new Date(now);
-    d.setDate(now.getDate() - i);
+  if (!range.start || !range.end) return { mode: "range-line", points: data };
+  const start = new Date(`${range.start}T00:00:00`);
+  const end = new Date(`${range.end}T00:00:00`);
+  const isSingleDay = range.start === range.end;
+  if (isSingleDay) {
+    const dayPoints = source
+      .filter((e) => toLocalDateKey(e.at) === range.start && e.categoryId === metric.categoryId)
+      .map((e) => {
+        const d = new Date(e.at);
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mm = String(d.getMinutes()).padStart(2, "0");
+        return {
+          t: d.getTime(),
+          label: `${hh}:${mm}`,
+          value: Number(e.fields?.[metric.fieldKey]) || 0,
+        };
+      })
+      .sort((a, b) => a.t - b.t);
+    return { mode: "day-points", points: dayPoints, unit: metric.unit };
+  }
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const key = toLocalDateKey(d);
     const label = `${d.getMonth() + 1}/${d.getDate()}`;
-    const dayEntries = entries.filter((e) => toLocalDateKey(e.at) === key);
-    const feed = dayEntries
-      .filter((e) => e.categoryId === "feeding")
-      .reduce((sum, e) => sum + (Number(e.fields?.amountMl) || 0), 0);
-    const sleep = dayEntries
-      .filter((e) => e.categoryId === "sleep")
-      .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
-    data.push({ label, feed, sleep });
+    const dayEntries = source.filter((e) => toLocalDateKey(e.at) === key && e.categoryId === metric.categoryId);
+    const value = dayEntries.reduce((sum, e) => sum + (Number(e.fields?.[metric.fieldKey]) || 0), 0);
+    data.push({ label, value });
   }
-  return data;
+  return { mode: "range-line", points: data, unit: metric.unit };
 }
 
 function getEntriesByRange(start, end) {
@@ -585,7 +666,7 @@ function applyCustomStatsRange() {
   }
   statsRange = { start, end, preset: "custom" };
   syncStatsRangeInputs();
-  renderStats();
+  render();
 }
 
 function buildVaccinePlan() {
@@ -738,6 +819,20 @@ function populateFilter() {
   sel.value = cur;
 }
 
+function populateChartMetricOptions() {
+  const sel = /** @type {HTMLSelectElement} */ (document.getElementById("chart-metric"));
+  const opts = getNumericMetricOptions();
+  sel.innerHTML = "";
+  for (const o of opts) {
+    const el = document.createElement("option");
+    el.value = o.id;
+    el.textContent = o.label;
+    sel.appendChild(el);
+  }
+  if (!opts.some((x) => x.id === chartMetricId) && opts[0]) chartMetricId = opts[0].id;
+  sel.value = chartMetricId;
+}
+
 function exportData() {
   const blob = new Blob([JSON.stringify(entries, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
@@ -852,6 +947,7 @@ function init() {
   loadVaccines();
   renderCategories();
   populateFilter();
+  populateChartMetricOptions();
   applyPresetRange("7d");
   syncStatsRangeInputs();
   render();
@@ -880,12 +976,16 @@ function init() {
     statsMode = /** @type {HTMLSelectElement} */ (ev.target).value;
     renderStats();
   });
-  document.getElementById("chart-days").addEventListener("change", (ev) => {
-    chartDays = Number(/** @type {HTMLSelectElement} */ (ev.target).value) || 7;
-    if (statsMode === "chart") renderTrendChart(chartDays);
+  document.getElementById("chart-metric").addEventListener("change", (ev) => {
+    chartMetricId = /** @type {HTMLSelectElement} */ (ev.target).value;
+    if (statsMode === "chart") renderTrendChart();
+  });
+  document.getElementById("chart-range-mode").addEventListener("change", (ev) => {
+    chartRangeMode = /** @type {HTMLSelectElement} */ (ev.target).value;
+    if (statsMode === "chart") renderTrendChart();
   });
   window.addEventListener("resize", () => {
-    if (statsMode === "chart") renderTrendChart(chartDays);
+    if (statsMode === "chart") renderTrendChart();
   });
   document.getElementById("btn-seed").addEventListener("click", generateSampleData);
   document.getElementById("btn-export").addEventListener("click", exportData);
