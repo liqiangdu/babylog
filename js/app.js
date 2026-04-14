@@ -4,6 +4,7 @@
 
 const STORAGE_KEY = "babylog_entries_v1";
 const STORAGE_PROFILE_KEY = "babylog_profile_v1";
+const STORAGE_THEME_KEY = "babylog_theme_mode_v1";
 const API_BASE = "http://127.0.0.1:8787/api";
 
 /** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string}>} */
@@ -23,6 +24,7 @@ let chartRangeMode = "follow";
 let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
 let apiReady = false;
+let themeMode = "system";
 
 const VACCINE_TEMPLATES = {
   cn: [
@@ -282,6 +284,25 @@ function mapEntryToApi(item) {
     fields: item.fields || {},
     note: item.note || "",
   };
+}
+
+function applyTheme(mode) {
+  const root = document.documentElement;
+  themeMode = ["system", "light", "dark"].includes(mode) ? mode : "system";
+  if (themeMode === "system") root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", themeMode);
+  localStorage.setItem(STORAGE_THEME_KEY, themeMode);
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(STORAGE_THEME_KEY) || "system";
+  applyTheme(saved);
+  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById("theme-select"));
+  if (!sel) return;
+  sel.value = themeMode;
+  sel.addEventListener("change", (ev) => {
+    applyTheme(/** @type {HTMLSelectElement} */ (ev.target).value);
+  });
 }
 
 async function initDataSource() {
@@ -1378,6 +1399,7 @@ function importData(file) {
 }
 
 async function init() {
+  initTheme();
   await initDataSource();
   renderCategories();
   populateFilter();
