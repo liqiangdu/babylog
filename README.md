@@ -74,6 +74,8 @@ cargo run
 
 前端会优先调用 Rust API（记录、宝宝信息、疫苗计划/设置/自定义模板），当 API 不可用时自动回退到 `localStorage`。
 
+Rust API 持久化使用 SQLite（`backend/data/babylog.db`），并包含时间轴/分类/日期等查询索引。
+
 ## 项目结构
 
 ```text
@@ -91,9 +93,8 @@ babylog/
 
 - `babylog_entries_v1`：日常记录
 - `babylog_profile_v1`：宝宝信息
-- `babylog_vaccines_v1`：疫苗计划
-- `babylog_vaccine_settings_v1`：疫苗提醒设置
-- `babylog_vaccine_custom_templates_v1`：自定义疫苗模板
+
+> 疫苗计划、疫苗提醒设置、自定义疫苗模板由 Rust API 持久化到 SQLite，不写入浏览器 `localStorage`。
 
 > 提示：清理浏览器站点数据会导致本地记录丢失，建议定期导出 JSON 备份。
 

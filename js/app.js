@@ -4,9 +4,6 @@
 
 const STORAGE_KEY = "babylog_entries_v1";
 const STORAGE_PROFILE_KEY = "babylog_profile_v1";
-const STORAGE_VACCINES_KEY = "babylog_vaccines_v1";
-const STORAGE_VACCINE_SETTINGS_KEY = "babylog_vaccine_settings_v1";
-const STORAGE_VACCINE_CUSTOM_TEMPLATES_KEY = "babylog_vaccine_custom_templates_v1";
 const API_BASE = "http://127.0.0.1:8787/api";
 
 /** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string}>} */
@@ -202,17 +199,10 @@ function saveProfile() {
 }
 
 function loadVaccines() {
-  try {
-    const raw = localStorage.getItem(STORAGE_VACCINES_KEY);
-    vaccines = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(vaccines)) vaccines = [];
-  } catch {
-    vaccines = [];
-  }
+  vaccines = [];
 }
 
 function saveVaccines() {
-  localStorage.setItem(STORAGE_VACCINES_KEY, JSON.stringify(vaccines));
   if (!apiReady) return;
   apiRequest("/vaccines", {
     method: "PUT",
@@ -230,22 +220,10 @@ function saveVaccines() {
 }
 
 function loadVaccineSettings() {
-  try {
-    const raw = localStorage.getItem(STORAGE_VACCINE_SETTINGS_KEY);
-    const data = raw ? JSON.parse(raw) : {};
-    vaccineSettings = {
-      region: data?.region || "cn",
-      reminderDays: Number(data?.reminderDays ?? 3),
-      notificationsEnabled: Boolean(data?.notificationsEnabled),
-      notifiedMap: data?.notifiedMap && typeof data.notifiedMap === "object" ? data.notifiedMap : {},
-    };
-  } catch {
-    vaccineSettings = { region: "cn", reminderDays: 3, notificationsEnabled: false, notifiedMap: {} };
-  }
+  vaccineSettings = { region: "cn", reminderDays: 3, notificationsEnabled: false, notifiedMap: {} };
 }
 
 function saveVaccineSettings() {
-  localStorage.setItem(STORAGE_VACCINE_SETTINGS_KEY, JSON.stringify(vaccineSettings));
   if (!apiReady) return;
   apiRequest("/vaccine-settings", {
     method: "PUT",
@@ -261,17 +239,10 @@ function saveVaccineSettings() {
 }
 
 function loadCustomVaccineTemplates() {
-  try {
-    const raw = localStorage.getItem(STORAGE_VACCINE_CUSTOM_TEMPLATES_KEY);
-    const data = raw ? JSON.parse(raw) : {};
-    customVaccineTemplates = data && typeof data === "object" ? data : {};
-  } catch {
-    customVaccineTemplates = {};
-  }
+  customVaccineTemplates = {};
 }
 
 function saveCustomVaccineTemplates() {
-  localStorage.setItem(STORAGE_VACCINE_CUSTOM_TEMPLATES_KEY, JSON.stringify(customVaccineTemplates));
   if (!apiReady) return;
   apiRequest("/vaccine-templates", {
     method: "PUT",
