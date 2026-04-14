@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f8f6f3" />
+    <title>BabyLog — 成长记录</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>BabyLog</h1>
+      <p>喝奶、睡眠、尿布与日常护理 — 数据保存在本机浏览器</p>
+    </header>
+
+    <main>
+      <div class="section-title">快速记录</div>
+      <div id="category-grid" class="category-grid"></div>
+
+      <div class="section-title">时间轴</div>
+      <div class="toolbar">
+        <select id="filter-category" aria-label="按类型筛选"></select>
+        <button type="button" id="btn-export" class="text-btn">导出 JSON</button>
+        <label class="text-btn" style="cursor: pointer">
+          导入
+          <input type="file" id="import-file" accept="application/json" class="hidden" />
+        </label>
+      </div>
+      <ul id="timeline" class="timeline" aria-live="polite"></ul>
+    </main>
+
+    <div id="modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal">
+        <h2 id="modal-title">记录</h2>
+        <form id="modal-form" onsubmit="return false"></form>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">取消</button>
+          <button type="button" class="btn btn-primary" id="modal-save">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/app.js"></script>
+  </body>
+</html>
