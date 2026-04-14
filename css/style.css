@@ -340,6 +340,7 @@ body {
   background: #fafafc;
   border-radius: var(--radius-sm);
   padding: 10px;
+  position: relative;
 }
 
 .scene.dark .stats-chart-wrap {
@@ -351,6 +352,21 @@ body {
   height: auto;
   display: block;
   border-radius: 6px;
+}
+
+.chart-tooltip {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  min-width: 120px;
+  max-width: 220px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(29, 29, 31, 0.92);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.33;
+  box-shadow: var(--card-shadow);
 }
 
 .chart-legend {

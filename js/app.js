@@ -19,6 +19,7 @@ let timelineVisibleCount = 20;
 const TREND_LINE_COLOR = "#0a84ff";
 let chartRangeMode = "follow";
 let chartMetricId = "feeding.amountMl";
+let chartHitPoints = [];
 
 const CATEGORIES = [
   { id: "feeding", label: "喝奶", emoji: "🍼", fields: [
@@ -544,6 +545,13 @@ function renderTrendChart() {
 
   const mapX = (i) => left + (pw * i) / Math.max(1, points.length - 1);
   const mapY = (v) => top + ph - (v / maxY) * ph;
+  chartHitPoints = points.map((p, i) => ({
+    x: mapX(i),
+    y: mapY(p.value),
+    label: p.label,
+    value: p.value,
+    unit,
+  }));
   const drawSeries = (seriesVals, color) => {
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
@@ -573,6 +581,45 @@ function renderTrendChart() {
     if (i % Math.ceil(points.length / 6) !== 0 && i !== points.length - 1) return;
     ctx.fillText(p.label, mapX(i) - 10, cssHeight - 8);
   });
+}
+
+function hideChartTooltip() {
+  const tip = document.getElementById("chart-tooltip");
+  if (!tip) return;
+  tip.classList.add("hidden");
+}
+
+function onChartHover(ev) {
+  if (statsMode !== "chart") return;
+  const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById("stats-chart"));
+  const tip = document.getElementById("chart-tooltip");
+  if (!canvas || !tip || chartHitPoints.length === 0) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = ev.clientX - rect.left;
+  const my = ev.clientY - rect.top;
+
+  let nearest = null;
+  let minDist = Infinity;
+  for (const p of chartHitPoints) {
+    const dx = p.x - mx;
+    const dy = p.y - my;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = p;
+    }
+  }
+  if (!nearest || minDist > 18) {
+    hideChartTooltip();
+    return;
+  }
+
+  tip.innerHTML = `<div>${nearest.label}</div><div>${nearest.value} ${nearest.unit}</div>`;
+  const offsetX = Math.min(rect.width - 130, Math.max(6, nearest.x + 10));
+  const offsetY = Math.max(6, nearest.y - 42);
+  tip.style.left = `${offsetX}px`;
+  tip.style.top = `${offsetY}px`;
+  tip.classList.remove("hidden");
 }
 
 function buildTrendData() {
@@ -987,6 +1034,9 @@ function init() {
   window.addEventListener("resize", () => {
     if (statsMode === "chart") renderTrendChart();
   });
+  const chartCanvas = document.getElementById("stats-chart");
+  chartCanvas.addEventListener("mousemove", onChartHover);
+  chartCanvas.addEventListener("mouseleave", hideChartTooltip);
   document.getElementById("btn-seed").addEventListener("click", generateSampleData);
   document.getElementById("btn-export").addEventListener("click", exportData);
   document.getElementById("import-file").addEventListener("change", (ev) => {
