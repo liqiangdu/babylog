@@ -7,6 +7,7 @@ const STORAGE_PROFILE_KEY = "babylog_profile_v1";
 const STORAGE_VACCINES_KEY = "babylog_vaccines_v1";
 const STORAGE_VACCINE_SETTINGS_KEY = "babylog_vaccine_settings_v1";
 const STORAGE_VACCINE_CUSTOM_TEMPLATES_KEY = "babylog_vaccine_custom_templates_v1";
+const API_BASE = "http://127.0.0.1:8787/api";
 
 /** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string}>} */
 let entries = [];
@@ -24,6 +25,7 @@ const TREND_LINE_COLOR = "#0a84ff";
 let chartRangeMode = "follow";
 let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
+let apiReady = false;
 
 const VACCINE_TEMPLATES = {
   cn: [
@@ -211,6 +213,20 @@ function loadVaccines() {
 
 function saveVaccines() {
   localStorage.setItem(STORAGE_VACCINES_KEY, JSON.stringify(vaccines));
+  if (!apiReady) return;
+  apiRequest("/vaccines", {
+    method: "PUT",
+    body: JSON.stringify(vaccines.map((v) => ({
+      id: String(v.id || ""),
+      name: String(v.name || ""),
+      dose: String(v.dose || ""),
+      due_date: String(v.dueDate || ""),
+      status: String(v.status || "todo"),
+      done_at: String(v.doneAt || ""),
+    }))),
+  }).catch(() => {
+    apiReady = false;
+  });
 }
 
 function loadVaccineSettings() {
@@ -230,6 +246,18 @@ function loadVaccineSettings() {
 
 function saveVaccineSettings() {
   localStorage.setItem(STORAGE_VACCINE_SETTINGS_KEY, JSON.stringify(vaccineSettings));
+  if (!apiReady) return;
+  apiRequest("/vaccine-settings", {
+    method: "PUT",
+    body: JSON.stringify({
+      region: String(vaccineSettings.region || "cn"),
+      reminder_days: Number(vaccineSettings.reminderDays ?? 3),
+      notifications_enabled: Boolean(vaccineSettings.notificationsEnabled),
+      notified_map: vaccineSettings.notifiedMap || {},
+    }),
+  }).catch(() => {
+    apiReady = false;
+  });
 }
 
 function loadCustomVaccineTemplates() {
@@ -244,6 +272,100 @@ function loadCustomVaccineTemplates() {
 
 function saveCustomVaccineTemplates() {
   localStorage.setItem(STORAGE_VACCINE_CUSTOM_TEMPLATES_KEY, JSON.stringify(customVaccineTemplates));
+  if (!apiReady) return;
+  apiRequest("/vaccine-templates", {
+    method: "PUT",
+    body: JSON.stringify(customVaccineTemplates),
+  }).catch(() => {
+    apiReady = false;
+  });
+}
+
+async function apiRequest(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options,
+  });
+  if (!res.ok) {
+    throw new Error(`API ${res.status}`);
+  }
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) return res.json();
+  return null;
+}
+
+function mapEntryFromApi(item) {
+  return {
+    id: item.id,
+    categoryId: item.category_id,
+    at: item.at,
+    fields: item.fields || {},
+    note: item.note || "",
+  };
+}
+
+function mapEntryToApi(item) {
+  return {
+    category_id: item.categoryId,
+    at: item.at,
+    fields: item.fields || {},
+    note: item.note || "",
+  };
+}
+
+async function initDataSource() {
+  try {
+    const [
+      apiProfile,
+      apiEntriesResp,
+      apiVaccines,
+      apiVaccineSettings,
+      apiVaccineTemplates,
+    ] = await Promise.all([
+      apiRequest("/profile"),
+      apiRequest("/entries?limit=5000&offset=0"),
+      apiRequest("/vaccines"),
+      apiRequest("/vaccine-settings"),
+      apiRequest("/vaccine-templates"),
+    ]);
+    profile = {
+      name: apiProfile?.name || "",
+      birthDate: apiProfile?.birth_date || "",
+      gender: apiProfile?.gender || "",
+      blood: apiProfile?.blood || "",
+    };
+    const items = Array.isArray(apiEntriesResp?.items) ? apiEntriesResp.items : [];
+    entries = items.map(mapEntryFromApi).sort((a, b) => new Date(b.at) - new Date(a.at));
+    vaccines = Array.isArray(apiVaccines)
+      ? apiVaccines.map((v) => ({
+        id: String(v.id || ""),
+        name: String(v.name || ""),
+        dose: String(v.dose || ""),
+        dueDate: String(v.due_date || ""),
+        status: v.status === "done" ? "done" : "todo",
+        doneAt: String(v.done_at || ""),
+      }))
+      : [];
+    vaccineSettings = {
+      region: apiVaccineSettings?.region || "cn",
+      reminderDays: Number(apiVaccineSettings?.reminder_days ?? 3),
+      notificationsEnabled: Boolean(apiVaccineSettings?.notifications_enabled),
+      notifiedMap: apiVaccineSettings?.notified_map && typeof apiVaccineSettings.notified_map === "object"
+        ? apiVaccineSettings.notified_map
+        : {},
+    };
+    customVaccineTemplates = apiVaccineTemplates && typeof apiVaccineTemplates === "object"
+      ? apiVaccineTemplates
+      : {};
+    apiReady = true;
+  } catch {
+    apiReady = false;
+    load();
+    loadProfile();
+    loadVaccines();
+    loadVaccineSettings();
+    loadCustomVaccineTemplates();
+  }
 }
 
 function getAllVaccineTemplates() {
@@ -455,33 +577,67 @@ function collectForm() {
   return { at, fields, note };
 }
 
-function submitModal() {
+async function submitModal() {
   if (!pendingCategoryId) return;
   const { at, fields, note } = collectForm();
+  let changedEntry = null;
   if (editingId) {
     const idx = entries.findIndex((e) => e.id === editingId);
     if (idx >= 0) {
       entries[idx] = { ...entries[idx], categoryId: pendingCategoryId, at, fields, note };
+      changedEntry = entries[idx];
     }
   } else {
-    entries.push({
+    changedEntry = {
       id: crypto.randomUUID(),
       categoryId: pendingCategoryId,
       at,
       fields,
       note,
-    });
+    };
+    entries.push(changedEntry);
   }
   entries.sort((a, b) => new Date(b.at) - new Date(a.at));
-  save();
+  if (apiReady && changedEntry) {
+    try {
+      if (editingId) {
+        await apiRequest(`/entries/${changedEntry.id}`, {
+          method: "PUT",
+          body: JSON.stringify(mapEntryToApi(changedEntry)),
+        });
+      } else {
+        const created = await apiRequest("/entries", {
+          method: "POST",
+          body: JSON.stringify(mapEntryToApi(changedEntry)),
+        });
+        if (created?.id) changedEntry.id = created.id;
+      }
+    } catch {
+      apiReady = false;
+      save();
+      alert("后端暂不可用，已回退到本地存储。");
+    }
+  } else {
+    save();
+  }
   closeModal();
   render();
 }
 
-function deleteEntry(id) {
+async function deleteEntry(id) {
   if (!confirm("确定删除这条记录？")) return;
   entries = entries.filter((e) => e.id !== id);
-  save();
+  if (apiReady) {
+    try {
+      await apiRequest(`/entries/${id}`, { method: "DELETE" });
+    } catch {
+      apiReady = false;
+      save();
+      alert("后端暂不可用，已回退到本地存储。");
+    }
+  } else {
+    save();
+  }
   render();
 }
 
@@ -521,14 +677,32 @@ function renderProfile() {
   summary.textContent = details.join(" | ");
 }
 
-function saveProfileFromForm() {
+async function saveProfileFromForm() {
   profile = {
     name: /** @type {HTMLInputElement} */ (document.getElementById("baby-name")).value.trim(),
     birthDate: /** @type {HTMLInputElement} */ (document.getElementById("baby-birth")).value,
     gender: /** @type {HTMLSelectElement} */ (document.getElementById("baby-gender")).value,
     blood: /** @type {HTMLInputElement} */ (document.getElementById("baby-blood")).value.trim(),
   };
-  saveProfile();
+  if (apiReady) {
+    try {
+      await apiRequest("/profile", {
+        method: "PUT",
+        body: JSON.stringify({
+          name: profile.name,
+          birth_date: profile.birthDate,
+          gender: profile.gender,
+          blood: profile.blood,
+        }),
+      });
+    } catch {
+      apiReady = false;
+      saveProfile();
+      alert("后端暂不可用，已回退到本地存储。");
+    }
+  } else {
+    saveProfile();
+  }
   renderProfile();
   renderVaccines();
   alert("宝宝信息已保存");
@@ -1208,12 +1382,21 @@ function exportData() {
 
 function importData(file) {
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
       const arr = JSON.parse(/** @type {string} */ (reader.result));
       if (!Array.isArray(arr)) throw new Error("格式错误");
       entries = arr.filter((x) => x && x.id && x.categoryId && x.at);
-      save();
+      if (apiReady) {
+        for (const e of entries) {
+          await apiRequest("/entries", {
+            method: "POST",
+            body: JSON.stringify(mapEntryToApi(e)),
+          });
+        }
+      } else {
+        save();
+      }
       render();
       alert(`已导入 ${entries.length} 条记录`);
     } catch {
@@ -1223,12 +1406,8 @@ function importData(file) {
   reader.readAsText(file);
 }
 
-function init() {
-  load();
-  loadProfile();
-  loadVaccines();
-  loadVaccineSettings();
-  loadCustomVaccineTemplates();
+async function init() {
+  await initDataSource();
   renderCategories();
   populateFilter();
   populateChartMetricOptions();

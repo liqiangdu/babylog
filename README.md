@@ -17,7 +17,7 @@
 
 - 纯前端静态应用（HTML + CSS + JavaScript）
 - 浏览器 `localStorage` 持久化
-- 无后端依赖、无第三方框架
+- 可选 Rust 后端（Axum + Tokio）用于高性能 API
 
 ## 快速开始
 
@@ -34,6 +34,46 @@ npx --yes serve .
 
 打开终端输出的本地地址即可访问。
 
+### 方式 3：运行 Rust API（可选）
+
+> 目录：`backend/`
+
+```bash
+cd backend
+cargo run
+```
+
+默认监听 `http://127.0.0.1:8787`，提供：
+
+- `GET /health`
+- `GET/PUT /api/profile`
+- `GET/POST /api/entries`
+- `DELETE /api/entries/:id`
+- `GET /api/stats`
+
+### 一键启动（前端 + Rust API）
+
+在项目根目录执行：
+
+```powershell
+.\start.ps1
+```
+
+会自动打开两个 PowerShell 窗口：
+
+- 前端静态服务（`npx --yes serve .`）
+- Rust API（自动注入 `C:\msys64\mingw64\bin` 到 PATH 后执行 `cargo run`）
+
+脚本会在启动前**强制重启 backend**（结束占用 `127.0.0.1:8787` 的旧进程，再拉起新实例）。
+
+如需在当前会话以后台任务方式启动：
+
+```powershell
+.\start.ps1 -NoNewWindow
+```
+
+前端会优先调用 Rust API（记录、宝宝信息、疫苗计划/设置/自定义模板），当 API 不可用时自动回退到 `localStorage`。
+
 ## 项目结构
 
 ```text
@@ -41,6 +81,7 @@ babylog/
   index.html      # 页面结构
   css/style.css   # 样式
   js/app.js       # 业务逻辑
+  backend/        # Rust API（可选）
   DESIGN.md       # UI 设计规范
 ```
 
