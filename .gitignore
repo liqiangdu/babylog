@@ -36,3 +36,6 @@ Thumbs.db
 ## Project-specific
 DESIGN.md
 
+## Generated test data (see scripts/generate_babylog_month.py)
+babylog-sample-month.json
+

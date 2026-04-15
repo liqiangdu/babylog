@@ -83,6 +83,7 @@ babylog/
   index.html      # 页面结构
   css/style.css   # 样式
   js/app.js       # 业务逻辑
+  scripts/        # 辅助脚本（如测试数据生成）
   backend/        # Rust API（可选）
   DESIGN.md       # UI 设计规范
 ```
@@ -97,6 +98,17 @@ babylog/
 > 疫苗计划、疫苗提醒设置、自定义疫苗模板由 Rust API 持久化到 SQLite，不写入浏览器 `localStorage`。
 
 > 提示：清理浏览器站点数据会导致本地记录丢失，建议定期导出 JSON 备份。
+
+## 测试数据生成（Python）
+
+仓库内提供脚本，可生成约一个月的随机记录，导出为 BabyLog 可导入的 JSON 数组（与「导出 JSON」格式一致）。
+
+```bash
+python scripts/generate_babylog_month.py -o babylog-sample-month.json
+python scripts/generate_babylog_month.py --days 30 --seed 42 --end 2026-04-15 -o out.json
+```
+
+在应用内：**时间轴 → 导入**，选择生成的文件。若已启用 Rust API，导入会逐条写入后端。
 
 ## 疫苗模板格式（表格编辑）
 
