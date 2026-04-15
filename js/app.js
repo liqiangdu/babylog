@@ -11,8 +11,8 @@ const API_ORIGIN = API_BASE.replace(/\/api\/?$/i, "") || "http://127.0.0.1:8787"
 
 /** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string, photos?: string[]}>} */
 let entries = [];
-/** @type {{name: string, birthDate: string, gender: string, blood: string}} */
-let profile = { name: "", birthDate: "", gender: "", blood: "" };
+/** @type {{name: string, birthDate: string, gender: string, blood: string, avatar: string}} */
+let profile = { name: "", birthDate: "", gender: "", blood: "", avatar: "" };
 /** @type {Array<{id: string, name: string, dose: string, dueDate: string, status: "todo"|"done", doneAt: string}>} */
 let vaccines = [];
 let vaccineSettings = { region: "cn", reminderDays: 3, notificationsEnabled: false, notifiedMap: {} };
@@ -29,6 +29,7 @@ let apiReady = false;
 let themeMode = "system";
 let activeModuleId = "profile";
 let sidebarOpen = false;
+let profileEditorOpen = true;
 
 const VACCINE_TEMPLATES = {
   cn: [
@@ -194,9 +195,10 @@ function loadProfile() {
       birthDate: data?.birthDate || "",
       gender: data?.gender || "",
       blood: data?.blood || "",
+      avatar: data?.avatar || "",
     };
   } catch {
-    profile = { name: "", birthDate: "", gender: "", blood: "" };
+    profile = { name: "", birthDate: "", gender: "", blood: "", avatar: "" };
   }
 }
 
@@ -390,6 +392,7 @@ async function initDataSource() {
       birthDate: apiProfile?.birth_date || "",
       gender: apiProfile?.gender || "",
       blood: apiProfile?.blood || "",
+      avatar: apiProfile?.avatar || apiProfile?.avatar_url || profile.avatar || "",
     };
     const items = Array.isArray(apiEntriesResp?.items) ? apiEntriesResp.items : [];
     entries = items.map(mapEntryFromApi).sort((a, b) => new Date(b.at) - new Date(a.at));
@@ -826,6 +829,9 @@ function renderProfile() {
   const genderEl = /** @type {HTMLSelectElement} */ (document.getElementById("baby-gender"));
   const bloodEl = /** @type {HTMLInputElement} */ (document.getElementById("baby-blood"));
   const summary = document.getElementById("profile-summary");
+  const statusTag = document.getElementById("profile-showcase-status");
+  const toggleBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById("btn-toggle-profile-editor"));
+  const editorCard = document.getElementById("profile-editor-card");
 
   nameEl.value = profile.name || "";
   birthEl.value = profile.birthDate || "";
@@ -833,14 +839,85 @@ function renderProfile() {
   bloodEl.value = profile.blood || "";
 
   const gMap = { boy: "男宝宝", girl: "女宝宝", other: "未设置" };
-  const details = [
-    profile.name ? `昵称: ${profile.name}` : "昵称未设置",
-    profile.birthDate ? `生日: ${profile.birthDate}` : "生日未设置",
-    `月龄: ${getAgeText()}`,
-    profile.gender ? `性别: ${gMap[profile.gender] || profile.gender}` : "",
-    profile.blood ? `血型: ${profile.blood}` : "",
-  ].filter(Boolean);
-  summary.textContent = details.join(" | ");
+  const genderText = profile.gender ? gMap[profile.gender] || profile.gender : "未设置";
+  const birthText = profile.birthDate || "未设置";
+  const ageText = getAgeText();
+  const bloodText = profile.blood || "未设置";
+  const nameText = profile.name || "宝宝档案";
+
+  const initial = profile.name ? profile.name.trim().slice(0, 1).toUpperCase() : "宝";
+  const fields = [
+    { label: "出生日期", value: birthText },
+    { label: "性别", value: genderText },
+    { label: "血型", value: bloodText },
+  ];
+
+  const completionCount = [profile.name, profile.birthDate, profile.gender, profile.blood, profile.avatar].filter(Boolean).length;
+  const isReady = completionCount >= 4;
+  if (!profileEditorOpen && !isReady) profileEditorOpen = true;
+  if (statusTag) {
+    statusTag.textContent = isReady ? "已完善" : "待完善";
+    statusTag.classList.toggle("ready", isReady);
+  }
+  if (toggleBtn) {
+    toggleBtn.textContent = profileEditorOpen ? "收起设置" : "编辑档案";
+  }
+  if (editorCard) {
+    editorCard.classList.toggle("hidden", !profileEditorOpen);
+  }
+
+  summary.className = "profile-dossier";
+  summary.textContent = "";
+
+  const hero = document.createElement("div");
+  hero.className = "profile-dossier-hero";
+
+  const avatar = document.createElement("div");
+  avatar.className = "profile-dossier-avatar";
+  if (profile.avatar) {
+    const avatarImg = document.createElement("img");
+    avatarImg.src = profile.avatar;
+    avatarImg.alt = `${nameText}头像`;
+    avatarImg.className = "profile-dossier-avatar-image";
+    avatar.appendChild(avatarImg);
+  } else {
+    avatar.textContent = initial;
+  }
+
+  const identity = document.createElement("div");
+  identity.className = "profile-dossier-identity";
+
+  const nameNode = document.createElement("div");
+  nameNode.className = "profile-dossier-name";
+  nameNode.textContent = nameText;
+
+  const ageNode = document.createElement("div");
+  ageNode.className = "profile-dossier-age";
+  ageNode.textContent = `当前月龄 ${ageText}`;
+
+  identity.appendChild(nameNode);
+  identity.appendChild(ageNode);
+  hero.appendChild(avatar);
+  hero.appendChild(identity);
+
+  const grid = document.createElement("div");
+  grid.className = "profile-dossier-grid";
+  for (const field of fields) {
+    const item = document.createElement("div");
+    item.className = "profile-dossier-item";
+    const label = document.createElement("div");
+    label.className = "profile-dossier-label";
+    label.textContent = field.label;
+    const value = document.createElement("div");
+    value.className = "profile-dossier-value";
+    value.textContent = field.value;
+    item.appendChild(label);
+    item.appendChild(value);
+    grid.appendChild(item);
+  }
+
+  summary.appendChild(hero);
+  summary.appendChild(grid);
 }
 
 async function saveProfileFromForm() {
@@ -849,6 +926,7 @@ async function saveProfileFromForm() {
     birthDate: /** @type {HTMLInputElement} */ (document.getElementById("baby-birth")).value,
     gender: /** @type {HTMLSelectElement} */ (document.getElementById("baby-gender")).value,
     blood: /** @type {HTMLInputElement} */ (document.getElementById("baby-blood")).value.trim(),
+    avatar: profile.avatar || "",
   };
   if (apiReady) {
     try {
@@ -866,17 +944,115 @@ async function saveProfileFromForm() {
       saveProfile();
       alert("后端暂不可用，已回退到本地存储。");
     }
-  } else {
-    saveProfile();
   }
+  saveProfile();
+  const completionCount = [profile.name, profile.birthDate, profile.gender, profile.blood, profile.avatar].filter(Boolean).length;
+  if (completionCount >= 4) profileEditorOpen = false;
   renderProfile();
   renderVaccines();
   alert("宝宝信息已保存");
 }
 
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("读取文件失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleAvatarChange(ev) {
+  const input = /** @type {HTMLInputElement} */ (ev.target);
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    alert("请选择图片文件");
+    input.value = "";
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    alert("头像文件请控制在 2MB 以内");
+    input.value = "";
+    return;
+  }
+  try {
+    const dataUrl = await readFileAsDataURL(file);
+    profile.avatar = dataUrl;
+    saveProfile();
+    renderProfile();
+  } catch {
+    alert("头像读取失败，请重试");
+  } finally {
+    input.value = "";
+  }
+}
+
+function clearAvatar() {
+  profile.avatar = "";
+  saveProfile();
+  renderProfile();
+}
+
+function toggleProfileEditor() {
+  profileEditorOpen = !profileEditorOpen;
+  renderProfile();
+}
+
+function renderModuleSummaries() {
+  const vaccineSummary = document.getElementById("vaccine-module-summary");
+  const quickSummary = document.getElementById("quick-module-summary");
+  const timelineSummary = document.getElementById("timeline-module-summary");
+  const gallerySummary = document.getElementById("gallery-module-summary");
+
+  if (vaccineSummary) {
+    const doneCount = vaccines.filter((v) => v.status === "done").length;
+    const todoCount = vaccines.length - doneCount;
+    const nextTodo = vaccines
+      .filter((v) => v.status !== "done")
+      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))[0];
+    vaccineSummary.innerHTML = `
+      <span class="module-summary-item">计划总数 <strong>${vaccines.length}</strong></span>
+      <span class="module-summary-item">已完成 <strong>${doneCount}</strong></span>
+      <span class="module-summary-item">待完成 <strong>${Math.max(0, todoCount)}</strong></span>
+      <span class="module-summary-item">下一针 <strong>${nextTodo ? nextTodo.dueDate : "暂无"}</strong></span>
+    `;
+  }
+
+  if (quickSummary) {
+    const todayKey = toLocalDateKey(new Date());
+    const todayCount = entries.filter((e) => toLocalDateKey(e.at) === todayKey).length;
+    quickSummary.innerHTML = `
+      <span class="module-summary-item">记录分类 <strong>${CATEGORIES.length}</strong></span>
+      <span class="module-summary-item">今日新增 <strong>${todayCount}</strong></span>
+      <span class="module-summary-item">累计记录 <strong>${entries.length}</strong></span>
+    `;
+  }
+
+  if (timelineSummary) {
+    const latest = entries[0];
+    timelineSummary.innerHTML = `
+      <span class="module-summary-item">总记录 <strong>${entries.length}</strong></span>
+      <span class="module-summary-item">最近记录 <strong>${latest ? `${formatDateHeader(latest.at)} ${formatTime(latest.at)}` : "暂无"}</strong></span>
+    `;
+  }
+
+  if (gallerySummary) {
+    const photos = collectGalleryPhotos();
+    const daySet = new Set(photos.map((p) => toLocalDateKey(p.at)));
+    const latestPhoto = photos[0];
+    gallerySummary.innerHTML = `
+      <span class="module-summary-item">照片总数 <strong>${photos.length}</strong></span>
+      <span class="module-summary-item">覆盖天数 <strong>${daySet.size}</strong></span>
+      <span class="module-summary-item">最近上传 <strong>${latestPhoto ? formatDateHeader(latestPhoto.at) : "暂无"}</strong></span>
+    `;
+  }
+}
+
 function renderStats() {
   const grid = document.getElementById("stats-grid");
   const chartWrap = document.getElementById("stats-chart-wrap");
+  const rangeHint = document.getElementById("stats-range-hint");
   const inRangeEntries = getEntriesByRange(statsRange.start, statsRange.end);
   const feedMl = inRangeEntries
     .filter((e) => e.categoryId === "feeding")
@@ -891,17 +1067,23 @@ function renderStats() {
   const doneVaccines = vaccines.filter((v) => v.status === "done").length;
   const rangeLabel = statsRange.start && statsRange.end ? `${statsRange.start} 至 ${statsRange.end}` : "全部时间";
 
+  if (rangeHint) {
+    rangeHint.textContent = `当前范围：${rangeLabel}`;
+  }
+
   const cards = [
-    { k: `范围记录总数 (${rangeLabel})`, v: `${inRangeEntries.length} 条` },
-    { k: "范围喂奶总量", v: `${feedMl} ml` },
+    { k: "范围记录总数", v: `${inRangeEntries.length} 条`, tone: "priority" },
+    { k: "范围喂奶总量", v: `${feedMl} ml`, tone: "priority" },
     { k: "范围睡眠时长", v: `${sleepMin} 分钟` },
     { k: "范围尿布", v: `小便 ${wetCount} / 大便 ${dirtyCount}` },
     { k: "范围洗澡次数", v: `${bathCount} 次` },
     { k: "范围用药次数", v: `${medicineCount} 次` },
     { k: "疫苗完成进度", v: vaccines.length ? `${doneVaccines}/${vaccines.length}` : "未生成" },
-    { k: "总记录数", v: `${entries.length} 条` },
+    { k: "累计总记录", v: `${entries.length} 条` },
   ];
-  grid.innerHTML = cards.map((c) => `<div class="stat-card"><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`).join("");
+  grid.innerHTML = cards
+    .map((c) => `<div class="stat-card ${c.tone || ""}"><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`)
+    .join("");
   if (statsMode === "chart") {
     grid.classList.add("hidden");
     chartWrap.classList.remove("hidden");
@@ -940,7 +1122,7 @@ function renderTrendChart() {
   const points = trend.points;
   const vals = points.map((p) => p.value);
   if (points.length === 0) {
-    ctx.fillStyle = "rgba(255,255,255,0.86)";
+    ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
     ctx.font = '14px "SF Pro Text", "Helvetica Neue", Arial';
     ctx.fillText("当前范围暂无可绘制数据", 16, 28);
     return;
@@ -954,9 +1136,9 @@ function renderTrendChart() {
   const ph = cssHeight - top - bottom;
   const unit = trend.unit || "数值";
 
-  ctx.strokeStyle = "rgba(128,128,128,0.25)";
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.22)";
   ctx.lineWidth = 1;
-  ctx.fillStyle = "rgba(255,255,255,0.86)";
+  ctx.fillStyle = "rgba(148, 163, 184, 0.92)";
   ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
   for (let i = 0; i <= 4; i += 1) {
     const y = top + (ph / 4) * i;
@@ -967,7 +1149,7 @@ function renderTrendChart() {
     const v = Math.round(maxY - (maxY / 4) * i);
     ctx.fillText(String(v), 8, y + 4);
   }
-  ctx.fillText(unit, 8, 12);
+  ctx.fillText(unit, 8, 14);
 
   const mapX = (i) => left + (pw * i) / Math.max(1, points.length - 1);
   const mapY = (v) => top + ph - (v / maxY) * ph;
@@ -980,7 +1162,9 @@ function renderTrendChart() {
   }));
   const drawSeries = (seriesVals, color) => {
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
     ctx.beginPath();
     seriesVals.forEach((v, i) => {
       const x = mapX(i);
@@ -991,21 +1175,46 @@ function renderTrendChart() {
     ctx.stroke();
   };
   // 点线图: 先画线，再画点
+  const gradient = ctx.createLinearGradient(0, top, 0, top + ph);
+  gradient.addColorStop(0, "rgba(10, 132, 255, 0.28)");
+  gradient.addColorStop(1, "rgba(10, 132, 255, 0.03)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = mapX(i);
+    const y = mapY(p.value);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.lineTo(mapX(points.length - 1), top + ph);
+  ctx.lineTo(mapX(0), top + ph);
+  ctx.closePath();
+  ctx.fill();
+
   drawSeries(vals, TREND_LINE_COLOR);
   ctx.fillStyle = TREND_LINE_COLOR;
   points.forEach((p, i) => {
     const x = mapX(i);
     const y = mapY(p.value);
     ctx.beginPath();
+    ctx.arc(x, y, 4.6, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(10, 132, 255, 0.22)";
+    ctx.fill();
+    ctx.beginPath();
     ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = TREND_LINE_COLOR;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
     ctx.fill();
   });
 
-  ctx.fillStyle = "rgba(255,255,255,0.86)";
-  ctx.font = '12px "SF Pro Text", "Helvetica Neue", Arial';
+  ctx.fillStyle = "rgba(148, 163, 184, 0.92)";
+  ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
   points.forEach((p, i) => {
     if (i % Math.ceil(points.length / 6) !== 0 && i !== points.length - 1) return;
-    ctx.fillText(p.label, mapX(i) - 10, cssHeight - 8);
+    ctx.fillText(p.label, mapX(i) - 12, cssHeight - 8);
   });
 }
 
@@ -1040,7 +1249,7 @@ function onChartHover(ev) {
     return;
   }
 
-  tip.innerHTML = `<div>${nearest.label}</div><div>${nearest.value} ${nearest.unit}</div>`;
+  tip.innerHTML = `<div class="chart-tip-label">${nearest.label}</div><div class="chart-tip-value">${nearest.value} ${nearest.unit}</div>`;
   const offsetX = Math.min(rect.width - 130, Math.max(6, nearest.x + 10));
   const offsetY = Math.max(6, nearest.y - 42);
   tip.style.left = `${offsetX}px`;
@@ -1589,6 +1798,7 @@ function renderTimeline() {
 
 function render() {
   renderProfile();
+  renderModuleSummaries();
   renderStats();
   renderVaccines();
   renderPhotoGallery();
@@ -1661,7 +1871,10 @@ function importData(file) {
 
 async function init() {
   initTheme();
+  loadProfile();
   await initDataSource();
+  const completionCount = [profile.name, profile.birthDate, profile.gender, profile.blood, profile.avatar].filter(Boolean).length;
+  profileEditorOpen = completionCount < 4;
   initModuleNavigation();
   renderCategories();
   populateFilter();
@@ -1685,6 +1898,9 @@ async function init() {
     renderTimeline();
   });
   document.getElementById("btn-save-profile").addEventListener("click", saveProfileFromForm);
+  document.getElementById("btn-toggle-profile-editor").addEventListener("click", toggleProfileEditor);
+  document.getElementById("baby-avatar").addEventListener("change", handleAvatarChange);
+  document.getElementById("btn-clear-avatar").addEventListener("click", clearAvatar);
   document.getElementById("btn-build-vaccine").addEventListener("click", buildVaccinePlan);
   document.getElementById("vaccine-region").addEventListener("change", (ev) => {
     vaccineSettings.region = /** @type {HTMLSelectElement} */ (ev.target).value;

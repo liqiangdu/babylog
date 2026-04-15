@@ -77,23 +77,82 @@
             <header class="module-head">
               <div>
                 <h2 class="module-title">宝宝信息</h2>
-                <p class="module-desc">维护基础档案，作为统计与计划的基准信息。</p>
+                <p class="module-desc">以档案卡形式维护宝宝基础信息，获得更清晰的成长身份视图。</p>
               </div>
             </header>
-            <section class="panel card-stack">
-              <form id="profile-form" class="inline-form" onsubmit="return false">
-                <input type="text" id="baby-name" placeholder="宝宝昵称" />
-                <input type="date" id="baby-birth" />
-                <select id="baby-gender">
-                  <option value="">性别</option>
-                  <option value="boy">男宝宝</option>
-                  <option value="girl">女宝宝</option>
-                  <option value="other">未设置</option>
-                </select>
-                <input type="text" id="baby-blood" placeholder="血型(可选)" />
-                <button type="button" class="btn btn-primary" id="btn-save-profile">保存信息</button>
-              </form>
-              <div id="profile-summary" class="muted-line">尚未填写宝宝信息</div>
+            <section class="profile-layout">
+              <article class="panel card-stack profile-showcase">
+                <div class="profile-showcase-header">
+                  <p class="profile-eyebrow">Profile</p>
+                  <div class="profile-showcase-tools">
+                    <span id="profile-showcase-status" class="profile-status-tag">未完善</span>
+                    <button type="button" id="btn-toggle-profile-editor" class="text-btn profile-edit-toggle">编辑档案</button>
+                  </div>
+                </div>
+                <div id="profile-summary" class="profile-dossier">
+                  <div class="profile-dossier-hero">
+                    <div class="profile-dossier-avatar">宝</div>
+                    <div class="profile-dossier-identity">
+                      <div class="profile-dossier-name">宝宝档案</div>
+                      <div class="profile-dossier-age">当前月龄 未设置生日</div>
+                    </div>
+                  </div>
+                  <div class="profile-dossier-grid">
+                    <div class="profile-dossier-item">
+                      <div class="profile-dossier-label">出生日期</div>
+                      <div class="profile-dossier-value">未设置</div>
+                    </div>
+                    <div class="profile-dossier-item">
+                      <div class="profile-dossier-label">性别</div>
+                      <div class="profile-dossier-value">未设置</div>
+                    </div>
+                    <div class="profile-dossier-item">
+                      <div class="profile-dossier-label">血型</div>
+                      <div class="profile-dossier-value">未设置</div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article id="profile-editor-card" class="panel card-stack profile-editor-card">
+                <div class="profile-editor-head">
+                  <h3 class="section-title">资料设置</h3>
+                  <p class="profile-editor-desc">填写后实时更新上方档案卡，形成统一且清晰的宝宝身份信息。</p>
+                </div>
+                <form id="profile-form" class="inline-form profile-form" onsubmit="return false">
+                  <div class="profile-avatar-control">
+                    <label for="baby-avatar" class="profile-avatar-label">宝宝头像</label>
+                    <div class="profile-avatar-actions">
+                      <input type="file" id="baby-avatar" accept="image/*" />
+                      <button type="button" class="text-btn" id="btn-clear-avatar">清除头像</button>
+                    </div>
+                  </div>
+                  <div class="profile-field profile-field-wide">
+                    <label class="profile-field-label" for="baby-name">宝宝昵称</label>
+                    <input type="text" id="baby-name" placeholder="如：小米粒" />
+                  </div>
+                  <div class="profile-field">
+                    <label class="profile-field-label" for="baby-birth">出生日期</label>
+                    <input type="date" id="baby-birth" />
+                  </div>
+                  <div class="profile-field">
+                    <label class="profile-field-label" for="baby-gender">性别</label>
+                    <select id="baby-gender">
+                      <option value="">请选择</option>
+                      <option value="boy">男宝宝</option>
+                      <option value="girl">女宝宝</option>
+                      <option value="other">未设置</option>
+                    </select>
+                  </div>
+                  <div class="profile-field profile-field-wide">
+                    <label class="profile-field-label" for="baby-blood">血型</label>
+                    <input type="text" id="baby-blood" placeholder="可选，如：A" />
+                  </div>
+                  <div class="profile-actions">
+                    <button type="button" class="btn btn-primary" id="btn-save-profile">保存信息</button>
+                  </div>
+                </form>
+              </article>
             </section>
           </section>
 
@@ -101,34 +160,40 @@
             <header class="module-head">
               <div>
                 <h2 class="module-title">数据统计</h2>
-                <p class="module-desc">按日期范围查看关键指标与趋势变化。</p>
+                <p class="module-desc">在统一面板中查看关键指标、趋势变化与周期表现。</p>
               </div>
             </header>
-            <section class="panel card-stack">
-              <div class="toolbar">
-                <input type="date" id="stats-start" />
-                <input type="date" id="stats-end" />
-                <select id="stats-preset" aria-label="统计快捷范围">
-                  <option value="custom">自定义范围</option>
-                  <option value="7d">最近7天</option>
-                  <option value="30d">最近30天</option>
-                  <option value="today">今天</option>
-                  <option value="all">全部</option>
-                </select>
-                <button type="button" class="text-btn" id="btn-apply-stats">应用范围</button>
+            <section class="panel card-stack stats-workspace">
+              <div class="stats-toolbar-shell">
+                <div class="toolbar stats-toolbar-primary">
+                  <input type="date" id="stats-start" />
+                  <input type="date" id="stats-end" />
+                  <select id="stats-preset" aria-label="统计快捷范围">
+                    <option value="custom">自定义范围</option>
+                    <option value="7d">最近7天</option>
+                    <option value="30d">最近30天</option>
+                    <option value="today">今天</option>
+                    <option value="all">全部</option>
+                  </select>
+                  <button type="button" class="text-btn" id="btn-apply-stats">应用范围</button>
+                </div>
+                <div class="toolbar stats-toolbar-secondary">
+                  <select id="stats-mode" aria-label="统计展示模式">
+                    <option value="cards">卡片模式</option>
+                    <option value="chart">图表模式</option>
+                  </select>
+                  <select id="chart-metric" aria-label="图表指标"></select>
+                  <select id="chart-range-mode" aria-label="图表范围">
+                    <option value="follow">跟随上方统计范围</option>
+                    <option value="7">最近7天</option>
+                    <option value="30">最近30天</option>
+                    <option value="90">最近90天</option>
+                  </select>
+                </div>
               </div>
-              <div class="toolbar">
-                <select id="stats-mode" aria-label="统计展示模式">
-                  <option value="cards">卡片模式</option>
-                  <option value="chart">图表模式</option>
-                </select>
-                <select id="chart-metric" aria-label="图表指标"></select>
-                <select id="chart-range-mode" aria-label="图表范围">
-                  <option value="follow">跟随上方统计范围</option>
-                  <option value="7">最近7天</option>
-                  <option value="30">最近30天</option>
-                  <option value="90">最近90天</option>
-                </select>
+              <div class="stats-metric-caption">
+                <span>统计概览</span>
+                <span id="stats-range-hint" class="stats-range-hint">当前范围：全部时间</span>
               </div>
               <div id="stats-grid" class="stats-grid"></div>
               <div id="stats-chart-wrap" class="stats-chart-wrap hidden">
@@ -141,15 +206,16 @@
             </section>
           </section>
 
-          <section id="module-vaccine" class="scene module-panel">
+          <section id="module-vaccine" class="scene module-panel module-vaccine">
             <header class="module-head">
               <div>
                 <h2 class="module-title">疫苗计划</h2>
-                <p class="module-desc">按地区模板管理接种计划、提醒和完成状态。</p>
+                <p class="module-desc">按地区模板管理接种计划、提醒节奏与完成状态。</p>
               </div>
             </header>
-            <section class="panel card-stack">
-              <div class="toolbar">
+            <div id="vaccine-module-summary" class="module-summary-bar"></div>
+            <section class="panel card-stack vaccine-workspace">
+              <div class="toolbar vaccine-toolbar">
                 <select id="vaccine-region" aria-label="疫苗地区模板">
                   <option value="cn">中国大陆计划</option>
                   <option value="who">WHO扩展计划</option>
@@ -161,12 +227,12 @@
                   <option value="3">提前3天</option>
                   <option value="7">提前7天</option>
                 </select>
-                <button type="button" id="btn-build-vaccine" class="text-btn">生成接种计划</button>
-                <button type="button" id="btn-check-vaccine-reminder" class="text-btn">检查提醒</button>
-                <button type="button" id="btn-enable-vaccine-notice" class="text-btn">启用通知</button>
-                <button type="button" id="btn-toggle-vaccine-editor" class="text-btn">编辑模板</button>
+                <button type="button" id="btn-build-vaccine" class="text-btn">生成计划</button>
+                <button type="button" id="btn-check-vaccine-reminder" class="text-btn">立即检查</button>
+                <button type="button" id="btn-enable-vaccine-notice" class="text-btn">开启通知</button>
+                <button type="button" id="btn-toggle-vaccine-editor" class="text-btn">模板编辑</button>
               </div>
-              <div id="vaccine-template-editor" class="panel hidden">
+              <div id="vaccine-template-editor" class="panel hidden vaccine-template-editor">
                 <div class="section-title">自定义模板编辑</div>
                 <div class="toolbar">
                   <input type="text" id="vaccine-template-name" placeholder="模板名称（如 上海儿童接种）" />
@@ -197,32 +263,34 @@
             </section>
           </section>
 
-          <section id="module-quick-entry" class="scene module-panel">
+          <section id="module-quick-entry" class="scene module-panel module-quick-entry">
             <header class="module-head">
               <div>
                 <h2 class="module-title">快速记录</h2>
-                <p class="module-desc">通过分类按钮快速创建日常记录。</p>
+                <p class="module-desc">通过分类入口快速新增日常记录，减少重复输入。</p>
               </div>
             </header>
-            <section class="panel card-stack">
+            <div id="quick-module-summary" class="module-summary-bar"></div>
+            <section class="panel card-stack quick-entry-workspace">
               <div id="category-grid" class="category-grid"></div>
             </section>
           </section>
 
-          <section id="module-timeline" class="scene module-panel">
+          <section id="module-timeline" class="scene module-panel module-timeline">
             <header class="module-head">
               <div>
                 <h2 class="module-title">时间轴</h2>
-                <p class="module-desc">按时间回看记录，支持筛选、导入和导出。</p>
+                <p class="module-desc">按时间回看记录，支持筛选、导入与导出。</p>
               </div>
             </header>
-            <section class="panel card-stack">
-              <div class="toolbar">
+            <div id="timeline-module-summary" class="module-summary-bar"></div>
+            <section class="panel card-stack timeline-workspace">
+              <div class="toolbar timeline-toolbar">
                 <select id="filter-category" aria-label="按类型筛选"></select>
                 <input type="date" id="filter-day" aria-label="按日期筛选" />
-                <button type="button" id="btn-export" class="text-btn">导出 JSON</button>
-                <label class="text-btn" style="cursor: pointer">
-                  导入
+                <button type="button" id="btn-export" class="text-btn">导出记录</button>
+                <label class="text-btn timeline-import-btn">
+                  导入记录
                   <input type="file" id="import-file" accept="application/json" class="hidden" />
                 </label>
               </div>
@@ -233,14 +301,15 @@
             </section>
           </section>
 
-          <section id="module-gallery" class="scene module-panel">
+          <section id="module-gallery" class="scene module-panel module-gallery">
             <header class="module-head">
               <div>
                 <h2 class="module-title">照片画廊</h2>
-                <p class="module-desc">集中展示记录中上传的照片，按时间倒序浏览。</p>
+                <p class="module-desc">集中展示记录中的照片，按时间倒序浏览与回看。</p>
               </div>
             </header>
-            <section class="panel card-stack">
+            <div id="gallery-module-summary" class="module-summary-bar"></div>
+            <section class="panel card-stack gallery-workspace">
               <div id="photo-gallery-summary" class="muted-line">暂无照片记录</div>
               <div id="photo-gallery" class="photo-gallery" aria-live="polite"></div>
             </section>
