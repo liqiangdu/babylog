@@ -77,23 +77,82 @@
             <header class="module-head">
               <div>
                 <h2 class="module-title">宝宝信息</h2>
-                <p class="module-desc">维护基础档案，作为统计与计划的基准信息。</p>
+                <p class="module-desc">以档案卡形式维护宝宝基础信息，获得更清晰的成长身份视图。</p>
               </div>
             </header>
-            <section class="panel card-stack">
-              <form id="profile-form" class="inline-form" onsubmit="return false">
-                <input type="text" id="baby-name" placeholder="宝宝昵称" />
-                <input type="date" id="baby-birth" />
-                <select id="baby-gender">
-                  <option value="">性别</option>
-                  <option value="boy">男宝宝</option>
-                  <option value="girl">女宝宝</option>
-                  <option value="other">未设置</option>
-                </select>
-                <input type="text" id="baby-blood" placeholder="血型(可选)" />
-                <button type="button" class="btn btn-primary" id="btn-save-profile">保存信息</button>
-              </form>
-              <div id="profile-summary" class="muted-line">尚未填写宝宝信息</div>
+            <section class="profile-layout">
+              <article class="panel card-stack profile-showcase">
+                <div class="profile-showcase-header">
+                  <p class="profile-eyebrow">Profile</p>
+                  <div class="profile-showcase-tools">
+                    <span id="profile-showcase-status" class="profile-status-tag">未完善</span>
+                    <button type="button" id="btn-toggle-profile-editor" class="text-btn profile-edit-toggle">编辑档案</button>
+                  </div>
+                </div>
+                <div id="profile-summary" class="profile-dossier">
+                  <div class="profile-dossier-hero">
+                    <div class="profile-dossier-avatar">宝</div>
+                    <div class="profile-dossier-identity">
+                      <div class="profile-dossier-name">宝宝档案</div>
+                      <div class="profile-dossier-age">当前月龄 未设置生日</div>
+                    </div>
+                  </div>
+                  <div class="profile-dossier-grid">
+                    <div class="profile-dossier-item">
+                      <div class="profile-dossier-label">出生日期</div>
+                      <div class="profile-dossier-value">未设置</div>
+                    </div>
+                    <div class="profile-dossier-item">
+                      <div class="profile-dossier-label">性别</div>
+                      <div class="profile-dossier-value">未设置</div>
+                    </div>
+                    <div class="profile-dossier-item">
+                      <div class="profile-dossier-label">血型</div>
+                      <div class="profile-dossier-value">未设置</div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article id="profile-editor-card" class="panel card-stack profile-editor-card">
+                <div class="profile-editor-head">
+                  <h3 class="section-title">资料设置</h3>
+                  <p class="profile-editor-desc">填写后实时更新上方档案卡，形成统一且清晰的宝宝身份信息。</p>
+                </div>
+                <form id="profile-form" class="inline-form profile-form" onsubmit="return false">
+                  <div class="profile-avatar-control">
+                    <label for="baby-avatar" class="profile-avatar-label">宝宝头像</label>
+                    <div class="profile-avatar-actions">
+                      <input type="file" id="baby-avatar" accept="image/*" />
+                      <button type="button" class="text-btn" id="btn-clear-avatar">清除头像</button>
+                    </div>
+                  </div>
+                  <div class="profile-field profile-field-wide">
+                    <label class="profile-field-label" for="baby-name">宝宝昵称</label>
+                    <input type="text" id="baby-name" placeholder="如：小米粒" />
+                  </div>
+                  <div class="profile-field">
+                    <label class="profile-field-label" for="baby-birth">出生日期</label>
+                    <input type="date" id="baby-birth" />
+                  </div>
+                  <div class="profile-field">
+                    <label class="profile-field-label" for="baby-gender">性别</label>
+                    <select id="baby-gender">
+                      <option value="">请选择</option>
+                      <option value="boy">男宝宝</option>
+                      <option value="girl">女宝宝</option>
+                      <option value="other">未设置</option>
+                    </select>
+                  </div>
+                  <div class="profile-field profile-field-wide">
+                    <label class="profile-field-label" for="baby-blood">血型</label>
+                    <input type="text" id="baby-blood" placeholder="可选，如：A" />
+                  </div>
+                  <div class="profile-actions">
+                    <button type="button" class="btn btn-primary" id="btn-save-profile">保存信息</button>
+                  </div>
+                </form>
+              </article>
             </section>
           </section>
 
