@@ -4,11 +4,12 @@
 
 const STORAGE_KEY = "babylog_entries_v1";
 const STORAGE_PROFILE_KEY = "babylog_profile_v1";
-const STORAGE_VACCINES_KEY = "babylog_vaccines_v1";
-const STORAGE_VACCINE_SETTINGS_KEY = "babylog_vaccine_settings_v1";
-const STORAGE_VACCINE_CUSTOM_TEMPLATES_KEY = "babylog_vaccine_custom_templates_v1";
+const STORAGE_THEME_KEY = "babylog_theme_mode_v1";
+const API_BASE = "http://127.0.0.1:8787/api";
+/** Origin for uploads and /media (no /api suffix). */
+const API_ORIGIN = API_BASE.replace(/\/api\/?$/i, "") || "http://127.0.0.1:8787";
 
-/** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string}>} */
+/** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string, photos?: string[]}>} */
 let entries = [];
 /** @type {{name: string, birthDate: string, gender: string, blood: string}} */
 let profile = { name: "", birthDate: "", gender: "", blood: "" };
@@ -24,6 +25,8 @@ const TREND_LINE_COLOR = "#0a84ff";
 let chartRangeMode = "follow";
 let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
+let apiReady = false;
+let themeMode = "system";
 
 const VACCINE_TEMPLATES = {
   cn: [
@@ -200,50 +203,165 @@ function saveProfile() {
 }
 
 function loadVaccines() {
-  try {
-    const raw = localStorage.getItem(STORAGE_VACCINES_KEY);
-    vaccines = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(vaccines)) vaccines = [];
-  } catch {
-    vaccines = [];
-  }
+  vaccines = [];
 }
 
 function saveVaccines() {
-  localStorage.setItem(STORAGE_VACCINES_KEY, JSON.stringify(vaccines));
+  if (!apiReady) return;
+  apiRequest("/vaccines", {
+    method: "PUT",
+    body: JSON.stringify(vaccines.map((v) => ({
+      id: String(v.id || ""),
+      name: String(v.name || ""),
+      dose: String(v.dose || ""),
+      due_date: String(v.dueDate || ""),
+      status: String(v.status || "todo"),
+      done_at: String(v.doneAt || ""),
+    }))),
+  }).catch(() => {
+    apiReady = false;
+  });
 }
 
 function loadVaccineSettings() {
-  try {
-    const raw = localStorage.getItem(STORAGE_VACCINE_SETTINGS_KEY);
-    const data = raw ? JSON.parse(raw) : {};
-    vaccineSettings = {
-      region: data?.region || "cn",
-      reminderDays: Number(data?.reminderDays ?? 3),
-      notificationsEnabled: Boolean(data?.notificationsEnabled),
-      notifiedMap: data?.notifiedMap && typeof data.notifiedMap === "object" ? data.notifiedMap : {},
-    };
-  } catch {
-    vaccineSettings = { region: "cn", reminderDays: 3, notificationsEnabled: false, notifiedMap: {} };
-  }
+  vaccineSettings = { region: "cn", reminderDays: 3, notificationsEnabled: false, notifiedMap: {} };
 }
 
 function saveVaccineSettings() {
-  localStorage.setItem(STORAGE_VACCINE_SETTINGS_KEY, JSON.stringify(vaccineSettings));
+  if (!apiReady) return;
+  apiRequest("/vaccine-settings", {
+    method: "PUT",
+    body: JSON.stringify({
+      region: String(vaccineSettings.region || "cn"),
+      reminder_days: Number(vaccineSettings.reminderDays ?? 3),
+      notifications_enabled: Boolean(vaccineSettings.notificationsEnabled),
+      notified_map: vaccineSettings.notifiedMap || {},
+    }),
+  }).catch(() => {
+    apiReady = false;
+  });
 }
 
 function loadCustomVaccineTemplates() {
-  try {
-    const raw = localStorage.getItem(STORAGE_VACCINE_CUSTOM_TEMPLATES_KEY);
-    const data = raw ? JSON.parse(raw) : {};
-    customVaccineTemplates = data && typeof data === "object" ? data : {};
-  } catch {
-    customVaccineTemplates = {};
-  }
+  customVaccineTemplates = {};
 }
 
 function saveCustomVaccineTemplates() {
-  localStorage.setItem(STORAGE_VACCINE_CUSTOM_TEMPLATES_KEY, JSON.stringify(customVaccineTemplates));
+  if (!apiReady) return;
+  apiRequest("/vaccine-templates", {
+    method: "PUT",
+    body: JSON.stringify(customVaccineTemplates),
+  }).catch(() => {
+    apiReady = false;
+  });
+}
+
+async function apiRequest(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options,
+  });
+  if (!res.ok) {
+    throw new Error(`API ${res.status}`);
+  }
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) return res.json();
+  return null;
+}
+
+function mapEntryFromApi(item) {
+  return {
+    id: item.id,
+    categoryId: item.category_id,
+    at: item.at,
+    fields: item.fields || {},
+    note: item.note || "",
+    photos: Array.isArray(item.photos) ? item.photos : [],
+  };
+}
+
+function mapEntryToApi(item) {
+  return {
+    category_id: item.categoryId,
+    at: item.at,
+    fields: item.fields || {},
+    note: item.note || "",
+    photos: Array.isArray(item.photos) ? item.photos : [],
+  };
+}
+
+function applyTheme(mode) {
+  const root = document.documentElement;
+  themeMode = ["system", "light", "dark"].includes(mode) ? mode : "system";
+  if (themeMode === "system") root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", themeMode);
+  localStorage.setItem(STORAGE_THEME_KEY, themeMode);
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(STORAGE_THEME_KEY) || "system";
+  applyTheme(saved);
+  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById("theme-select"));
+  if (!sel) return;
+  sel.value = themeMode;
+  sel.addEventListener("change", (ev) => {
+    applyTheme(/** @type {HTMLSelectElement} */ (ev.target).value);
+  });
+}
+
+async function initDataSource() {
+  try {
+    const [
+      apiProfile,
+      apiEntriesResp,
+      apiVaccines,
+      apiVaccineSettings,
+      apiVaccineTemplates,
+    ] = await Promise.all([
+      apiRequest("/profile"),
+      apiRequest("/entries?limit=5000&offset=0"),
+      apiRequest("/vaccines"),
+      apiRequest("/vaccine-settings"),
+      apiRequest("/vaccine-templates"),
+    ]);
+    profile = {
+      name: apiProfile?.name || "",
+      birthDate: apiProfile?.birth_date || "",
+      gender: apiProfile?.gender || "",
+      blood: apiProfile?.blood || "",
+    };
+    const items = Array.isArray(apiEntriesResp?.items) ? apiEntriesResp.items : [];
+    entries = items.map(mapEntryFromApi).sort((a, b) => new Date(b.at) - new Date(a.at));
+    vaccines = Array.isArray(apiVaccines)
+      ? apiVaccines.map((v) => ({
+        id: String(v.id || ""),
+        name: String(v.name || ""),
+        dose: String(v.dose || ""),
+        dueDate: String(v.due_date || ""),
+        status: v.status === "done" ? "done" : "todo",
+        doneAt: String(v.done_at || ""),
+      }))
+      : [];
+    vaccineSettings = {
+      region: apiVaccineSettings?.region || "cn",
+      reminderDays: Number(apiVaccineSettings?.reminder_days ?? 3),
+      notificationsEnabled: Boolean(apiVaccineSettings?.notifications_enabled),
+      notifiedMap: apiVaccineSettings?.notified_map && typeof apiVaccineSettings.notified_map === "object"
+        ? apiVaccineSettings.notified_map
+        : {},
+    };
+    customVaccineTemplates = apiVaccineTemplates && typeof apiVaccineTemplates === "object"
+      ? apiVaccineTemplates
+      : {};
+    apiReady = true;
+  } catch {
+    apiReady = false;
+    load();
+    loadProfile();
+    loadVaccines();
+    loadVaccineSettings();
+    loadCustomVaccineTemplates();
+  }
 }
 
 function getAllVaccineTemplates() {
@@ -356,10 +474,105 @@ function inferMetricUnit(field) {
 
 let editingId = null;
 let pendingCategoryId = null;
+/** @type {string[]} */
+let modalPhotos = [];
+
+const MAX_ENTRY_PHOTOS = 8;
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Upload image files to backend object storage; returns public URLs (/media/...).
+ * @param {File[]} files
+ * @returns {Promise<string[]>}
+ */
+async function uploadPhotosToServer(files) {
+  const form = new FormData();
+  for (const f of files) {
+    form.append("file", f);
+  }
+  const res = await fetch(`${API_ORIGIN}/api/uploads`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || `upload ${res.status}`);
+  }
+  const urls = data.urls;
+  if (!Array.isArray(urls)) throw new Error("invalid upload response");
+  return urls;
+}
+
+function renderPhotoPreviews(form) {
+  const wrap = form.querySelector("#photo-previews");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  modalPhotos.forEach((url, idx) => {
+    const item = document.createElement("div");
+    item.className = "photo-preview-item";
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = `照片 ${idx + 1}`;
+    img.className = "photo-preview-thumb";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "photo-preview-remove";
+    btn.textContent = "×";
+    btn.title = "移除";
+    btn.addEventListener("click", () => {
+      modalPhotos.splice(idx, 1);
+      renderPhotoPreviews(form);
+    });
+    item.appendChild(img);
+    item.appendChild(btn);
+    wrap.appendChild(item);
+  });
+}
+
+async function onModalPhotosSelected(input) {
+  const files = [...(input.files || [])];
+  input.value = "";
+  const form = document.getElementById("modal-form");
+  if (!apiReady) {
+    alert("上传照片需要先启动后端：图片会保存到服务端对象存储，数据库只存 URL。");
+    return;
+  }
+  const room = MAX_ENTRY_PHOTOS - modalPhotos.length;
+  if (room <= 0) {
+    alert(`最多添加 ${MAX_ENTRY_PHOTOS} 张照片`);
+    return;
+  }
+  /** @type {File[]} */
+  const candidates = [];
+  for (const file of files) {
+    if (!file.type.startsWith("image/")) {
+      alert(`已跳过非图片文件: ${file.name}`);
+      continue;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      alert(`图片过大（>${MAX_PHOTO_BYTES / 1024 / 1024}MB），已跳过: ${file.name}`);
+      continue;
+    }
+    if (candidates.length >= room) {
+      alert(`最多再添加 ${room} 张（合计 ${MAX_ENTRY_PHOTOS} 张上限）`);
+      break;
+    }
+    candidates.push(file);
+  }
+  if (!candidates.length) return;
+  try {
+    const urls = await uploadPhotosToServer(candidates);
+    modalPhotos.push(...urls);
+  } catch (e) {
+    alert(`照片上传失败：${e instanceof Error ? e.message : String(e)}`);
+  }
+  renderPhotoPreviews(form);
+}
 
 function openModal(categoryId, existing) {
   pendingCategoryId = categoryId;
   editingId = existing ? existing.id : null;
+  modalPhotos = existing && Array.isArray(existing.photos) ? [...existing.photos] : [];
   const cat = getCategory(categoryId);
   const overlay = document.getElementById("modal-overlay");
   const title = document.getElementById("modal-title");
@@ -412,6 +625,18 @@ function openModal(categoryId, existing) {
   `;
   form.appendChild(noteRow);
 
+  const photoRow = document.createElement("div");
+  photoRow.className = "form-row";
+  photoRow.innerHTML = `
+    <label for="field-photos">照片（可选，最多 ${MAX_ENTRY_PHOTOS} 张，需后端；存对象存储+URL）</label>
+    <input type="file" id="field-photos" accept="image/*" multiple />
+    <div id="photo-previews" class="photo-previews" aria-live="polite"></div>
+  `;
+  form.appendChild(photoRow);
+  renderPhotoPreviews(form);
+  const photoInput = /** @type {HTMLInputElement} */ (photoRow.querySelector("#field-photos"));
+  photoInput.addEventListener("change", () => onModalPhotosSelected(photoInput));
+
   if (existing) {
     const flds = existing.fields || {};
     for (const f of cat.fields) {
@@ -429,6 +654,7 @@ function closeModal() {
   document.getElementById("modal-overlay").classList.remove("open");
   pendingCategoryId = null;
   editingId = null;
+  modalPhotos = [];
 }
 
 function collectForm() {
@@ -452,36 +678,71 @@ function collectForm() {
   }
   const noteEl = /** @type {HTMLTextAreaElement} */ (form.querySelector("#field-note"));
   const note = noteEl ? noteEl.value.trim() : "";
-  return { at, fields, note };
+  return { at, fields, note, photos: [...modalPhotos] };
 }
 
-function submitModal() {
+async function submitModal() {
   if (!pendingCategoryId) return;
-  const { at, fields, note } = collectForm();
+  const { at, fields, note, photos } = collectForm();
+  let changedEntry = null;
   if (editingId) {
     const idx = entries.findIndex((e) => e.id === editingId);
     if (idx >= 0) {
-      entries[idx] = { ...entries[idx], categoryId: pendingCategoryId, at, fields, note };
+      entries[idx] = { ...entries[idx], categoryId: pendingCategoryId, at, fields, note, photos };
+      changedEntry = entries[idx];
     }
   } else {
-    entries.push({
+    changedEntry = {
       id: crypto.randomUUID(),
       categoryId: pendingCategoryId,
       at,
       fields,
       note,
-    });
+      photos,
+    };
+    entries.push(changedEntry);
   }
   entries.sort((a, b) => new Date(b.at) - new Date(a.at));
-  save();
+  if (apiReady && changedEntry) {
+    try {
+      if (editingId) {
+        await apiRequest(`/entries/${changedEntry.id}`, {
+          method: "PUT",
+          body: JSON.stringify(mapEntryToApi(changedEntry)),
+        });
+      } else {
+        const created = await apiRequest("/entries", {
+          method: "POST",
+          body: JSON.stringify(mapEntryToApi(changedEntry)),
+        });
+        if (created?.id) changedEntry.id = created.id;
+      }
+    } catch {
+      apiReady = false;
+      save();
+      alert("后端暂不可用，已回退到本地存储。");
+    }
+  } else {
+    save();
+  }
   closeModal();
   render();
 }
 
-function deleteEntry(id) {
+async function deleteEntry(id) {
   if (!confirm("确定删除这条记录？")) return;
   entries = entries.filter((e) => e.id !== id);
-  save();
+  if (apiReady) {
+    try {
+      await apiRequest(`/entries/${id}`, { method: "DELETE" });
+    } catch {
+      apiReady = false;
+      save();
+      alert("后端暂不可用，已回退到本地存储。");
+    }
+  } else {
+    save();
+  }
   render();
 }
 
@@ -521,14 +782,32 @@ function renderProfile() {
   summary.textContent = details.join(" | ");
 }
 
-function saveProfileFromForm() {
+async function saveProfileFromForm() {
   profile = {
     name: /** @type {HTMLInputElement} */ (document.getElementById("baby-name")).value.trim(),
     birthDate: /** @type {HTMLInputElement} */ (document.getElementById("baby-birth")).value,
     gender: /** @type {HTMLSelectElement} */ (document.getElementById("baby-gender")).value,
     blood: /** @type {HTMLInputElement} */ (document.getElementById("baby-blood")).value.trim(),
   };
-  saveProfile();
+  if (apiReady) {
+    try {
+      await apiRequest("/profile", {
+        method: "PUT",
+        body: JSON.stringify({
+          name: profile.name,
+          birth_date: profile.birthDate,
+          gender: profile.gender,
+          blood: profile.blood,
+        }),
+      });
+    } catch {
+      apiReady = false;
+      saveProfile();
+      alert("后端暂不可用，已回退到本地存储。");
+    }
+  } else {
+    saveProfile();
+  }
   renderProfile();
   renderVaccines();
   alert("宝宝信息已保存");
@@ -1151,8 +1430,35 @@ function renderTimeline() {
         <button type="button" class="icon-btn" data-del title="删除">🗑</button>
       </div>
     `;
+    const bodyEl = li.querySelector(".tl-body");
     const metaEl = li.querySelector(".tl-meta");
     if (metaEl) metaEl.textContent = metaLine;
+    const photos = Array.isArray(e.photos) ? e.photos : [];
+    if (photos.length && bodyEl) {
+      const wrap = document.createElement("div");
+      wrap.className = "tl-photos";
+      photos.slice(0, 4).forEach((url) => {
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.className = "tl-photo-link";
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = "附图";
+        img.className = "tl-photo-thumb";
+        img.loading = "lazy";
+        a.appendChild(img);
+        wrap.appendChild(a);
+      });
+      if (photos.length > 4) {
+        const more = document.createElement("span");
+        more.className = "tl-photo-more";
+        more.textContent = `+${photos.length - 4}`;
+        wrap.appendChild(more);
+      }
+      bodyEl.appendChild(wrap);
+    }
     li.querySelector("[data-edit]").addEventListener("click", () => openModal(e.categoryId, e));
     li.querySelector("[data-del]").addEventListener("click", () => deleteEntry(e.id));
     frag.appendChild(li);
@@ -1208,12 +1514,23 @@ function exportData() {
 
 function importData(file) {
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
       const arr = JSON.parse(/** @type {string} */ (reader.result));
       if (!Array.isArray(arr)) throw new Error("格式错误");
-      entries = arr.filter((x) => x && x.id && x.categoryId && x.at);
-      save();
+      entries = arr
+        .filter((x) => x && x.id && x.categoryId && x.at)
+        .map((x) => ({ ...x, photos: Array.isArray(x.photos) ? x.photos : [] }));
+      if (apiReady) {
+        for (const e of entries) {
+          await apiRequest("/entries", {
+            method: "POST",
+            body: JSON.stringify(mapEntryToApi(e)),
+          });
+        }
+      } else {
+        save();
+      }
       render();
       alert(`已导入 ${entries.length} 条记录`);
     } catch {
@@ -1223,12 +1540,9 @@ function importData(file) {
   reader.readAsText(file);
 }
 
-function init() {
-  load();
-  loadProfile();
-  loadVaccines();
-  loadVaccineSettings();
-  loadCustomVaccineTemplates();
+async function init() {
+  initTheme();
+  await initDataSource();
   renderCategories();
   populateFilter();
   populateChartMetricOptions();
