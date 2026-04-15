@@ -1384,6 +1384,63 @@ function renderVaccines() {
   checkVaccineReminders(false);
 }
 
+function collectGalleryPhotos() {
+  /** @type {Array<{entryId: string, at: string, categoryLabel: string, url: string}>} */
+  const photos = [];
+  for (const entry of entries) {
+    const urls = Array.isArray(entry.photos) ? entry.photos : [];
+    if (!urls.length) continue;
+    const cat = getCategory(entry.categoryId);
+    for (const url of urls) {
+      photos.push({
+        entryId: entry.id,
+        at: entry.at,
+        categoryLabel: cat.label,
+        url,
+      });
+    }
+  }
+  return photos.sort((a, b) => new Date(b.at) - new Date(a.at));
+}
+
+function renderPhotoGallery() {
+  const summaryEl = document.getElementById("photo-gallery-summary");
+  const galleryEl = document.getElementById("photo-gallery");
+  if (!summaryEl || !galleryEl) return;
+  const photos = collectGalleryPhotos();
+  if (!photos.length) {
+    summaryEl.textContent = "暂无照片记录";
+    galleryEl.innerHTML = `<div class="empty-state">上传照片后会在这里集中展示。</div>`;
+    return;
+  }
+  const daySet = new Set(photos.map((p) => toLocalDateKey(p.at)));
+  summaryEl.textContent = `共 ${photos.length} 张照片，覆盖 ${daySet.size} 天`;
+  galleryEl.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  for (const photo of photos) {
+    const item = document.createElement("article");
+    item.className = "photo-gallery-item";
+    const link = document.createElement("a");
+    link.href = photo.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.className = "photo-gallery-link";
+    const img = document.createElement("img");
+    img.src = photo.url;
+    img.alt = `${photo.categoryLabel} 照片`;
+    img.className = "photo-gallery-thumb";
+    img.loading = "lazy";
+    const meta = document.createElement("div");
+    meta.className = "photo-gallery-meta";
+    meta.textContent = `${formatDateHeader(photo.at)} · ${formatTime(photo.at)} · ${photo.categoryLabel}`;
+    link.appendChild(img);
+    item.appendChild(link);
+    item.appendChild(meta);
+    frag.appendChild(item);
+  }
+  galleryEl.appendChild(frag);
+}
+
 function renderTimeline() {
   const filter = /** @type {HTMLSelectElement} */ (document.getElementById("filter-category")).value;
   const day = /** @type {HTMLInputElement} */ (document.getElementById("filter-day")).value;
@@ -1473,6 +1530,7 @@ function render() {
   renderProfile();
   renderStats();
   renderVaccines();
+  renderPhotoGallery();
   renderTimeline();
 }
 
