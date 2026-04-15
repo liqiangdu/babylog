@@ -12,7 +12,7 @@ if (-not (Test-Path $backend)) {
 }
 
 $frontendCmd = "cd `"$root`"; npx --yes serve ."
-$backendCmd = "cd `"$backend`"; `$env:PATH = `"C:\msys64\mingw64\bin;`" + `$env:PATH; cargo run"
+$backendCmd = "cd `"$backend`"; cargo run"
 
 # Force restart backend: stop current listener on 8787 first.
 try {

@@ -2,6 +2,8 @@
 
 Rust + Axum backend scaffold for BabyLog performance experiments.
 
+Windows builds use the **MSVC** target (`x86_64-pc-windows-msvc`). Install [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the **Desktop development with C++** workload so `link.exe` is available.
+
 ## Run
 
 ```bash

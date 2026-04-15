@@ -62,7 +62,7 @@ cargo run
 会自动打开两个 PowerShell 窗口：
 
 - 前端静态服务（`npx --yes serve .`）
-- Rust API（自动注入 `C:\msys64\mingw64\bin` 到 PATH 后执行 `cargo run`）
+- Rust API（使用默认 MSVC 工具链执行 `cargo run`，需已安装 Visual Studio Build Tools 的 C++ 工作负载）
 
 脚本会在启动前**强制重启 backend**（结束占用 `127.0.0.1:8787` 的旧进程，再拉起新实例）。
 
