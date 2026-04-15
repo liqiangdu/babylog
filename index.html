@@ -15,169 +15,239 @@
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
-    <header class="top-nav">
-      <div class="nav-inner">
-        <div class="nav-logo">BabyLog</div>
-        <div class="nav-tools">
-          <div class="nav-meta">成长记录</div>
+    <div id="mobile-topbar" class="mobile-topbar">
+      <button type="button" id="btn-open-sidebar" class="icon-btn" aria-label="打开菜单">☰</button>
+      <div id="mobile-topbar-title" class="mobile-topbar-title">BabyLog</div>
+    </div>
+
+    <div id="app-backdrop" class="app-backdrop hidden"></div>
+
+    <div class="app-shell">
+      <aside id="app-sidebar" class="app-sidebar">
+        <div class="sidebar-brand">BabyLog</div>
+        <div class="sidebar-subtitle">成长记录</div>
+        <nav id="module-nav" class="module-nav" aria-label="模块导航">
+          <div class="module-nav-group-label">概览</div>
+          <button type="button" class="module-nav-item active" data-module="profile">
+            <span class="module-nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 19c1.8-3 4.1-4.5 7-4.5s5.2 1.5 7 4.5"></path></svg>
+            </span><span class="module-nav-text">宝宝信息</span>
+          </button>
+          <button type="button" class="module-nav-item" data-module="stats">
+            <span class="module-nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 19V9"></path><path d="M12 19V5"></path><path d="M19 19v-7"></path><path d="M4 19h16"></path></svg>
+            </span><span class="module-nav-text">数据统计</span>
+          </button>
+          <button type="button" class="module-nav-item" data-module="vaccine">
+            <span class="module-nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 7l10 10"></path><path d="M6 9l2-2"></path><path d="M16 19l2-2"></path><path d="M13 4l7 7"></path></svg>
+            </span><span class="module-nav-text">疫苗计划</span>
+          </button>
+          <div class="module-nav-divider"></div>
+          <div class="module-nav-group-label">记录</div>
+          <button type="button" class="module-nav-item" data-module="quick-entry">
+            <span class="module-nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+            </span><span class="module-nav-text">快速记录</span>
+          </button>
+          <button type="button" class="module-nav-item" data-module="timeline">
+            <span class="module-nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path></svg>
+            </span><span class="module-nav-text">时间轴</span>
+          </button>
+          <button type="button" class="module-nav-item" data-module="gallery">
+            <span class="module-nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"></rect><circle cx="9" cy="11" r="1.6"></circle><path d="M20 15l-4-3-4 4-3-2-5 4"></path></svg>
+            </span><span class="module-nav-text">照片画廊</span>
+          </button>
+        </nav>
+        <div class="sidebar-tools">
+          <label for="theme-select" class="sidebar-label">主题模式</label>
           <select id="theme-select" aria-label="主题模式">
             <option value="system">跟随系统</option>
             <option value="light">浅色</option>
             <option value="dark">深色</option>
           </select>
         </div>
-      </div>
-    </header>
+      </aside>
 
-    <main>
-      <section class="hero">
-        <div class="container hero-content">
-          <h1>记录每一次成长瞬间</h1>
-          <p>喝奶、睡眠、尿布、用药、发育与疫苗，一站式管理宝宝日常。</p>
-        </div>
-      </section>
-
-      <section class="scene">
+      <main class="app-content">
         <div class="container">
-          <section class="panel card-stack">
-            <div class="section-title">宝宝信息</div>
-            <form id="profile-form" class="inline-form" onsubmit="return false">
-              <input type="text" id="baby-name" placeholder="宝宝昵称" />
-              <input type="date" id="baby-birth" />
-              <select id="baby-gender">
-                <option value="">性别</option>
-                <option value="boy">男宝宝</option>
-                <option value="girl">女宝宝</option>
-                <option value="other">未设置</option>
-              </select>
-              <input type="text" id="baby-blood" placeholder="血型(可选)" />
-              <button type="button" class="btn btn-primary" id="btn-save-profile">保存信息</button>
-            </form>
-            <div id="profile-summary" class="muted-line">尚未填写宝宝信息</div>
-          </section>
-        </div>
-      </section>
-
-      <section class="scene">
-        <div class="container">
-          <section class="panel card-stack">
-            <div class="section-title">数据统计</div>
-            <div class="toolbar">
-              <input type="date" id="stats-start" />
-              <input type="date" id="stats-end" />
-              <select id="stats-preset" aria-label="统计快捷范围">
-                <option value="custom">自定义范围</option>
-                <option value="7d">最近7天</option>
-                <option value="30d">最近30天</option>
-                <option value="today">今天</option>
-                <option value="all">全部</option>
-              </select>
-              <button type="button" class="text-btn" id="btn-apply-stats">应用范围</button>
-            </div>
-            <div class="toolbar">
-              <select id="stats-mode" aria-label="统计展示模式">
-                <option value="cards">卡片模式</option>
-                <option value="chart">图表模式</option>
-              </select>
-          <select id="chart-metric" aria-label="图表指标"></select>
-          <select id="chart-range-mode" aria-label="图表范围">
-            <option value="follow">跟随上方统计范围</option>
-            <option value="7">最近7天</option>
-            <option value="30">最近30天</option>
-            <option value="90">最近90天</option>
-              </select>
-            </div>
-            <div id="stats-grid" class="stats-grid"></div>
-            <div id="stats-chart-wrap" class="stats-chart-wrap hidden">
-              <canvas id="stats-chart" width="900" height="320"></canvas>
-              <div id="chart-tooltip" class="chart-tooltip hidden"></div>
-              <div class="chart-legend">
-            <span><i class="dot feed"></i> <span id="chart-legend-text">趋势指标</span></span>
+          <section id="module-profile" class="scene module-panel active">
+            <header class="module-head">
+              <div>
+                <h2 class="module-title">宝宝信息</h2>
+                <p class="module-desc">维护基础档案，作为统计与计划的基准信息。</p>
               </div>
-            </div>
+            </header>
+            <section class="panel card-stack">
+              <form id="profile-form" class="inline-form" onsubmit="return false">
+                <input type="text" id="baby-name" placeholder="宝宝昵称" />
+                <input type="date" id="baby-birth" />
+                <select id="baby-gender">
+                  <option value="">性别</option>
+                  <option value="boy">男宝宝</option>
+                  <option value="girl">女宝宝</option>
+                  <option value="other">未设置</option>
+                </select>
+                <input type="text" id="baby-blood" placeholder="血型(可选)" />
+                <button type="button" class="btn btn-primary" id="btn-save-profile">保存信息</button>
+              </form>
+              <div id="profile-summary" class="muted-line">尚未填写宝宝信息</div>
+            </section>
           </section>
-        </div>
-      </section>
 
-      <section class="scene">
-        <div class="container">
-          <section class="panel card-stack">
-            <div class="section-title">疫苗计划</div>
-            <div class="toolbar">
-              <select id="vaccine-region" aria-label="疫苗地区模板">
-                <option value="cn">中国大陆计划</option>
-                <option value="who">WHO扩展计划</option>
-                <option value="us">美国CDC简版</option>
-              </select>
-              <select id="vaccine-reminder-days" aria-label="提前提醒天数">
-                <option value="0">当天提醒</option>
-                <option value="1">提前1天</option>
-                <option value="3">提前3天</option>
-                <option value="7">提前7天</option>
-              </select>
-              <button type="button" id="btn-build-vaccine" class="text-btn">生成接种计划</button>
-              <button type="button" id="btn-check-vaccine-reminder" class="text-btn">检查提醒</button>
-              <button type="button" id="btn-enable-vaccine-notice" class="text-btn">启用通知</button>
-              <button type="button" id="btn-toggle-vaccine-editor" class="text-btn">编辑模板</button>
-            </div>
-            <div id="vaccine-template-editor" class="panel hidden">
-              <div class="section-title">自定义模板编辑</div>
+          <section id="module-stats" class="scene module-panel">
+            <header class="module-head">
+              <div>
+                <h2 class="module-title">数据统计</h2>
+                <p class="module-desc">按日期范围查看关键指标与趋势变化。</p>
+              </div>
+            </header>
+            <section class="panel card-stack">
               <div class="toolbar">
-                <input type="text" id="vaccine-template-name" placeholder="模板名称（如 上海儿童接种）" />
-              </div>
-              <div class="form-row">
-                <label>条目（表格化编辑）</label>
-                <table id="vaccine-template-table" class="vaccine-table">
-                  <thead>
-                    <tr>
-                      <th>疫苗名</th>
-                      <th>剂次</th>
-                      <th>天数</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody id="vaccine-template-tbody"></tbody>
-                </table>
+                <input type="date" id="stats-start" />
+                <input type="date" id="stats-end" />
+                <select id="stats-preset" aria-label="统计快捷范围">
+                  <option value="custom">自定义范围</option>
+                  <option value="7d">最近7天</option>
+                  <option value="30d">最近30天</option>
+                  <option value="today">今天</option>
+                  <option value="all">全部</option>
+                </select>
+                <button type="button" class="text-btn" id="btn-apply-stats">应用范围</button>
               </div>
               <div class="toolbar">
-                <button type="button" id="btn-add-vaccine-row" class="text-btn">新增一行</button>
-                <button type="button" id="btn-load-vaccine-template" class="text-btn">载入当前模板</button>
-                <button type="button" id="btn-save-vaccine-template" class="text-btn">保存模板</button>
-                <button type="button" id="btn-delete-vaccine-template" class="text-btn">删除当前自定义</button>
+                <select id="stats-mode" aria-label="统计展示模式">
+                  <option value="cards">卡片模式</option>
+                  <option value="chart">图表模式</option>
+                </select>
+                <select id="chart-metric" aria-label="图表指标"></select>
+                <select id="chart-range-mode" aria-label="图表范围">
+                  <option value="follow">跟随上方统计范围</option>
+                  <option value="7">最近7天</option>
+                  <option value="30">最近30天</option>
+                  <option value="90">最近90天</option>
+                </select>
               </div>
-            </div>
-            <div id="vaccine-reminder-summary" class="muted-line"></div>
-            <ul id="vaccine-list" class="timeline"></ul>
-          </section>
-        </div>
-      </section>
-
-      <section class="scene">
-        <div class="container">
-          <section class="panel card-stack">
-            <div class="section-title">快速记录</div>
-            <div id="category-grid" class="category-grid"></div>
+              <div id="stats-grid" class="stats-grid"></div>
+              <div id="stats-chart-wrap" class="stats-chart-wrap hidden">
+                <canvas id="stats-chart" width="900" height="320"></canvas>
+                <div id="chart-tooltip" class="chart-tooltip hidden"></div>
+                <div class="chart-legend">
+                  <span><i class="dot feed"></i> <span id="chart-legend-text">趋势指标</span></span>
+                </div>
+              </div>
+            </section>
           </section>
 
-          <section class="panel card-stack">
-            <div class="section-title">时间轴</div>
-            <div class="toolbar">
-              <select id="filter-category" aria-label="按类型筛选"></select>
-              <input type="date" id="filter-day" aria-label="按日期筛选" />
-              <button type="button" id="btn-export" class="text-btn">导出 JSON</button>
-              <label class="text-btn" style="cursor: pointer">
-                导入
-                <input type="file" id="import-file" accept="application/json" class="hidden" />
-              </label>
-            </div>
-            <ul id="timeline" class="timeline" aria-live="polite"></ul>
-            <div id="timeline-more-wrap" class="timeline-more-wrap hidden">
-              <button type="button" id="btn-more-timeline" class="text-btn">更多</button>
-            </div>
+          <section id="module-vaccine" class="scene module-panel">
+            <header class="module-head">
+              <div>
+                <h2 class="module-title">疫苗计划</h2>
+                <p class="module-desc">按地区模板管理接种计划、提醒和完成状态。</p>
+              </div>
+            </header>
+            <section class="panel card-stack">
+              <div class="toolbar">
+                <select id="vaccine-region" aria-label="疫苗地区模板">
+                  <option value="cn">中国大陆计划</option>
+                  <option value="who">WHO扩展计划</option>
+                  <option value="us">美国CDC简版</option>
+                </select>
+                <select id="vaccine-reminder-days" aria-label="提前提醒天数">
+                  <option value="0">当天提醒</option>
+                  <option value="1">提前1天</option>
+                  <option value="3">提前3天</option>
+                  <option value="7">提前7天</option>
+                </select>
+                <button type="button" id="btn-build-vaccine" class="text-btn">生成接种计划</button>
+                <button type="button" id="btn-check-vaccine-reminder" class="text-btn">检查提醒</button>
+                <button type="button" id="btn-enable-vaccine-notice" class="text-btn">启用通知</button>
+                <button type="button" id="btn-toggle-vaccine-editor" class="text-btn">编辑模板</button>
+              </div>
+              <div id="vaccine-template-editor" class="panel hidden">
+                <div class="section-title">自定义模板编辑</div>
+                <div class="toolbar">
+                  <input type="text" id="vaccine-template-name" placeholder="模板名称（如 上海儿童接种）" />
+                </div>
+                <div class="form-row">
+                  <label>条目（表格化编辑）</label>
+                  <table id="vaccine-template-table" class="vaccine-table">
+                    <thead>
+                      <tr>
+                        <th>疫苗名</th>
+                        <th>剂次</th>
+                        <th>天数</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="vaccine-template-tbody"></tbody>
+                  </table>
+                </div>
+                <div class="toolbar">
+                  <button type="button" id="btn-add-vaccine-row" class="text-btn">新增一行</button>
+                  <button type="button" id="btn-load-vaccine-template" class="text-btn">载入当前模板</button>
+                  <button type="button" id="btn-save-vaccine-template" class="text-btn">保存模板</button>
+                  <button type="button" id="btn-delete-vaccine-template" class="text-btn">删除当前自定义</button>
+                </div>
+              </div>
+              <div id="vaccine-reminder-summary" class="muted-line"></div>
+              <ul id="vaccine-list" class="timeline"></ul>
+            </section>
+          </section>
+
+          <section id="module-quick-entry" class="scene module-panel">
+            <header class="module-head">
+              <div>
+                <h2 class="module-title">快速记录</h2>
+                <p class="module-desc">通过分类按钮快速创建日常记录。</p>
+              </div>
+            </header>
+            <section class="panel card-stack">
+              <div id="category-grid" class="category-grid"></div>
+            </section>
+          </section>
+
+          <section id="module-timeline" class="scene module-panel">
+            <header class="module-head">
+              <div>
+                <h2 class="module-title">时间轴</h2>
+                <p class="module-desc">按时间回看记录，支持筛选、导入和导出。</p>
+              </div>
+            </header>
+            <section class="panel card-stack">
+              <div class="toolbar">
+                <select id="filter-category" aria-label="按类型筛选"></select>
+                <input type="date" id="filter-day" aria-label="按日期筛选" />
+                <button type="button" id="btn-export" class="text-btn">导出 JSON</button>
+                <label class="text-btn" style="cursor: pointer">
+                  导入
+                  <input type="file" id="import-file" accept="application/json" class="hidden" />
+                </label>
+              </div>
+              <ul id="timeline" class="timeline" aria-live="polite"></ul>
+              <div id="timeline-more-wrap" class="timeline-more-wrap hidden">
+                <button type="button" id="btn-more-timeline" class="text-btn">更多</button>
+              </div>
+            </section>
+          </section>
+
+          <section id="module-gallery" class="scene module-panel">
+            <header class="module-head">
+              <div>
+                <h2 class="module-title">照片画廊</h2>
+                <p class="module-desc">集中展示记录中上传的照片，按时间倒序浏览。</p>
+              </div>
+            </header>
+            <section class="panel card-stack">
+              <div id="photo-gallery-summary" class="muted-line">暂无照片记录</div>
+              <div id="photo-gallery" class="photo-gallery" aria-live="polite"></div>
+            </section>
           </section>
         </div>
-      </section>
-    </main>
+      </main>
+    </div>
 
     <div id="modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <div class="modal">

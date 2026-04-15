@@ -27,6 +27,8 @@ let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
 let apiReady = false;
 let themeMode = "system";
+let activeModuleId = "profile";
+let sidebarOpen = false;
 
 const VACCINE_TEMPLATES = {
   cn: [
@@ -307,6 +309,65 @@ function initTheme() {
   sel.addEventListener("change", (ev) => {
     applyTheme(/** @type {HTMLSelectElement} */ (ev.target).value);
   });
+}
+
+function setSidebarOpen(open) {
+  sidebarOpen = Boolean(open);
+  const sidebar = document.getElementById("app-sidebar");
+  const backdrop = document.getElementById("app-backdrop");
+  if (!sidebar || !backdrop) return;
+  if (sidebarOpen) {
+    sidebar.classList.add("open");
+    backdrop.classList.remove("hidden");
+  } else {
+    sidebar.classList.remove("open");
+    backdrop.classList.add("hidden");
+  }
+}
+
+function setActiveModule(moduleId) {
+  activeModuleId = moduleId;
+  document.querySelectorAll(".module-nav-item").forEach((el) => {
+    const isActive = el.getAttribute("data-module") === moduleId;
+    el.classList.toggle("active", isActive);
+  });
+  document.querySelectorAll(".module-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.id === `module-${moduleId}`);
+  });
+  const titleEl = document.getElementById("mobile-topbar-title");
+  const activeNavText = document.querySelector(`#module-nav .module-nav-item[data-module="${moduleId}"] .module-nav-text`);
+  if (titleEl && activeNavText) {
+    titleEl.textContent = activeNavText.textContent || "BabyLog";
+  }
+}
+
+function initModuleNavigation() {
+  const nav = document.getElementById("module-nav");
+  if (!nav) return;
+  nav.addEventListener("click", (ev) => {
+    const target = /** @type {HTMLElement|null} */ (ev.target instanceof HTMLElement ? ev.target.closest(".module-nav-item") : null);
+    if (!target) return;
+    const moduleId = target.getAttribute("data-module");
+    if (!moduleId) return;
+    setActiveModule(moduleId);
+    setSidebarOpen(false);
+  });
+
+  const openBtn = document.getElementById("btn-open-sidebar");
+  if (openBtn) {
+    openBtn.addEventListener("click", () => setSidebarOpen(!sidebarOpen));
+  }
+  const backdrop = document.getElementById("app-backdrop");
+  if (backdrop) {
+    backdrop.addEventListener("click", () => setSidebarOpen(false));
+  }
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") setSidebarOpen(false);
+  });
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 760) setSidebarOpen(false);
+  });
+  setActiveModule(activeModuleId);
 }
 
 async function initDataSource() {
@@ -1384,6 +1445,63 @@ function renderVaccines() {
   checkVaccineReminders(false);
 }
 
+function collectGalleryPhotos() {
+  /** @type {Array<{entryId: string, at: string, categoryLabel: string, url: string}>} */
+  const photos = [];
+  for (const entry of entries) {
+    const urls = Array.isArray(entry.photos) ? entry.photos : [];
+    if (!urls.length) continue;
+    const cat = getCategory(entry.categoryId);
+    for (const url of urls) {
+      photos.push({
+        entryId: entry.id,
+        at: entry.at,
+        categoryLabel: cat.label,
+        url,
+      });
+    }
+  }
+  return photos.sort((a, b) => new Date(b.at) - new Date(a.at));
+}
+
+function renderPhotoGallery() {
+  const summaryEl = document.getElementById("photo-gallery-summary");
+  const galleryEl = document.getElementById("photo-gallery");
+  if (!summaryEl || !galleryEl) return;
+  const photos = collectGalleryPhotos();
+  if (!photos.length) {
+    summaryEl.textContent = "暂无照片记录";
+    galleryEl.innerHTML = `<div class="empty-state">上传照片后会在这里集中展示。</div>`;
+    return;
+  }
+  const daySet = new Set(photos.map((p) => toLocalDateKey(p.at)));
+  summaryEl.textContent = `共 ${photos.length} 张照片，覆盖 ${daySet.size} 天`;
+  galleryEl.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  for (const photo of photos) {
+    const item = document.createElement("article");
+    item.className = "photo-gallery-item";
+    const link = document.createElement("a");
+    link.href = photo.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.className = "photo-gallery-link";
+    const img = document.createElement("img");
+    img.src = photo.url;
+    img.alt = `${photo.categoryLabel} 照片`;
+    img.className = "photo-gallery-thumb";
+    img.loading = "lazy";
+    const meta = document.createElement("div");
+    meta.className = "photo-gallery-meta";
+    meta.textContent = `${formatDateHeader(photo.at)} · ${formatTime(photo.at)} · ${photo.categoryLabel}`;
+    link.appendChild(img);
+    item.appendChild(link);
+    item.appendChild(meta);
+    frag.appendChild(item);
+  }
+  galleryEl.appendChild(frag);
+}
+
 function renderTimeline() {
   const filter = /** @type {HTMLSelectElement} */ (document.getElementById("filter-category")).value;
   const day = /** @type {HTMLInputElement} */ (document.getElementById("filter-day")).value;
@@ -1473,6 +1591,7 @@ function render() {
   renderProfile();
   renderStats();
   renderVaccines();
+  renderPhotoGallery();
   renderTimeline();
 }
 
@@ -1543,6 +1662,7 @@ function importData(file) {
 async function init() {
   initTheme();
   await initDataSource();
+  initModuleNavigation();
   renderCategories();
   populateFilter();
   populateChartMetricOptions();
