@@ -27,6 +27,8 @@ let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
 let apiReady = false;
 let themeMode = "system";
+let activeModuleId = "profile";
+let sidebarOpen = false;
 
 const VACCINE_TEMPLATES = {
   cn: [
@@ -307,6 +309,65 @@ function initTheme() {
   sel.addEventListener("change", (ev) => {
     applyTheme(/** @type {HTMLSelectElement} */ (ev.target).value);
   });
+}
+
+function setSidebarOpen(open) {
+  sidebarOpen = Boolean(open);
+  const sidebar = document.getElementById("app-sidebar");
+  const backdrop = document.getElementById("app-backdrop");
+  if (!sidebar || !backdrop) return;
+  if (sidebarOpen) {
+    sidebar.classList.add("open");
+    backdrop.classList.remove("hidden");
+  } else {
+    sidebar.classList.remove("open");
+    backdrop.classList.add("hidden");
+  }
+}
+
+function setActiveModule(moduleId) {
+  activeModuleId = moduleId;
+  document.querySelectorAll(".module-nav-item").forEach((el) => {
+    const isActive = el.getAttribute("data-module") === moduleId;
+    el.classList.toggle("active", isActive);
+  });
+  document.querySelectorAll(".module-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.id === `module-${moduleId}`);
+  });
+  const titleEl = document.getElementById("mobile-topbar-title");
+  const activeNavText = document.querySelector(`#module-nav .module-nav-item[data-module="${moduleId}"] .module-nav-text`);
+  if (titleEl && activeNavText) {
+    titleEl.textContent = activeNavText.textContent || "BabyLog";
+  }
+}
+
+function initModuleNavigation() {
+  const nav = document.getElementById("module-nav");
+  if (!nav) return;
+  nav.addEventListener("click", (ev) => {
+    const target = /** @type {HTMLElement|null} */ (ev.target instanceof HTMLElement ? ev.target.closest(".module-nav-item") : null);
+    if (!target) return;
+    const moduleId = target.getAttribute("data-module");
+    if (!moduleId) return;
+    setActiveModule(moduleId);
+    setSidebarOpen(false);
+  });
+
+  const openBtn = document.getElementById("btn-open-sidebar");
+  if (openBtn) {
+    openBtn.addEventListener("click", () => setSidebarOpen(!sidebarOpen));
+  }
+  const backdrop = document.getElementById("app-backdrop");
+  if (backdrop) {
+    backdrop.addEventListener("click", () => setSidebarOpen(false));
+  }
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") setSidebarOpen(false);
+  });
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 760) setSidebarOpen(false);
+  });
+  setActiveModule(activeModuleId);
 }
 
 async function initDataSource() {
@@ -1601,6 +1662,7 @@ function importData(file) {
 async function init() {
   initTheme();
   await initDataSource();
+  initModuleNavigation();
   renderCategories();
   populateFilter();
   populateChartMetricOptions();
