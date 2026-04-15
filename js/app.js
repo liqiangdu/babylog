@@ -999,9 +999,60 @@ function toggleProfileEditor() {
   renderProfile();
 }
 
+function renderModuleSummaries() {
+  const vaccineSummary = document.getElementById("vaccine-module-summary");
+  const quickSummary = document.getElementById("quick-module-summary");
+  const timelineSummary = document.getElementById("timeline-module-summary");
+  const gallerySummary = document.getElementById("gallery-module-summary");
+
+  if (vaccineSummary) {
+    const doneCount = vaccines.filter((v) => v.status === "done").length;
+    const todoCount = vaccines.length - doneCount;
+    const nextTodo = vaccines
+      .filter((v) => v.status !== "done")
+      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))[0];
+    vaccineSummary.innerHTML = `
+      <span class="module-summary-item">计划总数 <strong>${vaccines.length}</strong></span>
+      <span class="module-summary-item">已完成 <strong>${doneCount}</strong></span>
+      <span class="module-summary-item">待完成 <strong>${Math.max(0, todoCount)}</strong></span>
+      <span class="module-summary-item">下一针 <strong>${nextTodo ? nextTodo.dueDate : "暂无"}</strong></span>
+    `;
+  }
+
+  if (quickSummary) {
+    const todayKey = toLocalDateKey(new Date());
+    const todayCount = entries.filter((e) => toLocalDateKey(e.at) === todayKey).length;
+    quickSummary.innerHTML = `
+      <span class="module-summary-item">记录分类 <strong>${CATEGORIES.length}</strong></span>
+      <span class="module-summary-item">今日新增 <strong>${todayCount}</strong></span>
+      <span class="module-summary-item">累计记录 <strong>${entries.length}</strong></span>
+    `;
+  }
+
+  if (timelineSummary) {
+    const latest = entries[0];
+    timelineSummary.innerHTML = `
+      <span class="module-summary-item">总记录 <strong>${entries.length}</strong></span>
+      <span class="module-summary-item">最近记录 <strong>${latest ? `${formatDateHeader(latest.at)} ${formatTime(latest.at)}` : "暂无"}</strong></span>
+    `;
+  }
+
+  if (gallerySummary) {
+    const photos = collectGalleryPhotos();
+    const daySet = new Set(photos.map((p) => toLocalDateKey(p.at)));
+    const latestPhoto = photos[0];
+    gallerySummary.innerHTML = `
+      <span class="module-summary-item">照片总数 <strong>${photos.length}</strong></span>
+      <span class="module-summary-item">覆盖天数 <strong>${daySet.size}</strong></span>
+      <span class="module-summary-item">最近上传 <strong>${latestPhoto ? formatDateHeader(latestPhoto.at) : "暂无"}</strong></span>
+    `;
+  }
+}
+
 function renderStats() {
   const grid = document.getElementById("stats-grid");
   const chartWrap = document.getElementById("stats-chart-wrap");
+  const rangeHint = document.getElementById("stats-range-hint");
   const inRangeEntries = getEntriesByRange(statsRange.start, statsRange.end);
   const feedMl = inRangeEntries
     .filter((e) => e.categoryId === "feeding")
@@ -1016,17 +1067,23 @@ function renderStats() {
   const doneVaccines = vaccines.filter((v) => v.status === "done").length;
   const rangeLabel = statsRange.start && statsRange.end ? `${statsRange.start} 至 ${statsRange.end}` : "全部时间";
 
+  if (rangeHint) {
+    rangeHint.textContent = `当前范围：${rangeLabel}`;
+  }
+
   const cards = [
-    { k: `范围记录总数 (${rangeLabel})`, v: `${inRangeEntries.length} 条` },
-    { k: "范围喂奶总量", v: `${feedMl} ml` },
+    { k: "范围记录总数", v: `${inRangeEntries.length} 条`, tone: "priority" },
+    { k: "范围喂奶总量", v: `${feedMl} ml`, tone: "priority" },
     { k: "范围睡眠时长", v: `${sleepMin} 分钟` },
     { k: "范围尿布", v: `小便 ${wetCount} / 大便 ${dirtyCount}` },
     { k: "范围洗澡次数", v: `${bathCount} 次` },
     { k: "范围用药次数", v: `${medicineCount} 次` },
     { k: "疫苗完成进度", v: vaccines.length ? `${doneVaccines}/${vaccines.length}` : "未生成" },
-    { k: "总记录数", v: `${entries.length} 条` },
+    { k: "累计总记录", v: `${entries.length} 条` },
   ];
-  grid.innerHTML = cards.map((c) => `<div class="stat-card"><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`).join("");
+  grid.innerHTML = cards
+    .map((c) => `<div class="stat-card ${c.tone || ""}"><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`)
+    .join("");
   if (statsMode === "chart") {
     grid.classList.add("hidden");
     chartWrap.classList.remove("hidden");
@@ -1065,7 +1122,7 @@ function renderTrendChart() {
   const points = trend.points;
   const vals = points.map((p) => p.value);
   if (points.length === 0) {
-    ctx.fillStyle = "rgba(255,255,255,0.86)";
+    ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
     ctx.font = '14px "SF Pro Text", "Helvetica Neue", Arial';
     ctx.fillText("当前范围暂无可绘制数据", 16, 28);
     return;
@@ -1079,9 +1136,9 @@ function renderTrendChart() {
   const ph = cssHeight - top - bottom;
   const unit = trend.unit || "数值";
 
-  ctx.strokeStyle = "rgba(128,128,128,0.25)";
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.22)";
   ctx.lineWidth = 1;
-  ctx.fillStyle = "rgba(255,255,255,0.86)";
+  ctx.fillStyle = "rgba(148, 163, 184, 0.92)";
   ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
   for (let i = 0; i <= 4; i += 1) {
     const y = top + (ph / 4) * i;
@@ -1092,7 +1149,7 @@ function renderTrendChart() {
     const v = Math.round(maxY - (maxY / 4) * i);
     ctx.fillText(String(v), 8, y + 4);
   }
-  ctx.fillText(unit, 8, 12);
+  ctx.fillText(unit, 8, 14);
 
   const mapX = (i) => left + (pw * i) / Math.max(1, points.length - 1);
   const mapY = (v) => top + ph - (v / maxY) * ph;
@@ -1105,7 +1162,9 @@ function renderTrendChart() {
   }));
   const drawSeries = (seriesVals, color) => {
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
     ctx.beginPath();
     seriesVals.forEach((v, i) => {
       const x = mapX(i);
@@ -1116,21 +1175,46 @@ function renderTrendChart() {
     ctx.stroke();
   };
   // 点线图: 先画线，再画点
+  const gradient = ctx.createLinearGradient(0, top, 0, top + ph);
+  gradient.addColorStop(0, "rgba(10, 132, 255, 0.28)");
+  gradient.addColorStop(1, "rgba(10, 132, 255, 0.03)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = mapX(i);
+    const y = mapY(p.value);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.lineTo(mapX(points.length - 1), top + ph);
+  ctx.lineTo(mapX(0), top + ph);
+  ctx.closePath();
+  ctx.fill();
+
   drawSeries(vals, TREND_LINE_COLOR);
   ctx.fillStyle = TREND_LINE_COLOR;
   points.forEach((p, i) => {
     const x = mapX(i);
     const y = mapY(p.value);
     ctx.beginPath();
+    ctx.arc(x, y, 4.6, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(10, 132, 255, 0.22)";
+    ctx.fill();
+    ctx.beginPath();
     ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = TREND_LINE_COLOR;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
     ctx.fill();
   });
 
-  ctx.fillStyle = "rgba(255,255,255,0.86)";
-  ctx.font = '12px "SF Pro Text", "Helvetica Neue", Arial';
+  ctx.fillStyle = "rgba(148, 163, 184, 0.92)";
+  ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
   points.forEach((p, i) => {
     if (i % Math.ceil(points.length / 6) !== 0 && i !== points.length - 1) return;
-    ctx.fillText(p.label, mapX(i) - 10, cssHeight - 8);
+    ctx.fillText(p.label, mapX(i) - 12, cssHeight - 8);
   });
 }
 
@@ -1165,7 +1249,7 @@ function onChartHover(ev) {
     return;
   }
 
-  tip.innerHTML = `<div>${nearest.label}</div><div>${nearest.value} ${nearest.unit}</div>`;
+  tip.innerHTML = `<div class="chart-tip-label">${nearest.label}</div><div class="chart-tip-value">${nearest.value} ${nearest.unit}</div>`;
   const offsetX = Math.min(rect.width - 130, Math.max(6, nearest.x + 10));
   const offsetY = Math.max(6, nearest.y - 42);
   tip.style.left = `${offsetX}px`;
@@ -1714,6 +1798,7 @@ function renderTimeline() {
 
 function render() {
   renderProfile();
+  renderModuleSummaries();
   renderStats();
   renderVaccines();
   renderPhotoGallery();
