@@ -1,17 +1,17 @@
-use std::{collections::BTreeMap, net::SocketAddr, path::PathBuf};
+use std::{collections::BTreeMap, env, net::SocketAddr, path::PathBuf};
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, put},
+    routing::{get, post, put},
     Json, Router,
 };
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use tokio::fs;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 use tracing::info;
 use uuid::Uuid;
 
@@ -30,6 +30,8 @@ struct Entry {
     at: DateTime<Utc>,
     fields: BTreeMap<String, serde_json::Value>,
     note: String,
+    #[serde(default)]
+    photos: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -77,6 +79,14 @@ struct CustomTemplate {
 #[derive(Clone)]
 struct AppState {
     db_path: PathBuf,
+    objects_dir: PathBuf,
+    /// Public origin for absolute media URLs (e.g. https://api.example.com or http://127.0.0.1:8787).
+    public_base: String,
+}
+
+#[derive(Debug, Serialize)]
+struct UploadResponse {
+    urls: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,6 +103,8 @@ struct CreateEntry {
     at: DateTime<Utc>,
     fields: Option<BTreeMap<String, serde_json::Value>>,
     note: Option<String>,
+    #[serde(default)]
+    photos: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,6 +113,8 @@ struct UpdateEntry {
     at: DateTime<Utc>,
     fields: Option<BTreeMap<String, serde_json::Value>>,
     note: Option<String>,
+    #[serde(default)]
+    photos: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -124,11 +138,13 @@ async fn main() {
         .init();
 
     let state = bootstrap_state().await;
+    let objects_dir = state.objects_dir.clone();
     let app = Router::new()
         .route("/health", get(health))
         .route("/api/profile", get(get_profile).put(put_profile))
         .route("/api/entries", get(list_entries).post(create_entry))
         .route("/api/entries/:id", put(update_entry).delete(delete_entry))
+        .route("/api/uploads", post(upload_images))
         .route("/api/vaccines", get(get_vaccines).put(put_vaccines))
         .route(
             "/api/vaccine-settings",
@@ -140,6 +156,8 @@ async fn main() {
         )
         .route("/api/stats", get(get_stats))
         .with_state(state)
+        .nest_service("/media", ServeDir::new(objects_dir))
+        .layer(DefaultBodyLimit::max(48 * 1024 * 1024))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
 
@@ -157,14 +175,116 @@ async fn main() {
 
 async fn bootstrap_state() -> AppState {
     let db_path = PathBuf::from("data/babylog.db");
+    let objects_dir = PathBuf::from("data/objects");
     if let Some(parent) = db_path.parent() {
         let _ = fs::create_dir_all(parent).await;
     }
+    let _ = fs::create_dir_all(&objects_dir).await;
     if let Err(e) = ensure_schema(&db_path) {
         tracing::error!("failed to initialize sqlite schema: {}", e);
         std::process::exit(1);
     }
-    AppState { db_path }
+    let public_base = env::var("BABYLOG_PUBLIC_BASE")
+        .unwrap_or_else(|_| "http://127.0.0.1:8787".to_string())
+        .trim_end_matches('/')
+        .to_string();
+    AppState {
+        db_path,
+        objects_dir,
+        public_base,
+    }
+}
+
+const MAX_UPLOAD_BYTES: usize = 8 * 1024 * 1024;
+
+fn sniff_image_ext(data: &[u8]) -> Option<&'static str> {
+    if data.len() < 12 {
+        return None;
+    }
+    if data.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return Some("jpg");
+    }
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some("png");
+    }
+    if data.len() >= 6 && (&data[..6] == b"GIF87a" || &data[..6] == b"GIF89a") {
+        return Some("gif");
+    }
+    if data.starts_with(b"RIFF") && data.len() >= 12 && &data[8..12] == b"WEBP" {
+        return Some("webp");
+    }
+    None
+}
+
+async fn upload_images(
+    State(state): State<AppState>,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
+    let mut urls = Vec::new();
+    let mut saw_file_field = false;
+    loop {
+        let field = match multipart.next_field().await {
+            Ok(Some(f)) => f,
+            Ok(None) => break,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                )
+                    .into_response();
+            }
+        };
+        let name = field.name().unwrap_or("");
+        if name != "file" && name != "files" {
+            continue;
+        }
+        saw_file_field = true;
+        let data = match field.bytes().await {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::warn!("multipart field read error: {}", e);
+                continue;
+            }
+        };
+        if data.is_empty() {
+            continue;
+        }
+        if data.len() > MAX_UPLOAD_BYTES {
+            tracing::warn!("skip upload: file too large ({} bytes)", data.len());
+            continue;
+        }
+        let Some(ext) = sniff_image_ext(&data) else {
+            tracing::warn!("skip upload: unsupported image signature");
+            continue;
+        };
+        let id = Uuid::new_v4();
+        let fname = format!("{}.{}", id, ext);
+        let path = state.objects_dir.join(&fname);
+        if let Err(e) = fs::write(&path, &data).await {
+            tracing::error!("failed to write upload {}: {}", fname, e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "failed to persist file" })),
+            )
+                .into_response();
+        }
+        urls.push(format!("{}/media/{}", state.public_base, fname));
+    }
+
+    if urls.is_empty() {
+        let msg = if saw_file_field {
+            "no valid image files stored (check type jpeg/png/gif/webp and max 8MB each)"
+        } else {
+            "no files received (use multipart form field name \"file\")"
+        };
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": msg })),
+        )
+            .into_response();
+    }
+
+    (StatusCode::OK, Json(UploadResponse { urls })).into_response()
 }
 
 fn open_conn(db_path: &PathBuf) -> rusqlite::Result<Connection> {
@@ -224,6 +344,22 @@ fn ensure_schema(db_path: &PathBuf) -> rusqlite::Result<()> {
           items_json TEXT NOT NULL
         );
         ",
+    )?;
+    migrate_entries_photos_column(&conn)?;
+    Ok(())
+}
+
+fn migrate_entries_photos_column(conn: &Connection) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info(entries)")?;
+    let cols: Vec<String> = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<_, _>>()?;
+    if cols.iter().any(|c| c == "photos_json") {
+        return Ok(());
+    }
+    conn.execute(
+        "ALTER TABLE entries ADD COLUMN photos_json TEXT NOT NULL DEFAULT '[]'",
+        [],
     )?;
     Ok(())
 }
@@ -323,7 +459,7 @@ async fn list_entries(State(state): State<AppState>, Query(query): Query<EntryQu
         .map_err(|e| e.to_string())?;
 
         let list_sql = format!(
-            "SELECT id, category_id, at, fields_json, note FROM entries {} ORDER BY at DESC LIMIT ?{} OFFSET ?{}",
+            "SELECT id, category_id, at, fields_json, note, photos_json FROM entries {} ORDER BY at DESC LIMIT ?{} OFFSET ?{}",
             where_sql,
             if where_parts.is_empty() { 1 } else { where_parts.len() + 1 },
             if where_parts.is_empty() { 2 } else { where_parts.len() + 2 }
@@ -334,17 +470,20 @@ async fn list_entries(State(state): State<AppState>, Query(query): Query<EntryQu
             let id_str: String = row.get(0)?;
             let at_str: String = row.get(2)?;
             let fields_str: String = row.get(3)?;
+            let photos_str: String = row.get(5)?;
             let at = DateTime::parse_from_rfc3339(&at_str)
                 .map_err(|_| rusqlite::Error::InvalidQuery)?
                 .with_timezone(&Utc);
             let fields = serde_json::from_str::<BTreeMap<String, serde_json::Value>>(&fields_str)
                 .unwrap_or_default();
+            let photos = serde_json::from_str::<Vec<String>>(&photos_str).unwrap_or_default();
             Ok(Entry {
                 id: Uuid::parse_str(&id_str).map_err(|_| rusqlite::Error::InvalidQuery)?,
                 category_id: row.get(1)?,
                 at,
                 fields,
                 note: row.get(4)?,
+                photos,
             })
         };
 
@@ -384,10 +523,11 @@ async fn list_entries(State(state): State<AppState>, Query(query): Query<EntryQu
 async fn create_entry(State(state): State<AppState>, Json(payload): Json<CreateEntry>) -> impl IntoResponse {
     let entry = Entry {
         id: Uuid::new_v4(),
-        category_id: payload.category_id,
+        category_id: payload.category_id.clone(),
         at: payload.at,
-        fields: payload.fields.unwrap_or_default(),
-        note: payload.note.unwrap_or_default(),
+        fields: payload.fields.clone().unwrap_or_default(),
+        note: payload.note.clone().unwrap_or_default(),
+        photos: payload.photos.clone().unwrap_or_default(),
     };
     let entry_clone = entry.clone();
 
@@ -395,15 +535,17 @@ async fn create_entry(State(state): State<AppState>, Json(payload): Json<CreateE
         let conn = open_conn(&state.db_path).map_err(|e| e.to_string())?;
         let day = entry_clone.at.date_naive().to_string();
         let fields_json = serde_json::to_string(&entry_clone.fields).map_err(|e| e.to_string())?;
+        let photos_json = serde_json::to_string(&entry_clone.photos).map_err(|e| e.to_string())?;
         conn.execute(
-            "INSERT INTO entries (id, category_id, at, day, fields_json, note) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO entries (id, category_id, at, day, fields_json, note, photos_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 entry_clone.id.to_string(),
                 entry_clone.category_id,
                 entry_clone.at.to_rfc3339(),
                 day,
                 fields_json,
-                entry_clone.note
+                entry_clone.note,
+                photos_json
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -429,16 +571,19 @@ async fn update_entry(
     let result = tokio::task::spawn_blocking(move || -> Result<usize, String> {
         let conn = open_conn(&state.db_path).map_err(|e| e.to_string())?;
         let fields_json = serde_json::to_string(&payload.fields.unwrap_or_default()).map_err(|e| e.to_string())?;
+        let photos_json =
+            serde_json::to_string(&payload.photos.unwrap_or_default()).map_err(|e| e.to_string())?;
         let day = payload.at.date_naive().to_string();
         let updated = conn
             .execute(
-                "UPDATE entries SET category_id = ?1, at = ?2, day = ?3, fields_json = ?4, note = ?5 WHERE id = ?6",
+                "UPDATE entries SET category_id = ?1, at = ?2, day = ?3, fields_json = ?4, note = ?5, photos_json = ?6 WHERE id = ?7",
                 params![
                     payload.category_id,
                     payload.at.to_rfc3339(),
                     day,
                     fields_json,
                     payload.note.unwrap_or_default(),
+                    photos_json,
                     id.to_string()
                 ],
             )

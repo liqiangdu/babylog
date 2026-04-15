@@ -12,6 +12,7 @@
 - 疫苗计划：地区模板、提醒设置、浏览器通知
 - 模板编辑：支持表格化自定义疫苗模板编辑
 - 数据导入导出：JSON 备份与恢复
+- 每条记录可选附加多张照片（走 API 时上传到服务端对象目录 `data/objects/`，通过 `/media/...` 提供直链，SQLite 仅存 URL；纯本地模式需启动后端才能上传）
 
 ## 技术栈
 
@@ -49,6 +50,8 @@ cargo run
 - `GET/PUT /api/profile`
 - `GET/POST /api/entries`
 - `DELETE /api/entries/:id`
+- `POST /api/uploads`（multipart，字段名 `file`，返回 `{ "urls": ["…/media/<uuid>.jpg"] }`）
+- `GET /media/<file>`（静态图片，高性能直出）
 - `GET /api/stats`
 
 ### 一键启动（前端 + Rust API）
@@ -75,6 +78,8 @@ cargo run
 前端会优先调用 Rust API（记录、宝宝信息、疫苗计划/设置/自定义模板），当 API 不可用时自动回退到 `localStorage`。
 
 Rust API 持久化使用 SQLite（`backend/data/babylog.db`），并包含时间轴/分类/日期等查询索引。
+
+图片走磁盘对象存储目录 `backend/data/objects/`（已 gitignore），对外 URL 前缀可通过环境变量 **`BABYLOG_PUBLIC_BASE`** 配置（默认 `http://127.0.0.1:8787`），便于反向代理到 HTTPS。后续若要换 S3/R2/MinIO，可替换 `upload_images` 的实现并保持 API 契约不变。
 
 ## 项目结构
 

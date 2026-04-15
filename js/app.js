@@ -6,8 +6,10 @@ const STORAGE_KEY = "babylog_entries_v1";
 const STORAGE_PROFILE_KEY = "babylog_profile_v1";
 const STORAGE_THEME_KEY = "babylog_theme_mode_v1";
 const API_BASE = "http://127.0.0.1:8787/api";
+/** Origin for uploads and /media (no /api suffix). */
+const API_ORIGIN = API_BASE.replace(/\/api\/?$/i, "") || "http://127.0.0.1:8787";
 
-/** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string}>} */
+/** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string, photos?: string[]}>} */
 let entries = [];
 /** @type {{name: string, birthDate: string, gender: string, blood: string}} */
 let profile = { name: "", birthDate: "", gender: "", blood: "" };
@@ -274,6 +276,7 @@ function mapEntryFromApi(item) {
     at: item.at,
     fields: item.fields || {},
     note: item.note || "",
+    photos: Array.isArray(item.photos) ? item.photos : [],
   };
 }
 
@@ -283,6 +286,7 @@ function mapEntryToApi(item) {
     at: item.at,
     fields: item.fields || {},
     note: item.note || "",
+    photos: Array.isArray(item.photos) ? item.photos : [],
   };
 }
 
@@ -470,10 +474,105 @@ function inferMetricUnit(field) {
 
 let editingId = null;
 let pendingCategoryId = null;
+/** @type {string[]} */
+let modalPhotos = [];
+
+const MAX_ENTRY_PHOTOS = 8;
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Upload image files to backend object storage; returns public URLs (/media/...).
+ * @param {File[]} files
+ * @returns {Promise<string[]>}
+ */
+async function uploadPhotosToServer(files) {
+  const form = new FormData();
+  for (const f of files) {
+    form.append("file", f);
+  }
+  const res = await fetch(`${API_ORIGIN}/api/uploads`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || `upload ${res.status}`);
+  }
+  const urls = data.urls;
+  if (!Array.isArray(urls)) throw new Error("invalid upload response");
+  return urls;
+}
+
+function renderPhotoPreviews(form) {
+  const wrap = form.querySelector("#photo-previews");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  modalPhotos.forEach((url, idx) => {
+    const item = document.createElement("div");
+    item.className = "photo-preview-item";
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = `照片 ${idx + 1}`;
+    img.className = "photo-preview-thumb";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "photo-preview-remove";
+    btn.textContent = "×";
+    btn.title = "移除";
+    btn.addEventListener("click", () => {
+      modalPhotos.splice(idx, 1);
+      renderPhotoPreviews(form);
+    });
+    item.appendChild(img);
+    item.appendChild(btn);
+    wrap.appendChild(item);
+  });
+}
+
+async function onModalPhotosSelected(input) {
+  const files = [...(input.files || [])];
+  input.value = "";
+  const form = document.getElementById("modal-form");
+  if (!apiReady) {
+    alert("上传照片需要先启动后端：图片会保存到服务端对象存储，数据库只存 URL。");
+    return;
+  }
+  const room = MAX_ENTRY_PHOTOS - modalPhotos.length;
+  if (room <= 0) {
+    alert(`最多添加 ${MAX_ENTRY_PHOTOS} 张照片`);
+    return;
+  }
+  /** @type {File[]} */
+  const candidates = [];
+  for (const file of files) {
+    if (!file.type.startsWith("image/")) {
+      alert(`已跳过非图片文件: ${file.name}`);
+      continue;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      alert(`图片过大（>${MAX_PHOTO_BYTES / 1024 / 1024}MB），已跳过: ${file.name}`);
+      continue;
+    }
+    if (candidates.length >= room) {
+      alert(`最多再添加 ${room} 张（合计 ${MAX_ENTRY_PHOTOS} 张上限）`);
+      break;
+    }
+    candidates.push(file);
+  }
+  if (!candidates.length) return;
+  try {
+    const urls = await uploadPhotosToServer(candidates);
+    modalPhotos.push(...urls);
+  } catch (e) {
+    alert(`照片上传失败：${e instanceof Error ? e.message : String(e)}`);
+  }
+  renderPhotoPreviews(form);
+}
 
 function openModal(categoryId, existing) {
   pendingCategoryId = categoryId;
   editingId = existing ? existing.id : null;
+  modalPhotos = existing && Array.isArray(existing.photos) ? [...existing.photos] : [];
   const cat = getCategory(categoryId);
   const overlay = document.getElementById("modal-overlay");
   const title = document.getElementById("modal-title");
@@ -526,6 +625,18 @@ function openModal(categoryId, existing) {
   `;
   form.appendChild(noteRow);
 
+  const photoRow = document.createElement("div");
+  photoRow.className = "form-row";
+  photoRow.innerHTML = `
+    <label for="field-photos">照片（可选，最多 ${MAX_ENTRY_PHOTOS} 张，需后端；存对象存储+URL）</label>
+    <input type="file" id="field-photos" accept="image/*" multiple />
+    <div id="photo-previews" class="photo-previews" aria-live="polite"></div>
+  `;
+  form.appendChild(photoRow);
+  renderPhotoPreviews(form);
+  const photoInput = /** @type {HTMLInputElement} */ (photoRow.querySelector("#field-photos"));
+  photoInput.addEventListener("change", () => onModalPhotosSelected(photoInput));
+
   if (existing) {
     const flds = existing.fields || {};
     for (const f of cat.fields) {
@@ -543,6 +654,7 @@ function closeModal() {
   document.getElementById("modal-overlay").classList.remove("open");
   pendingCategoryId = null;
   editingId = null;
+  modalPhotos = [];
 }
 
 function collectForm() {
@@ -566,17 +678,17 @@ function collectForm() {
   }
   const noteEl = /** @type {HTMLTextAreaElement} */ (form.querySelector("#field-note"));
   const note = noteEl ? noteEl.value.trim() : "";
-  return { at, fields, note };
+  return { at, fields, note, photos: [...modalPhotos] };
 }
 
 async function submitModal() {
   if (!pendingCategoryId) return;
-  const { at, fields, note } = collectForm();
+  const { at, fields, note, photos } = collectForm();
   let changedEntry = null;
   if (editingId) {
     const idx = entries.findIndex((e) => e.id === editingId);
     if (idx >= 0) {
-      entries[idx] = { ...entries[idx], categoryId: pendingCategoryId, at, fields, note };
+      entries[idx] = { ...entries[idx], categoryId: pendingCategoryId, at, fields, note, photos };
       changedEntry = entries[idx];
     }
   } else {
@@ -586,6 +698,7 @@ async function submitModal() {
       at,
       fields,
       note,
+      photos,
     };
     entries.push(changedEntry);
   }
@@ -1317,8 +1430,35 @@ function renderTimeline() {
         <button type="button" class="icon-btn" data-del title="删除">🗑</button>
       </div>
     `;
+    const bodyEl = li.querySelector(".tl-body");
     const metaEl = li.querySelector(".tl-meta");
     if (metaEl) metaEl.textContent = metaLine;
+    const photos = Array.isArray(e.photos) ? e.photos : [];
+    if (photos.length && bodyEl) {
+      const wrap = document.createElement("div");
+      wrap.className = "tl-photos";
+      photos.slice(0, 4).forEach((url) => {
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.className = "tl-photo-link";
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = "附图";
+        img.className = "tl-photo-thumb";
+        img.loading = "lazy";
+        a.appendChild(img);
+        wrap.appendChild(a);
+      });
+      if (photos.length > 4) {
+        const more = document.createElement("span");
+        more.className = "tl-photo-more";
+        more.textContent = `+${photos.length - 4}`;
+        wrap.appendChild(more);
+      }
+      bodyEl.appendChild(wrap);
+    }
     li.querySelector("[data-edit]").addEventListener("click", () => openModal(e.categoryId, e));
     li.querySelector("[data-del]").addEventListener("click", () => deleteEntry(e.id));
     frag.appendChild(li);
@@ -1378,7 +1518,9 @@ function importData(file) {
     try {
       const arr = JSON.parse(/** @type {string} */ (reader.result));
       if (!Array.isArray(arr)) throw new Error("格式错误");
-      entries = arr.filter((x) => x && x.id && x.categoryId && x.at);
+      entries = arr
+        .filter((x) => x && x.id && x.categoryId && x.at)
+        .map((x) => ({ ...x, photos: Array.isArray(x.photos) ? x.photos : [] }));
       if (apiReady) {
         for (const e of entries) {
           await apiRequest("/entries", {
