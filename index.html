@@ -38,6 +38,11 @@
               <svg viewBox="0 0 24 24"><path d="M5 19V9"></path><path d="M12 19V5"></path><path d="M19 19v-7"></path><path d="M4 19h16"></path></svg>
             </span><span class="module-nav-text">数据统计</span>
           </button>
+          <button type="button" class="module-nav-item" data-module="ai">
+            <span class="module-nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3l1.5 4.6h4.8L15.8 10l1.5 4.6L12 12.9 6.7 14.6 8.2 10 5.7 7.6h4.8L12 3z"></path><path d="M5 18h14v2H5z" opacity="0.35"></path></svg>
+            </span><span class="module-nav-text">AI 助手</span>
+          </button>
           <button type="button" class="module-nav-item" data-module="vaccine">
             <span class="module-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M7 7l10 10"></path><path d="M6 9l2-2"></path><path d="M16 19l2-2"></path><path d="M13 4l7 7"></path></svg>
@@ -156,6 +161,66 @@
             </section>
           </section>
 
+          <section id="module-ai" class="scene module-panel module-ai">
+            <header class="module-head">
+              <div>
+                <h2 class="module-title">AI 助手</h2>
+                <p class="module-desc">对宝宝数据做流式分析与建议。</p>
+              </div>
+            </header>
+            <div id="ai-module-summary" class="module-summary-bar"></div>
+            <section class="ai-workspace">
+              <div class="ai-layout">
+                <aside class="ai-sessions-panel">
+                  <div class="ai-settings">
+                    <div class="ai-instruction-title">项目指令（Instruction）</div>
+                    <div class="ai-instruction-compact" id="ai-instruction-compact" title="">
+                      <span id="ai-instruction-preview" class="ai-instruction-preview">未设置项目指令</span>
+                      <button type="button" class="ai-instruction-edit-btn" id="btn-edit-ai-instruction" aria-label="编辑 instruction" title="编辑 instruction">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25z"></path><path d="M14.06 4.19l3.75 3.75"></path></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="ai-sessions-head">
+                    <span class="section-title ai-sessions-title">会话</span>
+                  </div>
+                  <input type="search" id="ai-session-search" class="ai-session-search" placeholder="搜索会话标题或内容" aria-label="搜索会话" />
+                  <div id="ai-session-list" class="ai-session-list" aria-live="polite"></div>
+                </aside>
+                <div class="ai-chat">
+                  <div class="ai-chat-head">
+                    <span id="ai-active-session-title" class="ai-active-session-title">当前会话</span>
+                    <button type="button" class="ai-chat-head-icon-btn" id="btn-ai-new-session" aria-label="新建会话（Ctrl+Shift+N）" title="新建会话（Ctrl+Shift+N）">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+                    </button>
+                  </div>
+                  <div id="ai-chat-log" class="ai-chat-log" aria-live="polite"></div>
+                  <div class="ai-compose">
+                    <textarea id="ai-user-input" class="ai-textarea" rows="3" placeholder="输入问题并回车发送（Shift+Enter 换行）"></textarea>
+                    <div class="ai-compose-foot">
+                      <div class="ai-compose-hint">Enter 发送 · Shift+Enter 换行</div>
+                      <button type="button" id="btn-ai-send" class="ai-send-btn" aria-label="发送消息" title="发送消息">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5l14.5-6-6 14.5-1.8-6.7L4 11.5z"></path><path d="M10.7 13.3L18.5 5.5"></path></svg>
+                      </button>
+                    </div>
+                    <div id="ai-status" class="muted-line ai-status-line" aria-live="polite"></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <div id="ai-instruction-modal" class="ai-instruction-modal hidden" role="dialog" aria-modal="true" aria-labelledby="ai-instruction-modal-title">
+            <div class="ai-instruction-modal-panel">
+              <h3 id="ai-instruction-modal-title" class="section-title">编辑项目指令</h3>
+              <textarea id="ai-instruction" class="ai-textarea ai-instruction" rows="8" placeholder="定义助手角色、回答风格、约束边界和输出格式…"></textarea>
+              <div class="ai-settings-actions">
+                <button type="button" class="btn btn-secondary" id="btn-save-ai-instruction">保存</button>
+                <button type="button" class="text-btn" id="btn-cancel-ai-instruction">取消</button>
+              </div>
+            </div>
+          </div>
+
           <section id="module-stats" class="scene module-panel">
             <header class="module-head">
               <div>
@@ -204,6 +269,7 @@
                 </div>
               </div>
             </section>
+
           </section>
 
           <section id="module-vaccine" class="scene module-panel module-vaccine">
@@ -329,6 +395,8 @@
       </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
     <script src="js/app.js"></script>
   </body>
 </html>

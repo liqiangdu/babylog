@@ -5,6 +5,10 @@
 const STORAGE_KEY = "babylog_entries_v1";
 const STORAGE_PROFILE_KEY = "babylog_profile_v1";
 const STORAGE_THEME_KEY = "babylog_theme_mode_v1";
+const STORAGE_AI_INSTRUCTION_KEY = "babylog_ai_instruction_v1";
+const STORAGE_AI_PROJECT_KEY = "babylog_ai_project_v1";
+const DEFAULT_AI_INSTRUCTION =
+  "你是婴幼儿照护与成长数据助手，正在协助家长阅读「BabyLog」里的记录。\n\n回答要清晰、可执行；不要夸大确定性。凡涉及疾病诊断、用药调整或紧急情况，必须提醒家长咨询医生或前往医院。";
 const API_BASE = "http://127.0.0.1:8787/api";
 /** Origin for uploads and /media (no /api suffix). */
 const API_ORIGIN = API_BASE.replace(/\/api\/?$/i, "") || "http://127.0.0.1:8787";
@@ -30,6 +34,17 @@ let themeMode = "system";
 let activeModuleId = "profile";
 let sidebarOpen = false;
 let profileEditorOpen = true;
+let aiInstruction = DEFAULT_AI_INSTRUCTION;
+/**
+ * @typedef {{role: 'user'|'assistant', content: string, ts: string}} AiMessage
+ * @typedef {{id: string, title: string, createdAt: string, updatedAt: string, messages: AiMessage[]}} AiSession
+ * @typedef {{instruction: string, activeSessionId: string, contextPolicy: string, sessions: AiSession[]}} AiProject
+ */
+/** @type {AiProject} */
+let aiProject = { instruction: DEFAULT_AI_INSTRUCTION, activeSessionId: "", contextPolicy: "full_recent", sessions: [] };
+let aiStreamRenderScheduled = false;
+let aiBusy = false;
+let aiSessionSearchKeyword = "";
 
 const VACCINE_TEMPLATES = {
   cn: [
@@ -1047,6 +1062,17 @@ function renderModuleSummaries() {
       <span class="module-summary-item">最近上传 <strong>${latestPhoto ? formatDateHeader(latestPhoto.at) : "暂无"}</strong></span>
     `;
   }
+
+  const aiSummary = document.getElementById("ai-module-summary");
+  if (aiSummary) {
+    const active = getActiveAiSession();
+    const userTurns = active ? active.messages.filter((m) => m.role === "user").length : 0;
+    aiSummary.innerHTML = `
+      <span class="module-summary-item">会话数 <strong>${aiProject.sessions.length}</strong></span>
+      <span class="module-summary-item">用户消息 <strong>${userTurns}</strong></span>
+      <span class="module-summary-item">上下文记录 <strong>最多 300 条</strong></span>
+    `;
+  }
 }
 
 function renderStats() {
@@ -1803,6 +1829,556 @@ function render() {
   renderVaccines();
   renderPhotoGallery();
   renderTimeline();
+  renderAiChat();
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function makeAiSession(title = "新会话") {
+  const now = nowIso();
+  return { id: crypto.randomUUID(), title, createdAt: now, updatedAt: now, messages: [] };
+}
+
+function getActiveAiSession() {
+  return aiProject.sessions.find((s) => s.id === aiProject.activeSessionId) || null;
+}
+
+function ensureAiProjectConsistency() {
+  if (!Array.isArray(aiProject.sessions)) aiProject.sessions = [];
+  if (!["full_recent"].includes(aiProject.contextPolicy)) aiProject.contextPolicy = "full_recent";
+  if (!aiProject.instruction || !String(aiProject.instruction).trim()) aiProject.instruction = DEFAULT_AI_INSTRUCTION;
+  if (!aiProject.sessions.length) {
+    const first = makeAiSession("默认会话");
+    aiProject.sessions = [first];
+    aiProject.activeSessionId = first.id;
+    return;
+  }
+  if (!aiProject.sessions.some((s) => s.id === aiProject.activeSessionId)) {
+    aiProject.sessions.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    aiProject.activeSessionId = aiProject.sessions[0].id;
+  }
+}
+
+function saveAiProject() {
+  try {
+    localStorage.setItem(STORAGE_AI_PROJECT_KEY, JSON.stringify(aiProject));
+    localStorage.setItem(STORAGE_AI_INSTRUCTION_KEY, aiProject.instruction || DEFAULT_AI_INSTRUCTION);
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function migrateLegacyAiMessagesIfNeeded() {
+  if (aiProject.sessions.some((s) => Array.isArray(s.messages) && s.messages.length > 0)) return;
+  const legacy = Array.isArray(globalThis.aiMessages) ? globalThis.aiMessages : null;
+  if (!legacy || !legacy.length) return;
+  const first = getActiveAiSession();
+  if (!first) return;
+  first.messages = legacy
+    .filter((m) => m && (m.role === "user" || m.role === "assistant"))
+    .map((m) => ({ role: m.role, content: String(m.content || ""), ts: nowIso() }));
+  if (first.messages.length > 0 && (!first.title || first.title === "默认会话" || first.title === "新会话")) {
+    const lead = first.messages.find((m) => m.role === "user");
+    if (lead && lead.content) first.title = summarizeAsTitle(lead.content);
+  }
+  first.updatedAt = nowIso();
+}
+
+function loadAiInstruction() {
+  let legacyInstruction = DEFAULT_AI_INSTRUCTION;
+  try {
+    const raw = localStorage.getItem(STORAGE_AI_INSTRUCTION_KEY);
+    legacyInstruction = raw && String(raw).trim() ? String(raw) : DEFAULT_AI_INSTRUCTION;
+  } catch {
+    legacyInstruction = DEFAULT_AI_INSTRUCTION;
+  }
+  try {
+    const rawProject = localStorage.getItem(STORAGE_AI_PROJECT_KEY);
+    if (rawProject) {
+      const data = JSON.parse(rawProject);
+      aiProject = {
+        instruction: String(data?.instruction || legacyInstruction || DEFAULT_AI_INSTRUCTION),
+        activeSessionId: String(data?.activeSessionId || ""),
+        contextPolicy: String(data?.contextPolicy || "full_recent"),
+        sessions: Array.isArray(data?.sessions)
+          ? data.sessions.map((s) => ({
+            id: String(s?.id || crypto.randomUUID()),
+            title: String(s?.title || "新会话"),
+            createdAt: String(s?.createdAt || nowIso()),
+            updatedAt: String(s?.updatedAt || nowIso()),
+            messages: Array.isArray(s?.messages)
+              ? s.messages
+                .filter((m) => m && (m.role === "user" || m.role === "assistant"))
+                .map((m) => ({
+                  role: m.role,
+                  content: String(m.content || ""),
+                  ts: String(m.ts || s?.updatedAt || nowIso()),
+                }))
+              : [],
+          }))
+          : [],
+      };
+    } else {
+      aiProject = { instruction: legacyInstruction, activeSessionId: "", contextPolicy: "full_recent", sessions: [] };
+    }
+  } catch {
+    aiProject = { instruction: legacyInstruction, activeSessionId: "", contextPolicy: "full_recent", sessions: [] };
+  }
+  ensureAiProjectConsistency();
+  migrateLegacyAiMessagesIfNeeded();
+  aiInstruction = aiProject.instruction;
+  saveAiProject();
+}
+
+function syncAiInstructionField() {
+  const ta = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-instruction"));
+  const compact = /** @type {HTMLElement|null} */ (document.getElementById("ai-instruction-compact"));
+  const preview = /** @type {HTMLElement|null} */ (document.getElementById("ai-instruction-preview"));
+  if (!ta) return;
+  const value = aiProject.instruction || DEFAULT_AI_INSTRUCTION;
+  ta.value = value;
+  if (preview) {
+    const text = value.replace(/\s+/g, " ").trim() || "未设置项目指令";
+    preview.textContent = text;
+  }
+  if (compact) {
+    compact.setAttribute("title", value);
+  }
+}
+
+function saveAiInstructionFromForm() {
+  const ta = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-instruction"));
+  if (!ta) return;
+  aiProject.instruction = ta.value.trim() ? ta.value : DEFAULT_AI_INSTRUCTION;
+  aiInstruction = aiProject.instruction;
+  saveAiProject();
+  syncAiInstructionField();
+  closeAiInstructionEditor();
+  alert("项目指令已保存到本机");
+}
+
+function openAiInstructionEditor() {
+  const modal = document.getElementById("ai-instruction-modal");
+  const ta = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-instruction"));
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  if (ta) {
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
+}
+
+function closeAiInstructionEditor() {
+  const modal = document.getElementById("ai-instruction-modal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+}
+
+function summarizeAsTitle(text) {
+  const s = String(text || "").replace(/\s+/g, " ").trim();
+  return (s || "新会话").slice(0, 20);
+}
+
+function renderAiSessionList() {
+  const root = document.getElementById("ai-session-list");
+  if (!root) return;
+  root.innerHTML = "";
+  const keyword = String(aiSessionSearchKeyword || "").trim().toLowerCase();
+  const sessions = [...aiProject.sessions].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  const filtered = sessions.filter((s) => {
+    if (!keyword) return true;
+    const body = s.messages.slice(-6).map((m) => String(m.content || "")).join("\n");
+    return `${s.title}\n${body}`.toLowerCase().includes(keyword);
+  });
+  if (filtered.length === 0) {
+    root.innerHTML = `<div class="empty-state">没有匹配的会话</div>`;
+    return;
+  }
+  for (const s of filtered) {
+    const item = document.createElement("div");
+    item.className = `ai-session-item ${s.id === aiProject.activeSessionId ? "active" : ""}`;
+    item.dataset.sid = s.id;
+    const lastMsg = s.messages[s.messages.length - 1];
+    const lastText = lastMsg?.content ? String(lastMsg.content).replace(/\s+/g, " ").trim() : "暂无消息";
+    const updatedText = new Date(s.updatedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    item.innerHTML = `
+      <div class="ai-session-title">${escapeHtml(s.title || "新会话")}</div>
+      <div class="ai-session-meta">
+        <span>${s.messages.length} 条消息</span>
+        <span>${updatedText}</span>
+      </div>
+      <div class="ai-session-last">${escapeHtml(lastText.slice(0, 36) || "暂无消息")}</div>
+      <div class="ai-session-actions">
+        <button type="button" class="ai-session-action-btn" data-ai-rename aria-label="重命名会话" title="重命名">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25z"></path><path d="M14.06 4.19l3.75 3.75"></path></svg>
+        </button>
+        <button type="button" class="ai-session-action-btn" data-ai-delete aria-label="删除会话" title="删除">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 12h10l1-12"></path><path d="M9 7V5h6v2"></path></svg>
+        </button>
+      </div>
+    `;
+    item.addEventListener("click", () => switchAiSession(s.id));
+    const btnRename = item.querySelector("[data-ai-rename]");
+    if (btnRename) {
+      btnRename.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        renameAiSession(s.id);
+      });
+    }
+    const btnDelete = item.querySelector("[data-ai-delete]");
+    if (btnDelete) {
+      btnDelete.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        deleteAiSession(s.id);
+      });
+    }
+    root.appendChild(item);
+  }
+}
+
+function switchAiSession(sessionId) {
+  if (aiBusy) {
+    alert("请等待当前回答完成后再切换会话");
+    return;
+  }
+  if (!aiProject.sessions.some((s) => s.id === sessionId)) return;
+  aiProject.activeSessionId = sessionId;
+  saveAiProject();
+  renderAiChat();
+  renderAiSessionList();
+  renderModuleSummaries();
+}
+
+function createAiSession() {
+  if (aiBusy) {
+    alert("请等待当前回答完成后再新建会话");
+    return;
+  }
+  const s = makeAiSession("新会话");
+  aiProject.sessions.unshift(s);
+  aiProject.activeSessionId = s.id;
+  saveAiProject();
+  renderAiChat();
+  renderAiSessionList();
+  renderModuleSummaries();
+}
+
+function handleAiGlobalShortcuts(ev) {
+  const isNewSessionShortcut = (ev.ctrlKey || ev.metaKey) && ev.shiftKey && String(ev.key).toLowerCase() === "n";
+  if (!isNewSessionShortcut) return;
+  if (activeModuleId !== "ai") return;
+  const target = /** @type {HTMLElement|null} */ (ev.target instanceof HTMLElement ? ev.target : null);
+  if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+  ev.preventDefault();
+  createAiSession();
+}
+
+function renameAiSession(sessionId) {
+  if (aiBusy) {
+    alert("请等待当前回答完成后再重命名");
+    return;
+  }
+  const target = aiProject.sessions.find((s) => s.id === sessionId);
+  if (!target) return;
+  const next = window.prompt("请输入新的会话名称", target.title || "新会话");
+  if (next == null) return;
+  const value = String(next).trim();
+  if (!value) return;
+  target.title = value.slice(0, 40);
+  target.updatedAt = nowIso();
+  saveAiProject();
+  renderAiSessionList();
+}
+
+function deleteAiSession(sessionId) {
+  if (aiBusy) {
+    alert("请等待当前回答完成后再删除");
+    return;
+  }
+  const target = aiProject.sessions.find((s) => s.id === sessionId);
+  if (!target) return;
+  const ok = window.confirm(`确认删除会话「${target.title || "新会话"}」？`);
+  if (!ok) return;
+  aiProject.sessions = aiProject.sessions.filter((s) => s.id !== sessionId);
+  if (aiProject.sessions.length === 0) {
+    const created = makeAiSession("新会话");
+    aiProject.sessions = [created];
+    aiProject.activeSessionId = created.id;
+  } else if (aiProject.activeSessionId === sessionId) {
+    aiProject.sessions.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    aiProject.activeSessionId = aiProject.sessions[0].id;
+  }
+  saveAiProject();
+  renderAiSessionList();
+  renderAiChat();
+  renderModuleSummaries();
+}
+
+function clearAiChat() {
+  if (aiBusy) return;
+  const active = getActiveAiSession();
+  if (!active) return;
+  if (active.messages.length && !confirm("确定清空当前会话消息？")) return;
+  active.messages = [];
+  active.updatedAt = nowIso();
+  saveAiProject();
+  renderAiChat();
+  renderAiSessionList();
+  renderModuleSummaries();
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderMarkdownToHtml(src) {
+  const md = String(src || "");
+  if (!md.trim()) return "";
+  const markedFn = typeof marked !== "undefined" ? /** @type {any} */ (marked) : null;
+  const purify = typeof DOMPurify !== "undefined" ? DOMPurify : null;
+  if (!markedFn || !purify) {
+    return `<p>${escapeHtml(md)}</p>`;
+  }
+  try {
+    const rawHtml = markedFn.parse(md, { breaks: true, gfm: true });
+    return purify.sanitize(rawHtml, { USE_PROFILES: { html: true } });
+  } catch {
+    return `<p>${escapeHtml(md)}</p>`;
+  }
+}
+
+function buildBabyContextForAi() {
+  const lines = [];
+  const genderMap = { boy: "男", girl: "女", other: "未设置/其他" };
+  lines.push("## 宝宝档案");
+  lines.push(`昵称: ${profile.name || "未填写"}`);
+  lines.push(`出生日期: ${profile.birthDate || "未填写"}`);
+  lines.push(`性别: ${profile.gender ? genderMap[profile.gender] || profile.gender : "未填写"}`);
+  lines.push(`血型: ${profile.blood || "未填写"}`);
+  lines.push(`月龄参考: ${getAgeText()}`);
+  lines.push("");
+  lines.push("## 疫苗计划（摘要）");
+  if (!vaccines.length) {
+    lines.push("暂无疫苗计划数据。");
+  } else {
+    for (const v of vaccines.slice(0, 40)) {
+      lines.push(`${v.name} · ${v.dose} · 计划 ${v.dueDate} · 状态 ${v.status}${v.doneAt ? ` · 完成 ${v.doneAt}` : ""}`);
+    }
+    if (vaccines.length > 40) lines.push(`… 其余 ${vaccines.length - 40} 条略`);
+  }
+  lines.push("");
+  lines.push("## 最近记录（时间倒序，最多 300 条；文本由应用汇总）");
+  const slice = entries.slice(0, 300);
+  if (!slice.length) {
+    lines.push("暂无记录。");
+  } else {
+    for (const e of slice) {
+      const cat = getCategory(e.categoryId);
+      const detail = summarizeFields(cat, e.fields || {});
+      const metaLine = [formatDateHeader(e.at), formatTime(e.at), `${cat.emoji} ${cat.label}`, detail, e.note]
+        .filter((x) => x !== undefined && x !== null && String(x).trim() !== "")
+        .join(" | ");
+      lines.push(metaLine);
+    }
+    if (entries.length > 300) lines.push(`… 共 ${entries.length} 条记录，仅附最近 300 条`);
+  }
+  return lines.join("\n");
+}
+
+function scheduleAiChatRender() {
+  if (aiStreamRenderScheduled) return;
+  aiStreamRenderScheduled = true;
+  requestAnimationFrame(() => {
+    aiStreamRenderScheduled = false;
+    renderAiChat();
+  });
+}
+
+function setAiStatus(text) {
+  const el = document.getElementById("ai-status");
+  if (!el) return;
+  el.textContent = text || "";
+  el.classList.toggle("ai-status-busy", Boolean(text));
+}
+
+function refreshAiUiState() {
+  const moduleEl = document.getElementById("module-ai");
+  const input = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-user-input"));
+  const sendBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById("btn-ai-send"));
+  const newSessionBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById("btn-ai-new-session"));
+  const searchInput = /** @type {HTMLInputElement|null} */ (document.getElementById("ai-session-search"));
+  const canSend = Boolean(input && input.value.trim()) && !aiBusy;
+  if (moduleEl) moduleEl.classList.toggle("ai-busy", aiBusy);
+  if (input) input.disabled = aiBusy;
+  if (searchInput) searchInput.disabled = aiBusy;
+  if (newSessionBtn) newSessionBtn.disabled = aiBusy;
+  if (sendBtn) {
+    sendBtn.disabled = !canSend;
+    sendBtn.setAttribute("aria-disabled", String(!canSend));
+  }
+}
+
+function renderAiChat() {
+  const root = document.getElementById("ai-chat-log");
+  const titleEl = document.getElementById("ai-active-session-title");
+  if (!root) return;
+  root.classList.remove("ai-chat-log-empty");
+  root.innerHTML = "";
+  const active = getActiveAiSession();
+  if (titleEl) {
+    titleEl.textContent = active?.title ? String(active.title) : "当前会话";
+  }
+  if (!active || active.messages.length === 0) {
+    root.classList.add("ai-chat-log-empty");
+    root.innerHTML = `<div class="empty-state">开始一个新会话吧\n输入问题后按回车发送，或点击右上角图标新建会话。</div>`;
+    refreshAiUiState();
+    return;
+  }
+  for (let i = 0; i < active.messages.length; i += 1) {
+    const m = active.messages[i];
+    const isLastAssistantStreaming = aiBusy && m.role === "assistant" && i === active.messages.length - 1;
+    const row = document.createElement("div");
+    row.className = `ai-msg ai-msg-${m.role}`;
+    const bubble = document.createElement("div");
+    bubble.className = "ai-bubble";
+    if (m.role === "assistant") {
+      bubble.classList.add("ai-md");
+      const content = m.content || (aiBusy ? "…" : "");
+      bubble.innerHTML = content ? renderMarkdownToHtml(content) : "";
+      if (isLastAssistantStreaming) {
+        bubble.classList.add("ai-streaming");
+      }
+    } else {
+      bubble.textContent = m.content;
+    }
+    row.appendChild(bubble);
+    root.appendChild(row);
+  }
+  root.scrollTop = root.scrollHeight;
+  refreshAiUiState();
+}
+
+/**
+ * @param {object} payload
+ * @param {(chunk: string) => void} onChunk
+ */
+async function consumeSseChatStream(payload, onChunk) {
+  const res = await fetch(`${API_BASE}/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const ct = res.headers.get("content-type") || "";
+  if (!res.ok) {
+    if (ct.includes("application/json")) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error(j.error || `HTTP ${res.status}`);
+    }
+    const t = await res.text();
+    throw new Error(t || `HTTP ${res.status}`);
+  }
+  if (!res.body) throw new Error("empty response body");
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    for (;;) {
+      const idx = buf.indexOf("\n\n");
+      if (idx < 0) break;
+      const block = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const lines = block.split("\n");
+      for (const line of lines) {
+        const trimmed = line.replace(/\r$/, "");
+        if (!trimmed) continue;
+        if (!trimmed.startsWith("data:")) continue;
+        const data = trimmed.slice(trimmed.indexOf(":") + 1).trim();
+        if (data === "[DONE]") return;
+        let obj;
+        try {
+          obj = JSON.parse(data);
+        } catch {
+          continue;
+        }
+        if (obj && typeof obj.error === "string" && obj.error) throw new Error(obj.error);
+        if (obj && typeof obj.c === "string" && obj.c) onChunk(obj.c);
+      }
+    }
+  }
+}
+
+async function sendAiMessage() {
+  if (aiBusy) return;
+  const input = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-user-input"));
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  if (!apiReady) {
+    alert("AI 对话需要后端：请先启动 babylog-api，并在进程环境中设置 DEEPSEEK_API_KEY。");
+    return;
+  }
+  let active = getActiveAiSession();
+  if (!active) {
+    createAiSession();
+    active = getActiveAiSession();
+    if (!active) return;
+  }
+  input.value = "";
+  const userMsg = { role: "user", content: text, ts: nowIso() };
+  const assistantMsg = { role: "assistant", content: "", ts: nowIso() };
+  active.messages.push(userMsg);
+  active.messages.push(assistantMsg);
+  if (active.messages.length === 2 && (!active.title || active.title === "新会话" || active.title === "默认会话")) {
+    active.title = summarizeAsTitle(text);
+  }
+  active.updatedAt = nowIso();
+  saveAiProject();
+  renderAiChat();
+  renderAiSessionList();
+  renderModuleSummaries();
+  aiBusy = true;
+  refreshAiUiState();
+  setAiStatus("AI 正在生成回复…");
+  const assistant = assistantMsg;
+  const messageWindow = active.messages.slice(0, -1).slice(-40).map((m) => ({ role: m.role, content: m.content }));
+  const payload = {
+    instruction: aiProject.instruction || aiInstruction,
+    baby_context: buildBabyContextForAi(),
+    messages: messageWindow,
+  };
+  try {
+    await consumeSseChatStream(payload, (chunk) => {
+      assistant.content += chunk;
+      assistant.ts = nowIso();
+      scheduleAiChatRender();
+    });
+    active.updatedAt = nowIso();
+    saveAiProject();
+    scheduleAiChatRender();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    assistant.content = (assistant.content ? `${assistant.content}\n\n` : "") + `**出错：** ${msg}`;
+    assistant.ts = nowIso();
+    active.updatedAt = nowIso();
+    saveAiProject();
+    scheduleAiChatRender();
+  } finally {
+    aiBusy = false;
+    setAiStatus("");
+    refreshAiUiState();
+    renderAiSessionList();
+    renderModuleSummaries();
+  }
 }
 
 function populateFilter() {
@@ -1872,10 +2448,12 @@ function importData(file) {
 async function init() {
   initTheme();
   loadProfile();
+  loadAiInstruction();
   await initDataSource();
   const completionCount = [profile.name, profile.birthDate, profile.gender, profile.blood, profile.avatar].filter(Boolean).length;
   profileEditorOpen = completionCount < 4;
   initModuleNavigation();
+  syncAiInstructionField();
   renderCategories();
   populateFilter();
   populateChartMetricOptions();
@@ -1955,6 +2533,47 @@ async function init() {
   document.getElementById("modal-overlay").addEventListener("click", (ev) => {
     if (ev.target.id === "modal-overlay") closeModal();
   });
+
+  const btnSaveAiInstr = document.getElementById("btn-save-ai-instruction");
+  if (btnSaveAiInstr) btnSaveAiInstr.addEventListener("click", saveAiInstructionFromForm);
+  const btnEditAiInstr = document.getElementById("btn-edit-ai-instruction");
+  if (btnEditAiInstr) btnEditAiInstr.addEventListener("click", openAiInstructionEditor);
+  const btnCancelAiInstr = document.getElementById("btn-cancel-ai-instruction");
+  if (btnCancelAiInstr) {
+    btnCancelAiInstr.addEventListener("click", () => {
+      syncAiInstructionField();
+      closeAiInstructionEditor();
+    });
+  }
+  const aiInstrModal = document.getElementById("ai-instruction-modal");
+  if (aiInstrModal) {
+    aiInstrModal.addEventListener("click", (ev) => {
+      if (ev.target === aiInstrModal) closeAiInstructionEditor();
+    });
+  }
+  const btnAiNewSession = document.getElementById("btn-ai-new-session");
+  if (btnAiNewSession) btnAiNewSession.addEventListener("click", createAiSession);
+  const inputAiSearch = document.getElementById("ai-session-search");
+  if (inputAiSearch) {
+    inputAiSearch.addEventListener("input", (ev) => {
+      aiSessionSearchKeyword = /** @type {HTMLInputElement} */ (ev.target).value || "";
+      renderAiSessionList();
+    });
+  }
+  const aiUserInput = document.getElementById("ai-user-input");
+  if (aiUserInput) {
+    aiUserInput.addEventListener("input", refreshAiUiState);
+    aiUserInput.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" || ev.shiftKey) return;
+      ev.preventDefault();
+      sendAiMessage();
+    });
+  }
+  const btnAiSend = document.getElementById("btn-ai-send");
+  if (btnAiSend) btnAiSend.addEventListener("click", sendAiMessage);
+  document.addEventListener("keydown", handleAiGlobalShortcuts);
+  renderAiSessionList();
+  refreshAiUiState();
 }
 
 document.addEventListener("DOMContentLoaded", init);
