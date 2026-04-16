@@ -22,57 +22,96 @@
 
     <div id="app-backdrop" class="app-backdrop hidden"></div>
 
-    <div class="app-shell">
+    <div id="app-shell" class="app-shell">
       <aside id="app-sidebar" class="app-sidebar">
-        <div class="sidebar-brand">BabyLog</div>
-        <div class="sidebar-subtitle">成长记录</div>
+        <div class="sidebar-header">
+          <div class="sidebar-header-text">
+            <div class="sidebar-brand">BabyLog</div>
+            <div class="sidebar-subtitle">成长记录</div>
+          </div>
+          <button
+            type="button"
+            id="btn-toggle-sidebar-collapse"
+            class="icon-btn sidebar-collapse-btn"
+            aria-controls="app-sidebar"
+            aria-expanded="true"
+            aria-label="收起侧栏"
+            title="收起侧栏"
+          >
+            <svg class="sidebar-collapse-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M15 6l-6 6 6 6"></path>
+            </svg>
+          </button>
+        </div>
         <nav id="module-nav" class="module-nav" aria-label="模块导航">
           <div class="module-nav-group-label">概览</div>
-          <button type="button" class="module-nav-item active" data-module="profile">
+          <button type="button" class="module-nav-item active" data-module="profile" title="宝宝信息">
             <span class="module-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 19c1.8-3 4.1-4.5 7-4.5s5.2 1.5 7 4.5"></path></svg>
             </span><span class="module-nav-text">宝宝信息</span>
           </button>
-          <button type="button" class="module-nav-item" data-module="stats">
+          <button type="button" class="module-nav-item" data-module="stats" title="数据统计">
             <span class="module-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M5 19V9"></path><path d="M12 19V5"></path><path d="M19 19v-7"></path><path d="M4 19h16"></path></svg>
             </span><span class="module-nav-text">数据统计</span>
           </button>
-          <button type="button" class="module-nav-item" data-module="ai">
+          <button type="button" class="module-nav-item" data-module="ai" title="AI 助手">
             <span class="module-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M12 3l1.5 4.6h4.8L15.8 10l1.5 4.6L12 12.9 6.7 14.6 8.2 10 5.7 7.6h4.8L12 3z"></path><path d="M5 18h14v2H5z" opacity="0.35"></path></svg>
             </span><span class="module-nav-text">AI 助手</span>
           </button>
-          <button type="button" class="module-nav-item" data-module="vaccine">
+          <button type="button" class="module-nav-item" data-module="vaccine" title="疫苗计划">
             <span class="module-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M7 7l10 10"></path><path d="M6 9l2-2"></path><path d="M16 19l2-2"></path><path d="M13 4l7 7"></path></svg>
             </span><span class="module-nav-text">疫苗计划</span>
           </button>
           <div class="module-nav-divider"></div>
           <div class="module-nav-group-label">记录</div>
-          <button type="button" class="module-nav-item" data-module="quick-entry">
+          <button type="button" class="module-nav-item" data-module="quick-entry" title="快速记录">
             <span class="module-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
             </span><span class="module-nav-text">快速记录</span>
           </button>
-          <button type="button" class="module-nav-item" data-module="timeline">
+          <button type="button" class="module-nav-item" data-module="timeline" title="时间轴">
             <span class="module-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path></svg>
             </span><span class="module-nav-text">时间轴</span>
           </button>
-          <button type="button" class="module-nav-item" data-module="gallery">
+          <button type="button" class="module-nav-item" data-module="gallery" title="照片画廊">
             <span class="module-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"></rect><circle cx="9" cy="11" r="1.6"></circle><path d="M20 15l-4-3-4 4-3-2-5 4"></path></svg>
             </span><span class="module-nav-text">照片画廊</span>
           </button>
         </nav>
         <div class="sidebar-tools">
-          <label for="theme-select" class="sidebar-label">主题模式</label>
-          <select id="theme-select" aria-label="主题模式">
-            <option value="system">跟随系统</option>
-            <option value="light">浅色</option>
-            <option value="dark">深色</option>
-          </select>
+          <div class="sidebar-tools-label" id="theme-toggle-label">主题</div>
+          <div class="theme-toggle" role="group" aria-labelledby="theme-toggle-label">
+            <button
+              type="button"
+              class="theme-icon-btn"
+              data-theme="system"
+              aria-pressed="false"
+              aria-label="跟随系统"
+              title="跟随系统"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="12" rx="2"></rect>
+                <path d="M8 20h8"></path>
+                <path d="M12 16v4"></path>
+              </svg>
+            </button>
+            <button type="button" class="theme-icon-btn" data-theme="light" aria-pressed="false" aria-label="浅色" title="浅色">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="4"></circle>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+              </svg>
+            </button>
+            <button type="button" class="theme-icon-btn" data-theme="dark" aria-pressed="false" aria-label="深色" title="深色">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
+              </svg>
+            </button>
+          </div>
         </div>
       </aside>
 

@@ -5,6 +5,7 @@
 const STORAGE_KEY = "babylog_entries_v1";
 const STORAGE_PROFILE_KEY = "babylog_profile_v1";
 const STORAGE_THEME_KEY = "babylog_theme_mode_v1";
+const STORAGE_SIDEBAR_COLLAPSED_KEY = "babylog_sidebar_collapsed_v1";
 const STORAGE_AI_INSTRUCTION_KEY = "babylog_ai_instruction_v1";
 const STORAGE_AI_PROJECT_KEY = "babylog_ai_project_v1";
 const DEFAULT_AI_INSTRUCTION =
@@ -33,6 +34,8 @@ let apiReady = false;
 let themeMode = "system";
 let activeModuleId = "profile";
 let sidebarOpen = false;
+/** Desktop-only: narrow icon rail when true. */
+let sidebarCollapsedDesktop = false;
 let profileEditorOpen = true;
 let aiInstruction = DEFAULT_AI_INSTRUCTION;
 /**
@@ -309,23 +312,73 @@ function mapEntryToApi(item) {
   };
 }
 
+function syncThemeToggleUi() {
+  document.querySelectorAll(".theme-icon-btn").forEach((el) => {
+    const btn = /** @type {HTMLButtonElement} */ (el);
+    const mode = btn.getAttribute("data-theme");
+    const pressed = mode === themeMode;
+    btn.setAttribute("aria-pressed", String(pressed));
+    btn.classList.toggle("is-active", pressed);
+  });
+}
+
 function applyTheme(mode) {
   const root = document.documentElement;
   themeMode = ["system", "light", "dark"].includes(mode) ? mode : "system";
   if (themeMode === "system") root.removeAttribute("data-theme");
   else root.setAttribute("data-theme", themeMode);
   localStorage.setItem(STORAGE_THEME_KEY, themeMode);
+  syncThemeToggleUi();
 }
 
 function initTheme() {
   const saved = localStorage.getItem(STORAGE_THEME_KEY) || "system";
   applyTheme(saved);
-  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById("theme-select"));
-  if (!sel) return;
-  sel.value = themeMode;
-  sel.addEventListener("change", (ev) => {
-    applyTheme(/** @type {HTMLSelectElement} */ (ev.target).value);
+  document.querySelectorAll(".theme-icon-btn").forEach((el) => {
+    el.addEventListener("click", () => {
+      const m = el.getAttribute("data-theme");
+      applyTheme(m || "system");
+    });
   });
+}
+
+function readSidebarCollapsedPreference() {
+  try {
+    return localStorage.getItem(STORAGE_SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function applySidebarCollapsed(collapsed) {
+  const shell = document.getElementById("app-shell");
+  const sidebar = document.getElementById("app-sidebar");
+  const btn = document.getElementById("btn-toggle-sidebar-collapse");
+  if (!shell || !sidebar) return;
+  sidebarCollapsedDesktop = Boolean(collapsed);
+  shell.classList.toggle("app-shell--sidebar-collapsed", sidebarCollapsedDesktop);
+  sidebar.classList.toggle("app-sidebar--collapsed", sidebarCollapsedDesktop);
+  try {
+    localStorage.setItem(STORAGE_SIDEBAR_COLLAPSED_KEY, sidebarCollapsedDesktop ? "1" : "0");
+  } catch {
+    // ignore quota / private mode
+  }
+  if (btn) {
+    btn.setAttribute("aria-expanded", String(!sidebarCollapsedDesktop));
+    btn.setAttribute("aria-label", sidebarCollapsedDesktop ? "展开侧栏" : "收起侧栏");
+    btn.setAttribute("title", sidebarCollapsedDesktop ? "展开侧栏" : "收起侧栏");
+  }
+}
+
+function initSidebarCollapse() {
+  applySidebarCollapsed(readSidebarCollapsedPreference());
+  const btn = document.getElementById("btn-toggle-sidebar-collapse");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      if (window.innerWidth <= 760) return;
+      applySidebarCollapsed(!sidebarCollapsedDesktop);
+    });
+  }
 }
 
 function setSidebarOpen(open) {
@@ -2447,6 +2500,7 @@ function importData(file) {
 
 async function init() {
   initTheme();
+  initSidebarCollapse();
   loadProfile();
   loadAiInstruction();
   await initDataSource();
