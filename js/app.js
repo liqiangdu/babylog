@@ -411,6 +411,10 @@ function setActiveModule(moduleId) {
   if (titleEl && activeNavText) {
     titleEl.textContent = activeNavText.textContent || "BabyLog";
   }
+  const container = document.querySelector(".app-content .container");
+  if (container) {
+    container.classList.toggle("container-wide", moduleId === "ai");
+  }
 }
 
 function initModuleNavigation() {
