@@ -208,55 +208,53 @@
             </div>
           </div>
 
-          <section id="module-stats" class="scene module-panel">
+          <section id="module-stats" class="scene module-panel module-stats">
             <header class="module-head">
               <div>
-                <h2 class="module-title">数据统计</h2>
-                <p class="module-desc">在统一面板中查看关键指标、趋势变化与周期表现。</p>
+                <h2 class="module-title">统计</h2>
+                <p class="module-desc">查看关键指标与趋势。</p>
               </div>
             </header>
-            <section class="panel card-stack stats-workspace">
-              <div class="stats-toolbar-shell">
-                <div class="toolbar stats-toolbar-primary">
-                  <input type="date" id="stats-start" />
-                  <input type="date" id="stats-end" />
-                  <select id="stats-preset" aria-label="统计快捷范围">
-                    <option value="custom">自定义范围</option>
-                    <option value="7d">最近7天</option>
-                    <option value="30d">最近30天</option>
-                    <option value="today">今天</option>
-                    <option value="all">全部</option>
-                  </select>
-                  <button type="button" class="text-btn" id="btn-apply-stats">应用范围</button>
-                </div>
-                <div class="toolbar stats-toolbar-secondary">
-                  <select id="stats-mode" aria-label="统计展示模式">
-                    <option value="cards">卡片模式</option>
-                    <option value="chart">图表模式</option>
-                  </select>
-                  <select id="chart-metric" aria-label="图表指标"></select>
-                  <select id="chart-range-mode" aria-label="图表范围">
-                    <option value="follow">跟随上方统计范围</option>
-                    <option value="7">最近7天</option>
-                    <option value="30">最近30天</option>
-                    <option value="90">最近90天</option>
-                  </select>
-                </div>
-              </div>
-              <div class="stats-metric-caption">
-                <span>统计概览</span>
-                <span id="stats-range-hint" class="stats-range-hint">当前范围：全部时间</span>
-              </div>
-              <div id="stats-grid" class="stats-grid"></div>
-              <div id="stats-chart-wrap" class="stats-chart-wrap hidden">
-                <canvas id="stats-chart" width="900" height="320"></canvas>
-                <div id="chart-tooltip" class="chart-tooltip hidden"></div>
-                <div class="chart-legend">
-                  <span><i class="dot feed"></i> <span id="chart-legend-text">趋势指标</span></span>
-                </div>
-              </div>
-            </section>
 
+            <div class="stats-controls">
+              <div class="stats-controls-row">
+                <select id="stats-preset" aria-label="统计快捷范围">
+                  <option value="7d">最近 7 天</option>
+                  <option value="30d">最近 30 天</option>
+                  <option value="today">今天</option>
+                  <option value="all">全部</option>
+                  <option value="custom">自定义</option>
+                </select>
+                <input type="date" id="stats-start" />
+                <input type="date" id="stats-end" />
+                <button type="button" class="stats-apply-btn" id="btn-apply-stats">应用</button>
+              </div>
+              <div class="stats-controls-row stats-controls-secondary">
+                <select id="stats-mode" aria-label="展示模式">
+                  <option value="cards">卡片</option>
+                  <option value="chart">图表</option>
+                </select>
+                <select id="chart-metric" aria-label="图表指标"></select>
+                <select id="chart-range-mode" aria-label="图表范围">
+                  <option value="follow">跟随统计范围</option>
+                  <option value="7">近 7 天</option>
+                  <option value="30">近 30 天</option>
+                  <option value="90">近 90 天</option>
+                </select>
+              </div>
+              <span id="stats-range-hint" class="stats-range-hint">最近 7 天</span>
+            </div>
+
+            <div id="stats-grid" class="stats-grid"></div>
+
+            <div id="stats-chart-wrap" class="stats-chart-wrap hidden">
+              <canvas id="stats-chart" width="900" height="320"></canvas>
+              <div id="chart-tooltip" class="chart-tooltip hidden"></div>
+              <div class="chart-legend">
+                <span class="chart-legend-dot"></span>
+                <span id="chart-legend-text">趋势指标</span>
+              </div>
+            </div>
           </section>
 
           <section id="module-vaccine" class="scene module-panel module-vaccine">

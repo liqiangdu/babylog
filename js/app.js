@@ -1160,8 +1160,8 @@ function renderTrendChart() {
   const points = trend.points;
   const vals = points.map((p) => p.value);
   if (points.length === 0) {
-    ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
-    ctx.font = '14px "SF Pro Text", "Helvetica Neue", Arial';
+    ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
+    ctx.font = '13px "SF Pro Text", "Helvetica Neue", Arial';
     ctx.fillText("当前范围暂无可绘制数据", 16, 28);
     return;
   }
@@ -1174,9 +1174,9 @@ function renderTrendChart() {
   const ph = cssHeight - top - bottom;
   const unit = trend.unit || "数值";
 
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.22)";
+  ctx.strokeStyle = "rgba(128, 128, 128, 0.15)";
   ctx.lineWidth = 1;
-  ctx.fillStyle = "rgba(148, 163, 184, 0.92)";
+  ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
   ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
   for (let i = 0; i <= 4; i += 1) {
     const y = top + (ph / 4) * i;
@@ -1200,7 +1200,7 @@ function renderTrendChart() {
   }));
   const drawSeries = (seriesVals, color) => {
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 1.8;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -1214,8 +1214,8 @@ function renderTrendChart() {
   };
   // 点线图: 先画线，再画点
   const gradient = ctx.createLinearGradient(0, top, 0, top + ph);
-  gradient.addColorStop(0, "rgba(10, 132, 255, 0.28)");
-  gradient.addColorStop(1, "rgba(10, 132, 255, 0.03)");
+  gradient.addColorStop(0, "rgba(92, 156, 245, 0.18)");
+  gradient.addColorStop(1, "rgba(92, 156, 245, 0.01)");
   ctx.fillStyle = gradient;
   ctx.beginPath();
   points.forEach((p, i) => {
@@ -1235,20 +1235,12 @@ function renderTrendChart() {
     const x = mapX(i);
     const y = mapY(p.value);
     ctx.beginPath();
-    ctx.arc(x, y, 4.6, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(10, 132, 255, 0.22)";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
     ctx.fillStyle = TREND_LINE_COLOR;
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffffff";
     ctx.fill();
   });
 
-  ctx.fillStyle = "rgba(148, 163, 184, 0.92)";
+  ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
   ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
   points.forEach((p, i) => {
     if (i % Math.ceil(points.length / 6) !== 0 && i !== points.length - 1) return;

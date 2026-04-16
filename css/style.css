@@ -976,124 +976,147 @@ textarea:focus-visible {
   text-overflow: ellipsis;
 }
 
-.stats-workspace {
-  background:
-    radial-gradient(100% 220px at 0% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 62%),
-    var(--bg-elev);
+.stats-controls {
+  margin-bottom: var(--space-4);
 }
-.stats-toolbar-shell {
-  border: 1px solid color-mix(in srgb, var(--border) 82%, var(--accent) 18%);
-  border-radius: 14px;
-  padding: 10px;
-  background: color-mix(in srgb, var(--bg-soft) 84%, var(--bg-elev));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
-}
-.stats-toolbar-primary,
-.stats-toolbar-secondary {
-  margin: 0;
-}
-.stats-toolbar-secondary {
-  padding-top: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-}
-.stats-metric-caption {
-  margin-top: 12px;
-  margin-bottom: 8px;
+.stats-controls-row {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
-  gap: 10px;
+}
+.stats-controls-secondary {
+  margin-top: 6px;
+}
+.stats-controls select,
+.stats-controls input[type="date"] {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  color-scheme: light dark;
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+.stats-controls select:focus,
+.stats-controls input[type="date"]:focus {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  outline: none;
+}
+.stats-apply-btn {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.stats-apply-btn:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.stats-range-hint {
+  display: inline-block;
+  margin-top: 8px;
   font-size: 12px;
   color: var(--text-muted);
 }
-.stats-range-hint {
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: var(--radius-pill);
-  padding: 3px 10px;
-  background: color-mix(in srgb, var(--bg-soft) 82%, var(--bg-elev));
-}
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
 }
 .stat-card,
-.stats-chart-wrap,
+.stats-chart-wrap {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  border: 0;
+  border-radius: 10px;
+}
 #vaccine-template-editor {
-  background: color-mix(in srgb, var(--bg-soft) 82%, var(--bg-elev));
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+  border-radius: var(--radius-md);
 }
 .stat-card {
-  padding: 12px;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
-  transition: border-color var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+  padding: 14px 16px;
+  transition: background var(--dur-fast) var(--ease-standard);
 }
 .stat-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 .stat-card.priority {
-  background: linear-gradient(165deg, color-mix(in srgb, var(--accent) 16%, var(--bg-soft)), color-mix(in srgb, var(--bg-soft) 82%, var(--bg-elev)));
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 .stat-card .k {
   font-size: 12px;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.1px;
 }
 .stat-card .v {
   margin-top: 4px;
-  font-size: clamp(1.2rem, 2.1vw, 1.45rem);
-  font-weight: 700;
+  font-size: clamp(1.15rem, 2vw, 1.35rem);
+  font-weight: 600;
   color: var(--text);
-  letter-spacing: 0.1px;
-  line-height: 1.25;
+  letter-spacing: -0.2px;
+  line-height: 1.2;
 }
 .stats-chart-wrap {
-  margin-top: 8px;
-  padding: 12px;
+  margin-top: var(--space-3);
+  padding: 0;
   position: relative;
+  border-radius: 10px;
 }
 #stats-chart {
   width: 100%;
   height: auto;
   display: block;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-elev) 72%, var(--bg-soft));
+  background: transparent;
 }
 
 .chart-tooltip {
   position: absolute;
   z-index: 5;
   pointer-events: none;
-  min-width: 120px;
-  max-width: 220px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, #ffffff 16%, transparent);
-  background: rgba(17, 24, 39, 0.86);
-  color: #fff;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+  min-width: 100px;
+  max-width: 200px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
   font-size: 12px;
-  backdrop-filter: blur(8px) saturate(120%);
+  box-shadow: var(--shadow-md);
 }
 .chart-tip-label {
-  color: rgba(226, 232, 240, 0.92);
+  color: var(--text-muted);
 }
 .chart-tip-value {
   margin-top: 2px;
   font-size: 13px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text);
 }
 
-.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
-.dot.feed { background: var(--accent); }
+.chart-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--accent);
+}
 .chart-legend {
-  margin-top: 10px;
+  margin-top: 8px;
   font-size: 12px;
   color: var(--text-muted);
-  letter-spacing: 0.2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .vaccine-badge {
@@ -2137,9 +2160,9 @@ textarea:focus-visible {
   }
   .inline-form,
   .stats-grid { grid-template-columns: 1fr; }
-  .stats-metric-caption {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+  .stats-controls-row { flex-direction: column; }
+  .stats-controls select,
+  .stats-controls input[type="date"],
+  .stats-apply-btn { width: 100%; }
   .inline-form .btn { grid-column: auto; }
 }
