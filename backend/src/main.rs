@@ -1,4 +1,6 @@
-use std::{collections::BTreeMap, env, net::SocketAddr, path::PathBuf};
+use std::{collections::BTreeMap, env, net::SocketAddr, path::PathBuf, time::Duration};
+
+mod chat;
 
 use axum::{
     extract::{DefaultBodyLimit, Multipart, Path, Query, State},
@@ -77,11 +79,15 @@ struct CustomTemplate {
 }
 
 #[derive(Clone)]
-struct AppState {
+pub(crate) struct AppState {
     db_path: PathBuf,
     objects_dir: PathBuf,
     /// Public origin for absolute media URLs (e.g. https://api.example.com or http://127.0.0.1:8787).
     public_base: String,
+    http_client: reqwest::Client,
+    deepseek_api_key: String,
+    deepseek_base_url: String,
+    deepseek_model: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -155,6 +161,7 @@ async fn main() {
             get(get_vaccine_templates).put(put_vaccine_templates),
         )
         .route("/api/stats", get(get_stats))
+        .route("/api/chat/stream", post(chat::chat_stream))
         .with_state(state)
         .nest_service("/media", ServeDir::new(objects_dir))
         .layer(DefaultBodyLimit::max(48 * 1024 * 1024))
@@ -188,10 +195,25 @@ async fn bootstrap_state() -> AppState {
         .unwrap_or_else(|_| "http://127.0.0.1:8787".to_string())
         .trim_end_matches('/')
         .to_string();
+    let http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .connect_timeout(Duration::from_secs(15))
+        .build()
+        .expect("reqwest client");
+    let deepseek_api_key = env::var("DEEPSEEK_API_KEY").unwrap_or_default();
+    let deepseek_base_url = env::var("DEEPSEEK_BASE_URL")
+        .unwrap_or_else(|_| "https://api.deepseek.com".to_string())
+        .trim_end_matches('/')
+        .to_string();
+    let deepseek_model = env::var("DEEPSEEK_MODEL").unwrap_or_else(|_| "deepseek-chat".to_string());
     AppState {
         db_path,
         objects_dir,
         public_base,
+        http_client,
+        deepseek_api_key,
+        deepseek_base_url,
+        deepseek_model,
     }
 }
 

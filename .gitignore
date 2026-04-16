@@ -27,6 +27,7 @@ backend/data/
 Thumbs.db
 
 ## Editor/IDE
+.cursor/
 .vscode/
 .idea/
 *.suo
