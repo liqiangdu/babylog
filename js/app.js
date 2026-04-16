@@ -1068,9 +1068,9 @@ function renderModuleSummaries() {
     const daySet = new Set(photos.map((p) => toLocalDateKey(p.at)));
     const latestPhoto = photos[0];
     gallerySummary.innerHTML = `
-      <span class="module-summary-item">照片总数 <strong>${photos.length}</strong></span>
-      <span class="module-summary-item">覆盖天数 <strong>${daySet.size}</strong></span>
-      <span class="module-summary-item">最近上传 <strong>${latestPhoto ? formatDateHeader(latestPhoto.at) : "暂无"}</strong></span>
+      <span class="module-summary-item">${photos.length} <strong>张</strong></span>
+      <span class="module-summary-item">${daySet.size} <strong>天</strong></span>
+      <span class="module-summary-item">最近 <strong>${latestPhoto ? formatDateHeader(latestPhoto.at) : "\u2014"}</strong></span>
     `;
   }
 
@@ -1706,30 +1706,30 @@ function renderPhotoGallery() {
   if (!summaryEl || !galleryEl) return;
   const photos = collectGalleryPhotos();
   if (!photos.length) {
-    summaryEl.textContent = "暂无照片记录";
-    galleryEl.innerHTML = `<div class="empty-state">上传照片后会在这里集中展示。</div>`;
+    summaryEl.textContent = "";
+    galleryEl.innerHTML = `<div class="empty-state">暂无照片</div>`;
     return;
   }
   const daySet = new Set(photos.map((p) => toLocalDateKey(p.at)));
-  summaryEl.textContent = `共 ${photos.length} 张照片，覆盖 ${daySet.size} 天`;
+  summaryEl.textContent = `${photos.length} 张照片，${daySet.size} 天`;
   galleryEl.innerHTML = "";
   const frag = document.createDocumentFragment();
   for (const photo of photos) {
     const item = document.createElement("article");
-    item.className = "photo-gallery-item";
+    item.className = "gallery-item";
     const link = document.createElement("a");
     link.href = photo.url;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.className = "photo-gallery-link";
+    link.className = "gallery-link";
     const img = document.createElement("img");
     img.src = photo.url;
-    img.alt = `${photo.categoryLabel} 照片`;
-    img.className = "photo-gallery-thumb";
+    img.alt = `${photo.categoryLabel}`;
+    img.className = "gallery-thumb";
     img.loading = "lazy";
     const meta = document.createElement("div");
-    meta.className = "photo-gallery-meta";
-    meta.textContent = `${formatDateHeader(photo.at)} · ${formatTime(photo.at)} · ${photo.categoryLabel}`;
+    meta.className = "gallery-meta";
+    meta.textContent = `${formatDateHeader(photo.at)} · ${photo.categoryLabel}`;
     link.appendChild(img);
     item.appendChild(link);
     item.appendChild(meta);
