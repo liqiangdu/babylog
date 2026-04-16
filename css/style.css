@@ -142,6 +142,24 @@ body {
   padding: 0 4px 4px;
 }
 
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar-brand-mark {
+  display: block;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  object-fit: cover;
+}
+
 .sidebar-header-text {
   min-width: 0;
   flex: 1;
@@ -184,6 +202,17 @@ body {
     align-items: center;
     gap: 6px;
     padding: 0 0 4px;
+  }
+
+  .app-sidebar.app-sidebar--collapsed .sidebar-brand-row {
+    flex: 0;
+    justify-content: center;
+  }
+
+  .app-sidebar.app-sidebar--collapsed .sidebar-brand-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
   }
 
   .app-sidebar.app-sidebar--collapsed .sidebar-header-text {

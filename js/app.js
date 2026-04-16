@@ -1,5 +1,5 @@
 /**
- * BabyLog — 本地存储的婴儿日常记录
+ * Babylog — 本地存储的婴儿日常记录
  */
 
 const STORAGE_KEY = "babylog_entries_v1";
@@ -9,7 +9,7 @@ const STORAGE_SIDEBAR_COLLAPSED_KEY = "babylog_sidebar_collapsed_v1";
 const STORAGE_AI_INSTRUCTION_KEY = "babylog_ai_instruction_v1";
 const STORAGE_AI_PROJECT_KEY = "babylog_ai_project_v1";
 const DEFAULT_AI_INSTRUCTION =
-  "你是婴幼儿照护与成长数据助手，正在协助家长阅读「BabyLog」里的记录。\n\n回答要清晰、可执行；不要夸大确定性。凡涉及疾病诊断、用药调整或紧急情况，必须提醒家长咨询医生或前往医院。";
+  "你是婴幼儿照护与成长数据助手，正在协助家长阅读「Babylog」里的记录。\n\n回答要清晰、可执行；不要夸大确定性。凡涉及疾病诊断、用药调整或紧急情况，必须提醒家长咨询医生或前往医院。";
 const API_BASE = "http://127.0.0.1:8787/api";
 /** Origin for uploads and /media (no /api suffix). */
 const API_ORIGIN = API_BASE.replace(/\/api\/?$/i, "") || "http://127.0.0.1:8787";
@@ -419,7 +419,7 @@ function setActiveModule(moduleId) {
   const titleEl = document.getElementById("mobile-topbar-title");
   const activeNavText = document.querySelector(`#module-nav .module-nav-item[data-module="${moduleId}"] .module-nav-text`);
   if (titleEl && activeNavText) {
-    titleEl.textContent = activeNavText.textContent || "BabyLog";
+    titleEl.textContent = activeNavText.textContent || "Babylog";
   }
   const container = document.querySelector(".app-content .container");
   if (container) {
@@ -1458,7 +1458,7 @@ function checkVaccineReminders(notify) {
       const key = `${item.id}_${today}`;
       if (vaccineSettings.notifiedMap[key]) continue;
       const state = getVaccineReminderState(item);
-      new Notification("BabyLog 疫苗提醒", {
+      new Notification("Babylog 疫苗提醒", {
         body: `${item.name} ${item.dose} · ${state.text}`,
       });
       vaccineSettings.notifiedMap[key] = true;
@@ -2613,7 +2613,7 @@ function importData(file) {
       render();
       alert(`已导入 ${entries.length} 条记录`);
     } catch {
-      alert("导入失败：请确认是 BabyLog 导出的 JSON");
+      alert("导入失败：请确认是 Babylog 导出的 JSON");
     }
   };
   reader.readAsText(file);

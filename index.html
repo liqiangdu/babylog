@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f7f8" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
-    <title>BabyLog — 宝宝的每一天，都值得记住</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <title>Babylog</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -17,7 +18,7 @@
   <body>
     <div id="mobile-topbar" class="mobile-topbar">
       <button type="button" id="btn-open-sidebar" class="icon-btn" aria-label="打开菜单">☰</button>
-      <div id="mobile-topbar-title" class="mobile-topbar-title">BabyLog</div>
+      <div id="mobile-topbar-title" class="mobile-topbar-title">Babylog</div>
     </div>
 
     <div id="app-backdrop" class="app-backdrop hidden"></div>
@@ -25,9 +26,19 @@
     <div id="app-shell" class="app-shell">
       <aside id="app-sidebar" class="app-sidebar">
         <div class="sidebar-header">
-          <div class="sidebar-header-text">
-            <div class="sidebar-brand">BabyLog</div>
-            <div class="sidebar-subtitle">宝宝的每一天，都值得记住</div>
+          <div class="sidebar-brand-row">
+            <img
+              class="sidebar-brand-mark"
+              src="favicon.svg"
+              width="28"
+              height="28"
+              alt=""
+              decoding="async"
+              aria-hidden="true"
+            />
+            <div class="sidebar-header-text">
+              <div class="sidebar-brand">Babylog</div>
+            </div>
           </div>
           <button
             type="button"
