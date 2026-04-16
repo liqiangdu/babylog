@@ -916,96 +916,36 @@ function renderProfile() {
   const birthEl = /** @type {HTMLInputElement} */ (document.getElementById("baby-birth"));
   const genderEl = /** @type {HTMLSelectElement} */ (document.getElementById("baby-gender"));
   const bloodEl = /** @type {HTMLInputElement} */ (document.getElementById("baby-blood"));
-  const summary = document.getElementById("profile-summary");
-  const statusTag = document.getElementById("profile-showcase-status");
-  const toggleBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById("btn-toggle-profile-editor"));
-  const editorCard = document.getElementById("profile-editor-card");
 
   nameEl.value = profile.name || "";
   birthEl.value = profile.birthDate || "";
   genderEl.value = profile.gender || "";
   bloodEl.value = profile.blood || "";
 
-  const gMap = { boy: "男宝宝", girl: "女宝宝", other: "未设置" };
-  const genderText = profile.gender ? gMap[profile.gender] || profile.gender : "未设置";
-  const birthText = profile.birthDate || "未设置";
-  const ageText = getAgeText();
-  const bloodText = profile.blood || "未设置";
   const nameText = profile.name || "宝宝档案";
-
+  const ageText = getAgeText();
   const initial = profile.name ? profile.name.trim().slice(0, 1).toUpperCase() : "宝";
-  const fields = [
-    { label: "出生日期", value: birthText },
-    { label: "性别", value: genderText },
-    { label: "血型", value: bloodText },
-  ];
 
-  const completionCount = [profile.name, profile.birthDate, profile.gender, profile.blood, profile.avatar].filter(Boolean).length;
-  const isReady = completionCount >= 4;
-  if (!profileEditorOpen && !isReady) profileEditorOpen = true;
-  if (statusTag) {
-    statusTag.textContent = isReady ? "已完善" : "待完善";
-    statusTag.classList.toggle("ready", isReady);
-  }
-  if (toggleBtn) {
-    toggleBtn.textContent = profileEditorOpen ? "收起设置" : "编辑档案";
-  }
-  if (editorCard) {
-    editorCard.classList.toggle("hidden", !profileEditorOpen);
+  const avatarEl = document.getElementById("profile-avatar-display");
+  if (avatarEl) {
+    avatarEl.textContent = "";
+    if (profile.avatar) {
+      const img = document.createElement("img");
+      img.src = profile.avatar;
+      img.alt = nameText;
+      avatarEl.appendChild(img);
+    } else {
+      avatarEl.textContent = initial;
+    }
   }
 
-  summary.className = "profile-dossier";
-  summary.textContent = "";
-
-  const hero = document.createElement("div");
-  hero.className = "profile-dossier-hero";
-
-  const avatar = document.createElement("div");
-  avatar.className = "profile-dossier-avatar";
-  if (profile.avatar) {
-    const avatarImg = document.createElement("img");
-    avatarImg.src = profile.avatar;
-    avatarImg.alt = `${nameText}头像`;
-    avatarImg.className = "profile-dossier-avatar-image";
-    avatar.appendChild(avatarImg);
-  } else {
-    avatar.textContent = initial;
+  const summaryEl = document.getElementById("profile-summary");
+  if (summaryEl) {
+    const nameDisplay = summaryEl.querySelector(".profile-name-display");
+    const ageDisplay = summaryEl.querySelector(".profile-age-display");
+    if (nameDisplay) nameDisplay.textContent = nameText;
+    if (ageDisplay) ageDisplay.textContent = profile.birthDate ? ageText : "设置生日后显示月龄";
   }
-
-  const identity = document.createElement("div");
-  identity.className = "profile-dossier-identity";
-
-  const nameNode = document.createElement("div");
-  nameNode.className = "profile-dossier-name";
-  nameNode.textContent = nameText;
-
-  const ageNode = document.createElement("div");
-  ageNode.className = "profile-dossier-age";
-  ageNode.textContent = `当前月龄 ${ageText}`;
-
-  identity.appendChild(nameNode);
-  identity.appendChild(ageNode);
-  hero.appendChild(avatar);
-  hero.appendChild(identity);
-
-  const grid = document.createElement("div");
-  grid.className = "profile-dossier-grid";
-  for (const field of fields) {
-    const item = document.createElement("div");
-    item.className = "profile-dossier-item";
-    const label = document.createElement("div");
-    label.className = "profile-dossier-label";
-    label.textContent = field.label;
-    const value = document.createElement("div");
-    value.className = "profile-dossier-value";
-    value.textContent = field.value;
-    item.appendChild(label);
-    item.appendChild(value);
-    grid.appendChild(item);
-  }
-
-  summary.appendChild(hero);
-  summary.appendChild(grid);
 }
 
 async function saveProfileFromForm() {
@@ -1030,15 +970,14 @@ async function saveProfileFromForm() {
     } catch {
       apiReady = false;
       saveProfile();
-      alert("后端暂不可用，已回退到本地存储。");
+      showToast("后端不可用，已存到本地");
     }
   }
   saveProfile();
   const completionCount = [profile.name, profile.birthDate, profile.gender, profile.blood, profile.avatar].filter(Boolean).length;
-  if (completionCount >= 4) profileEditorOpen = false;
   renderProfile();
   renderVaccines();
-  alert("宝宝信息已保存");
+  showToast("已保存");
 }
 
 function readFileAsDataURL(file) {

@@ -33,6 +33,7 @@
 }
 
 html[data-theme="light"] {
+  color-scheme: light;
   --bg: #f5f6fa;
   --bg-elev: #ffffff;
   --bg-soft: #eef1f7;
@@ -45,6 +46,7 @@ html[data-theme="light"] {
 }
 
 html[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #0b0d12;
   --bg-elev: #171c29;
   --bg-soft: #20283a;
@@ -461,138 +463,158 @@ body {
 }
 .card-stack { margin-bottom: var(--space-4); }
 .section-title { margin: 0 0 var(--space-3); font-size: 20px; font-weight: 700; }
-.profile-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: var(--space-4);
+.module-profile .profile-page {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: var(--space-6) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
 }
-.profile-showcase,
-.profile-editor-card {
-  margin-bottom: 0;
-}
-.profile-showcase {
+
+.profile-hero {
   position: relative;
-  overflow: hidden;
-  border-color: color-mix(in srgb, var(--border) 82%, var(--accent) 18%);
-  background:
-    radial-gradient(110% 80% at 0% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 64%),
-    linear-gradient(160deg, color-mix(in srgb, var(--bg-elev) 94%, var(--bg-soft)), var(--bg-elev));
-}
-.profile-showcase-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-4);
+  justify-content: center;
 }
-.profile-showcase-tools {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-.profile-eyebrow {
-  margin: 0;
-  font-size: 12px;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
+
+.profile-avatar-lg {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  border: 0;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text-muted);
-  font-weight: 500;
-}
-.profile-status-tag {
-  display: inline-flex;
+  font-size: 32px;
+  font-weight: 700;
+  display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--border) 84%, var(--accent) 16%);
-  height: 32px;
-  min-width: 72px;
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1;
-  color: var(--text-muted);
-  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
-  letter-spacing: 0.2px;
-  box-sizing: border-box;
+  overflow: hidden;
+  flex-shrink: 0;
 }
-.profile-status-tag.ready {
-  color: var(--accent-strong);
-  border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-soft));
+
+.profile-avatar-lg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
-.profile-edit-toggle {
-  display: inline-flex;
+
+.profile-avatar-edit-label {
+  position: absolute;
+  bottom: 0;
+  right: -4px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  border: 2px solid var(--bg);
+  display: flex;
   align-items: center;
   justify-content: center;
-  height: 32px;
-  min-width: 88px;
-  padding: 0 14px;
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1;
-  border-color: color-mix(in srgb, var(--border) 82%, var(--accent) 18%);
-  box-sizing: border-box;
-}
-.profile-editor-card {
-  background: color-mix(in srgb, var(--bg-elev) 95%, var(--bg-soft));
-}
-.profile-editor-head {
-  margin-bottom: var(--space-3);
-}
-.profile-editor-head .section-title {
-  margin-bottom: 6px;
-}
-.profile-editor-desc {
-  margin: 0;
+  cursor: pointer;
   color: var(--text-muted);
+  transition: color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+}
+
+.profile-avatar-edit-label:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, var(--bg-elev));
+}
+
+.profile-avatar-edit-label svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.profile-identity {
+  text-align: center;
+}
+
+.profile-name-display {
+  font-size: clamp(1.3rem, 2.6vw, 1.7rem);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.1px;
+}
+
+.profile-age-display {
+  margin-top: 4px;
   font-size: 13px;
-  line-height: 1.45;
+  color: var(--text-muted);
 }
-.profile-form {
-  margin-top: 2px;
+
+.profile-fields {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
-.profile-field {
-  display: grid;
-  gap: 6px;
+
+.profile-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.profile-field-wide {
-  grid-column: span 2;
-}
+
 .profile-field-label {
   font-size: 12px;
   color: var(--text-muted);
   letter-spacing: 0.2px;
+  padding-left: 2px;
 }
-.profile-form input,
-.profile-form select {
-  background: color-mix(in srgb, var(--bg-elev) 92%, var(--bg-soft));
-  border-color: color-mix(in srgb, var(--border) 84%, transparent);
-  min-height: 42px;
-}
-.profile-actions {
-  grid-column: span 2;
-  position: sticky;
-  bottom: 0;
-  margin-top: var(--space-2);
-  padding-top: 12px;
-  background: linear-gradient(to top, var(--bg-elev) 62%, color-mix(in srgb, var(--bg-elev) 20%, transparent));
-}
-.profile-actions .btn {
+
+.profile-fields input,
+.profile-fields select {
   width: 100%;
   min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--text);
+  color-scheme: light dark;
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+
+.profile-fields input:focus,
+.profile-fields select:focus {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  outline: none;
+}
+
+.profile-save-btn {
+  margin-top: var(--space-2);
+  width: 100%;
+  padding: 12px;
+  border-radius: 22px;
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
 }
-.profile-actions .btn.btn-primary {
-  box-shadow:
-    0 8px 20px color-mix(in srgb, var(--accent) 28%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #ffffff 36%, transparent);
+
+.profile-save-btn:hover {
+  background: var(--accent-strong);
+  transform: scale(1.01);
 }
-.profile-actions .btn.btn-primary:hover {
-  transform: translateY(-1px) scale(1.005);
-}
-.profile-actions .btn.btn-primary:active {
-  transform: translateY(0) scale(1);
+
+.profile-save-btn:active {
+  transform: scale(0.98);
 }
 
 .inline-form {
@@ -601,29 +623,6 @@ body {
   gap: var(--space-2);
 }
 .inline-form .btn { grid-column: span 2; }
-.profile-avatar-control {
-  grid-column: span 2;
-  padding: 10px 12px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--bg-soft) 86%, transparent);
-}
-.profile-avatar-label {
-  display: block;
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-.profile-avatar-actions {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-.profile-avatar-actions input[type="file"] {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 8px;
-}
 
 input,
 select,
@@ -634,6 +633,7 @@ textarea {
   padding: 10px 12px;
   background: var(--bg-soft);
   color: var(--text);
+  color-scheme: light dark;
   font: inherit;
 }
 
@@ -699,80 +699,6 @@ textarea:focus-visible {
   color: var(--text-muted);
 }
 
-.profile-dossier {
-  margin-top: 0;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, var(--accent) 20%);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--bg-elev) 86%, rgba(255, 255, 255, 0.32));
-  padding: var(--space-4);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 24%, transparent),
-    0 10px 28px color-mix(in srgb, var(--accent) 8%, transparent);
-  backdrop-filter: blur(8px) saturate(130%);
-}
-.profile-dossier-hero {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
-}
-.profile-dossier-avatar {
-  width: 62px;
-  height: 62px;
-  border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--accent) 44%, var(--border));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--accent-strong);
-  background: color-mix(in srgb, var(--accent) 16%, var(--bg-soft));
-  flex-shrink: 0;
-  overflow: hidden;
-}
-.profile-dossier-avatar-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.profile-dossier-name {
-  font-size: clamp(1.35rem, 2.5vw, 1.7rem);
-  font-weight: 700;
-  letter-spacing: 0.1px;
-  line-height: 1.2;
-}
-.profile-dossier-age {
-  margin-top: 4px;
-  font-size: 14px;
-  color: var(--text-muted);
-}
-.profile-dossier-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-.profile-dossier-item {
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 12px;
-  padding: 12px;
-  background: color-mix(in srgb, var(--bg-elev) 84%, var(--bg-soft));
-  transition: border-color var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
-}
-.profile-dossier-item:hover {
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
-  transform: translateY(-1px);
-}
-.profile-dossier-label {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.profile-dossier-value {
-  margin-top: 4px;
-  font-size: 14px;
-  font-weight: 600;
-}
 
 .vaccine-workspace,
 .quick-entry-workspace,
@@ -2098,9 +2024,8 @@ textarea:focus-visible {
   .ai-chat-head {
     margin-top: 2px;
   }
-  .profile-layout {
-    grid-template-columns: 1fr;
-    gap: var(--space-3);
+  .module-profile .profile-page {
+    padding: var(--space-4) var(--space-3);
   }
   .app-shell {
     grid-template-columns: 1fr;
@@ -2137,9 +2062,4 @@ textarea:focus-visible {
     align-items: flex-start;
   }
   .inline-form .btn { grid-column: auto; }
-  .profile-field-wide { grid-column: auto; }
-  .profile-avatar-control { grid-column: auto; }
-  .profile-avatar-actions { flex-direction: column; align-items: stretch; }
-  .profile-actions { grid-column: auto; }
-  .profile-dossier-grid { grid-template-columns: 1fr; }
 }
