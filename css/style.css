@@ -717,38 +717,9 @@ textarea:focus-visible {
 }
 
 
-.vaccine-workspace,
 .quick-entry-workspace,
 .gallery-workspace {
   background: var(--bg-elev);
-}
-.vaccine-toolbar {
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  background: transparent;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.vaccine-toolbar > * {
-  min-height: 36px;
-}
-.vaccine-toolbar .text-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-  padding: 0 10px;
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-  transition: color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
-}
-.vaccine-toolbar .text-btn:hover {
-  color: var(--text);
-  border-color: var(--border);
 }
 
 .tl-controls {
@@ -1166,10 +1137,6 @@ textarea:focus-visible {
   border: 0;
   border-radius: 10px;
 }
-#vaccine-template-editor {
-  border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
-  border-radius: var(--radius-md);
-}
 .stat-card {
   padding: 14px 16px;
   transition: background var(--dur-fast) var(--ease-standard);
@@ -1246,46 +1213,207 @@ textarea:focus-visible {
   gap: 6px;
 }
 
-.vaccine-badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
+.vac-controls {
+  margin-bottom: var(--space-4);
 }
-.vaccine-badge.warn {
-  background: color-mix(in srgb, var(--warn) 24%, transparent);
-  color: var(--warn);
+.vac-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
-.vaccine-badge.danger {
-  background: color-mix(in srgb, var(--danger) 24%, transparent);
+.vac-controls select {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  color-scheme: light dark;
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+.vac-controls select:focus {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  outline: none;
+}
+.vac-action-btn {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.vac-action-btn:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.vac-controls-aux {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.vac-aux-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+}
+.vac-aux-btn:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.vac-aux-btn--danger:hover {
   color: var(--danger);
 }
-
-.vaccine-template-editor {
-  background: color-mix(in srgb, var(--bg-soft) 82%, var(--bg-elev));
+.vac-reminder-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
 }
-.vaccine-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.vaccine-table th,
-.vaccine-table td {
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-  padding: 8px;
+
+.vac-editor {
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+.vac-editor-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+}
+.vac-editor-input {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  color-scheme: light dark;
+  margin-bottom: var(--space-3);
+}
+.vac-editor-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  outline: none;
+}
+.vac-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: var(--space-3);
+}
+
+.vac-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.vac-table th,
+.vac-table td {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
+  padding: 8px 6px;
   text-align: left;
 }
-.vaccine-table input {
-  padding: 7px 10px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-elev) 88%, var(--bg-soft));
+.vac-table th {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.2px;
+}
+.vac-table input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.vac-table input:focus {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  outline: none;
 }
 
-.module-vaccine .module-desc,
-.module-quick-entry .module-desc,
-.module-timeline .module-desc,
-.module-gallery .module-desc {
-  max-width: 640px;
+.vac-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
+.vac-list li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 10px;
+  border-radius: 8px;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.vac-list li:hover {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+.vac-list .vac-name {
+  font-size: 14px;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+}
+.vac-list .vac-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.vac-list .vac-status {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  flex-shrink: 0;
+}
+.vac-list .vac-status.done { color: var(--text-muted); }
+.vac-list .vac-status.warn { color: var(--warn); }
+.vac-list .vac-status.danger { color: var(--danger); }
+.vac-list .vac-status.upcoming { color: var(--text-muted); }
+.vac-toggle-btn {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+}
+.vac-toggle-btn:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.vac-toggle-btn.is-done {
+  color: var(--accent);
+}
+
 .module-summary-bar {
   margin-bottom: var(--space-3);
   border: 0;
@@ -2295,5 +2423,8 @@ textarea:focus-visible {
   .tl-controls select,
   .tl-controls input[type="date"] { width: 100%; }
   .tl-controls-aux { margin-left: 0; }
+  .vac-controls-row { flex-direction: column; }
+  .vac-controls select,
+  .vac-action-btn { width: 100%; }
   .inline-form .btn { grid-column: auto; }
 }

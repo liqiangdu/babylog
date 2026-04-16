@@ -260,58 +260,53 @@
           <section id="module-vaccine" class="scene module-panel module-vaccine">
             <header class="module-head">
               <div>
-                <h2 class="module-title">疫苗计划</h2>
-                <p class="module-desc">按地区模板管理接种计划、提醒节奏与完成状态。</p>
+                <h2 class="module-title">疫苗</h2>
+                <p class="module-desc">接种计划与提醒。</p>
               </div>
             </header>
-            <div id="vaccine-module-summary" class="module-summary-bar"></div>
-            <section class="panel card-stack vaccine-workspace">
-              <div class="toolbar vaccine-toolbar">
+
+            <div class="vac-controls">
+              <div class="vac-controls-row">
                 <select id="vaccine-region" aria-label="疫苗地区模板">
-                  <option value="cn">中国大陆计划</option>
-                  <option value="who">WHO扩展计划</option>
-                  <option value="us">美国CDC简版</option>
+                  <option value="cn">中国大陆</option>
+                  <option value="who">WHO 扩展</option>
+                  <option value="us">美国 CDC</option>
                 </select>
                 <select id="vaccine-reminder-days" aria-label="提前提醒天数">
                   <option value="0">当天提醒</option>
-                  <option value="1">提前1天</option>
-                  <option value="3">提前3天</option>
-                  <option value="7">提前7天</option>
+                  <option value="1">提前 1 天</option>
+                  <option value="3">提前 3 天</option>
+                  <option value="7">提前 7 天</option>
                 </select>
-                <button type="button" id="btn-build-vaccine" class="text-btn">生成计划</button>
-                <button type="button" id="btn-check-vaccine-reminder" class="text-btn">立即检查</button>
-                <button type="button" id="btn-enable-vaccine-notice" class="text-btn">开启通知</button>
-                <button type="button" id="btn-toggle-vaccine-editor" class="text-btn">编辑模板</button>
+                <button type="button" id="btn-build-vaccine" class="vac-action-btn">生成计划</button>
               </div>
-              <div id="vaccine-template-editor" class="panel hidden vaccine-template-editor">
-                <div class="section-title">自定义模板编辑</div>
-                <div class="toolbar">
-                  <input type="text" id="vaccine-template-name" placeholder="模板名称（如 上海儿童接种）" />
-                </div>
-                <div class="form-row">
-                  <label>条目（表格化编辑）</label>
-                  <table id="vaccine-template-table" class="vaccine-table">
-                    <thead>
-                      <tr>
-                        <th>疫苗名</th>
-                        <th>剂次</th>
-                        <th>天数</th>
-                        <th>操作</th>
-                      </tr>
-                    </thead>
-                    <tbody id="vaccine-template-tbody"></tbody>
-                  </table>
-                </div>
-                <div class="toolbar">
-                  <button type="button" id="btn-add-vaccine-row" class="text-btn">新增一行</button>
-                  <button type="button" id="btn-load-vaccine-template" class="text-btn">载入当前模板</button>
-                  <button type="button" id="btn-save-vaccine-template" class="text-btn">保存模板</button>
-                  <button type="button" id="btn-delete-vaccine-template" class="text-btn">删除当前自定义</button>
-                </div>
+              <div class="vac-controls-aux">
+                <button type="button" id="btn-check-vaccine-reminder" class="vac-aux-btn">检查提醒</button>
+                <button type="button" id="btn-enable-vaccine-notice" class="vac-aux-btn">通知</button>
+                <button type="button" id="btn-toggle-vaccine-editor" class="vac-aux-btn">模板</button>
               </div>
-              <div id="vaccine-reminder-summary" class="muted-line"></div>
-              <ul id="vaccine-list" class="timeline"></ul>
-            </section>
+            </div>
+
+            <div id="vaccine-template-editor" class="vac-editor hidden">
+              <div class="vac-editor-title">自定义模板</div>
+              <input type="text" id="vaccine-template-name" class="vac-editor-input" placeholder="模板名称" />
+              <table id="vaccine-template-table" class="vac-table">
+                <thead>
+                  <tr><th>疫苗名</th><th>剂次</th><th>天数</th><th></th></tr>
+                </thead>
+                <tbody id="vaccine-template-tbody"></tbody>
+              </table>
+              <div class="vac-editor-actions">
+                <button type="button" id="btn-add-vaccine-row" class="vac-aux-btn">新增行</button>
+                <button type="button" id="btn-load-vaccine-template" class="vac-aux-btn">载入当前</button>
+                <button type="button" id="btn-save-vaccine-template" class="vac-aux-btn">保存</button>
+                <button type="button" id="btn-delete-vaccine-template" class="vac-aux-btn vac-aux-btn--danger">删除</button>
+              </div>
+            </div>
+
+            <div id="vaccine-reminder-summary" class="vac-reminder-hint"></div>
+            <div id="vaccine-module-summary" class="module-summary-bar"></div>
+            <ul id="vaccine-list" class="vac-list"></ul>
           </section>
 
           <section id="module-quick-entry" class="scene module-panel module-quick-entry">

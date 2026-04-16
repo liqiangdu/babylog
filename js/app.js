@@ -1382,11 +1382,10 @@ function applyCustomStatsRange() {
 
 function buildVaccinePlan() {
   if (!profile.birthDate) {
-    alert("请先填写宝宝生日，再生成疫苗计划");
+    showToast("请先填写生日");
     return;
   }
-  const shouldOverwrite = vaccines.length === 0 || confirm("将按生日重建疫苗计划，是否继续？");
-  if (!shouldOverwrite) return;
+  if (vaccines.length > 0 && !confirm("将按生日重建疫苗计划，是否继续？")) return;
 
   const base = new Date(profile.birthDate);
   const allTemplates = getAllVaccineTemplates();
@@ -1416,7 +1415,7 @@ function getVaccineReminderState(v) {
   return { cls: "", text: `${daysLeft} 天后`, daysLeft };
 }
 
-function checkVaccineReminders(showToast) {
+function checkVaccineReminders(notify) {
   const summary = document.getElementById("vaccine-reminder-summary");
   const dueItems = vaccines.filter((v) => v.status !== "done").filter((v) => {
     const state = getVaccineReminderState(v);
@@ -1424,8 +1423,8 @@ function checkVaccineReminders(showToast) {
   });
   if (summary) {
     summary.textContent = dueItems.length
-      ? `提醒：${dueItems.length} 项接种在提醒范围内（提前 ${vaccineSettings.reminderDays} 天）`
-      : "当前无接种提醒";
+      ? `${dueItems.length} 项接种在提醒范围内`
+      : "";
   }
 
   if (vaccineSettings.notificationsEnabled && "Notification" in window && Notification.permission === "granted") {
@@ -1442,7 +1441,7 @@ function checkVaccineReminders(showToast) {
     saveVaccineSettings();
   }
 
-  if (showToast) alert(dueItems.length ? `发现 ${dueItems.length} 条疫苗提醒` : "当前没有需要提醒的疫苗");
+  if (notify) showToast(dueItems.length ? `${dueItems.length} 项疫苗待接种` : "暂无提醒");
 }
 
 function syncVaccineSettingControls() {
@@ -1658,24 +1657,23 @@ function toggleVaccineDone(id) {
 function renderVaccines() {
   const list = document.getElementById("vaccine-list");
   if (!vaccines.length) {
-    list.innerHTML = `<li class="empty-state">暂无计划，请先填写生日并点击“生成接种计划”。</li>`;
+    list.innerHTML = `<li class="empty-state">暂无计划</li>`;
     return;
   }
   list.innerHTML = "";
-  const today = new Date().toISOString().slice(0, 10);
   for (const v of vaccines) {
     const li = document.createElement("li");
-    li.className = "vaccine-row";
     const state = getVaccineReminderState(v);
-    const badge = state.text ? `<span class="vaccine-badge ${state.cls}">${state.text}</span>` : "";
+    const isDone = v.status === "done";
+    const statusCls = isDone ? "done" : (state.cls || "upcoming");
+    const metaText = v.dueDate + (v.doneAt ? ` · 已接种 ${v.doneAt}` : "");
     li.innerHTML = `
-      <div class="tl-body">
-        <div class="tl-label">${v.name} · ${v.dose} ${badge}</div>
-        <div class="tl-meta">计划日期: ${v.dueDate} ${v.doneAt ? `· 完成: ${v.doneAt}` : ""}</div>
+      <div style="flex:1;min-width:0">
+        <div class="vac-name">${v.name} · ${v.dose}</div>
+        <div class="vac-meta">${metaText}</div>
       </div>
-      <div class="tl-actions">
-        <button type="button" class="icon-btn" data-vdone>${v.status === "done" ? "↺" : "✓"}</button>
-      </div>
+      <span class="vac-status ${statusCls}">${state.text}</span>
+      <button type="button" class="vac-toggle-btn${isDone ? " is-done" : ""}" data-vdone title="${isDone ? "撤销" : "完成"}">${isDone ? "✓" : "○"}</button>
     `;
     li.querySelector("[data-vdone]").addEventListener("click", () => toggleVaccineDone(v.id));
     list.appendChild(li);
