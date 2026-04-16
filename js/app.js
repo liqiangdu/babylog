@@ -1722,7 +1722,9 @@ function renderPhotoGallery() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "gallery-link";
-    btn.addEventListener("click", () => openLightbox(idx));
+    btn.addEventListener("click", () => openLightbox(idx, galleryPhotos.map((p) => ({
+      url: p.url, caption: `${formatDateHeader(p.at)} \u00b7 ${p.categoryLabel}`
+    }))));
     const img = document.createElement("img");
     img.src = photo.url;
     img.alt = `${photo.categoryLabel}`;
@@ -1740,9 +1742,11 @@ function renderPhotoGallery() {
 }
 
 /* ── Lightbox ── */
+let lightboxItems = [];
 let lightboxIndex = 0;
 
-function openLightbox(idx) {
+function openLightbox(idx, items) {
+  lightboxItems = items || galleryPhotos;
   lightboxIndex = idx;
   updateLightboxContent();
   document.getElementById("lightbox").classList.add("is-open");
@@ -1755,13 +1759,12 @@ function closeLightbox() {
 }
 
 function updateLightboxContent() {
-  const photo = galleryPhotos[lightboxIndex];
-  if (!photo) return;
-  document.getElementById("lightbox-img").src = photo.url;
-  document.getElementById("lightbox-caption").textContent =
-    `${formatDateHeader(photo.at)} · ${photo.categoryLabel}`;
+  const item = lightboxItems[lightboxIndex];
+  if (!item) return;
+  document.getElementById("lightbox-img").src = item.url;
+  document.getElementById("lightbox-caption").textContent = item.caption || "";
   document.getElementById("lightbox-prev").style.display = lightboxIndex > 0 ? "" : "none";
-  document.getElementById("lightbox-next").style.display = lightboxIndex < galleryPhotos.length - 1 ? "" : "none";
+  document.getElementById("lightbox-next").style.display = lightboxIndex < lightboxItems.length - 1 ? "" : "none";
 }
 
 function initLightbox() {
@@ -1770,7 +1773,7 @@ function initLightbox() {
     if (lightboxIndex > 0) { lightboxIndex--; updateLightboxContent(); }
   });
   document.getElementById("lightbox-next").addEventListener("click", () => {
-    if (lightboxIndex < galleryPhotos.length - 1) { lightboxIndex++; updateLightboxContent(); }
+    if (lightboxIndex < lightboxItems.length - 1) { lightboxIndex++; updateLightboxContent(); }
   });
   document.getElementById("lightbox").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeLightbox();
@@ -1780,7 +1783,7 @@ function initLightbox() {
     if (!lb.classList.contains("is-open")) return;
     if (e.key === "Escape") closeLightbox();
     else if (e.key === "ArrowLeft" && lightboxIndex > 0) { lightboxIndex--; updateLightboxContent(); }
-    else if (e.key === "ArrowRight" && lightboxIndex < galleryPhotos.length - 1) { lightboxIndex++; updateLightboxContent(); }
+    else if (e.key === "ArrowRight" && lightboxIndex < lightboxItems.length - 1) { lightboxIndex++; updateLightboxContent(); }
   });
 }
 
@@ -1837,19 +1840,19 @@ function renderTimeline() {
     if (photos.length && bodyEl) {
       const wrap = document.createElement("div");
       wrap.className = "tl-photos";
-      photos.slice(0, 4).forEach((url) => {
-        const a = document.createElement("a");
-        a.href = url;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.className = "tl-photo-link";
+      const tlLightboxItems = photos.map((u) => ({ url: u, caption: `${formatDateHeader(e.at)} \u00b7 ${cat.label}` }));
+      photos.slice(0, 4).forEach((url, pi) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tl-photo-link";
+        btn.addEventListener("click", () => openLightbox(pi, tlLightboxItems));
         const img = document.createElement("img");
         img.src = url;
         img.alt = "附图";
         img.className = "tl-photo-thumb";
         img.loading = "lazy";
-        a.appendChild(img);
-        wrap.appendChild(a);
+        btn.appendChild(img);
+        wrap.appendChild(btn);
       });
       if (photos.length > 4) {
         const more = document.createElement("span");

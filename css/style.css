@@ -874,6 +874,9 @@ textarea:focus-visible {
   border-radius: 6px;
   overflow: hidden;
   border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
   line-height: 0;
   transition: opacity var(--dur-fast) var(--ease-standard);
 }
