@@ -385,6 +385,11 @@ body {
   padding: var(--space-5) 0 var(--space-5);
 }
 
+.app-content.app-content--ai-full {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 .module-head {
   margin-bottom: var(--space-3);
   padding: var(--space-2) 2px 2px;
@@ -1222,11 +1227,14 @@ textarea:focus-visible {
   }
 }
 
+.module-ai {
+  height: 100dvh;
+}
+
 .module-ai .ai-workspace {
   padding: 0;
   margin: 0;
-  height: calc(100vh - 120px);
-  min-height: 620px;
+  height: 100%;
 }
 
 .ai-layout {
@@ -1242,7 +1250,7 @@ textarea:focus-visible {
   border-radius: 0;
   background: transparent;
   padding: 0 var(--space-4) 0 0;
-  border-right: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   min-height: 100%;
@@ -1696,10 +1704,10 @@ textarea:focus-visible {
 .ai-bubble {
   max-width: min(100%, 720px);
   padding: 10px 12px;
-  border-radius: 14px;
-  border: 0;
-  background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
-  box-shadow: none;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  background: color-mix(in srgb, var(--bg-soft) 84%, var(--bg-elev));
+  box-shadow: var(--shadow-sm);
   font-size: 14px;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -1718,7 +1726,14 @@ textarea:focus-visible {
 }
 
 .ai-msg-user .ai-bubble {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-radius: 16px 16px 6px 16px;
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev));
+  color: var(--text);
+}
+
+.ai-msg-assistant .ai-bubble {
+  border-radius: 16px 16px 16px 6px;
 }
 
 .ai-compose {
@@ -1734,35 +1749,26 @@ textarea:focus-visible {
   min-width: 360px;
   max-width: 720px;
   bottom: 0;
-  background: linear-gradient(to top, color-mix(in srgb, var(--bg-elev) 96%, transparent) 78%, transparent);
+  background: transparent;
   padding: var(--space-2) 0 var(--space-3);
   z-index: 2;
 }
 
 .module-ai .ai-textarea#ai-user-input {
   min-height: 84px;
+  padding-right: 52px;
   background: color-mix(in srgb, var(--bg-soft) 86%, var(--bg-elev));
   border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  box-shadow: var(--shadow-sm);
 }
 
 .module-ai .ai-compose {
-  background: linear-gradient(to top, color-mix(in srgb, var(--bg-elev) 96%, transparent) 78%, transparent);
-}
-
-.ai-compose-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.ai-compose-hint {
-  font-size: 12px;
-  color: var(--text-muted);
+  background: transparent;
 }
 
 .ai-send-btn {
+  position: absolute;
+  right: 10px;
+  top: 20px;
   width: 34px;
   height: 34px;
   border-radius: 10px;
@@ -1838,6 +1844,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-top: 2px;
 }
 
 .ai-status-line.ai-status-busy::before {
@@ -1948,6 +1955,9 @@ textarea:focus-visible {
 }
 
 @media (max-width: 760px) {
+  .module-ai {
+    height: auto;
+  }
   .module-ai .ai-workspace {
     height: auto;
     min-height: 0;
@@ -1982,9 +1992,6 @@ textarea:focus-visible {
   }
   .ai-chat-head {
     margin-top: 2px;
-  }
-  .ai-compose-hint {
-    font-size: 11px;
   }
   .profile-layout {
     grid-template-columns: 1fr;

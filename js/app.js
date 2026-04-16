@@ -415,6 +415,10 @@ function setActiveModule(moduleId) {
   if (container) {
     container.classList.toggle("container-wide", moduleId === "ai");
   }
+  const appContent = document.querySelector(".app-content");
+  if (appContent) {
+    appContent.classList.toggle("app-content--ai-full", moduleId === "ai");
+  }
 }
 
 function initModuleNavigation() {
