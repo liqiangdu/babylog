@@ -837,8 +837,8 @@ select option:hover {
     color var(--dur-fast) var(--ease-standard),
     transform var(--dur-fast) var(--ease-standard);
 }
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-secondary { background: var(--bg-soft); color: var(--text); border-color: var(--border); }
+.btn-primary { background: var(--text); color: var(--bg); }
+.btn-secondary { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text-sec); border-color: transparent; }
 .text-btn {
   background: transparent;
   border-color: color-mix(in srgb, var(--border) 50%, transparent);
@@ -847,18 +847,12 @@ select option:hover {
 .toolbar .text-btn { font-weight: 500; }
 
 .btn-primary:hover {
-  filter: brightness(1.08);
+  opacity: 0.85;
 }
 .btn-secondary:hover,
 .text-btn:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
   color: var(--text);
-  border-color: var(--border);
-}
-
-.btn-primary:active,
-.btn-secondary:active,
-.text-btn:active {
-  transform: scale(0.98);
 }
 
 button:focus-visible,
@@ -1919,39 +1913,43 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-4);
+  gap: var(--space-2);
   margin-top: var(--space-3);
 }
 
-.ai-instruction-modal-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  opacity: 0.6;
-  letter-spacing: 0.2px;
+.ai-instruction-discard-btn {
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 0;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text-sec);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.ai-instruction-discard-btn:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .ai-instruction-save-btn {
-  padding: 8px 20px;
+  padding: 7px 20px;
   border-radius: 20px;
   border: 0;
-  background: var(--accent);
-  color: #fff;
+  background: var(--text);
+  color: var(--bg);
   font: inherit;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  transition:
-    background var(--dur-fast) var(--ease-standard),
-    transform var(--dur-fast) var(--ease-standard);
+  transition: opacity var(--dur-fast) var(--ease-standard);
 }
-
 .ai-instruction-save-btn:hover {
-  background: var(--accent-strong);
-  transform: scale(1.03);
+  opacity: 0.85;
 }
-
-.ai-instruction-save-btn:active {
-  transform: scale(0.97);
+.ai-instruction-save-btn:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
 }
 
 .ai-sessions-head {

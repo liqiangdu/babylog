@@ -2047,15 +2047,27 @@ function syncAiInstructionField() {
   }
 }
 
+function syncAiInstructionSaveBtn() {
+  const ta = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-instruction"));
+  const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById("btn-save-ai-instruction"));
+  if (!ta || !btn) return;
+  const current = ta.value;
+  const saved = aiProject.instruction || DEFAULT_AI_INSTRUCTION;
+  btn.disabled = current === saved;
+}
+
 function saveAiInstructionFromForm() {
   const ta = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-instruction"));
   if (!ta) return;
-  aiProject.instruction = ta.value.trim() ? ta.value : DEFAULT_AI_INSTRUCTION;
+  const newVal = ta.value.trim() ? ta.value : DEFAULT_AI_INSTRUCTION;
+  const saved = aiProject.instruction || DEFAULT_AI_INSTRUCTION;
+  if (newVal === saved) return;
+  aiProject.instruction = newVal;
   aiInstruction = aiProject.instruction;
   saveAiProject();
   syncAiInstructionField();
   closeAiInstructionEditor();
-  showToast("指令已保存");
+  showToast("\u6307\u4ee4\u5df2\u4fdd\u5b58");
 }
 
 function openAiInstructionEditor() {
@@ -2063,11 +2075,18 @@ function openAiInstructionEditor() {
   const ta = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-instruction"));
   if (!modal) return;
   modal.classList.remove("hidden");
+  syncAiInstructionSaveBtn();
   if (ta) {
     ta.focus();
     ta.setSelectionRange(ta.value.length, ta.value.length);
   }
 }
+
+function discardAiInstruction() {
+  syncAiInstructionField();
+  closeAiInstructionEditor();
+}
+
 
 function closeAiInstructionEditor() {
   const modal = document.getElementById("ai-instruction-modal");
@@ -2697,19 +2716,17 @@ async function init() {
   if (btnSaveAiInstr) btnSaveAiInstr.addEventListener("click", saveAiInstructionFromForm);
   const btnEditAiInstr = document.getElementById("btn-edit-ai-instruction");
   if (btnEditAiInstr) btnEditAiInstr.addEventListener("click", openAiInstructionEditor);
+  const btnDiscardAiInstr = document.getElementById("btn-discard-ai-instruction");
+  if (btnDiscardAiInstr) btnDiscardAiInstr.addEventListener("click", discardAiInstruction);
+  const aiInstrTextarea = document.getElementById("ai-instruction");
+  if (aiInstrTextarea) aiInstrTextarea.addEventListener("input", syncAiInstructionSaveBtn);
   const aiInstrModal = document.getElementById("ai-instruction-modal");
   if (aiInstrModal) {
     aiInstrModal.addEventListener("click", (ev) => {
-      if (ev.target === aiInstrModal) {
-        syncAiInstructionField();
-        closeAiInstructionEditor();
-      }
+      if (ev.target === aiInstrModal) discardAiInstruction();
     });
     aiInstrModal.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape") {
-        syncAiInstructionField();
-        closeAiInstructionEditor();
-      }
+      if (ev.key === "Escape") discardAiInstruction();
     });
   }
   const btnAiNewSession = document.getElementById("btn-ai-new-session");
