@@ -2356,7 +2356,7 @@ function renderAiChat() {
   }
   if (!active || active.messages.length === 0) {
     root.classList.add("ai-chat-log-empty");
-    root.innerHTML = `<div class="empty-state">开始一个新会话吧\n输入问题后按回车发送，或点击右上角图标新建会话。</div>`;
+    root.innerHTML = `<div class="empty-state"><div class="ai-empty-greeting">你好，有什么可以帮你的？</div><div class="ai-empty-hint">输入问题开始对话</div></div>`;
     refreshAiUiState();
     return;
   }

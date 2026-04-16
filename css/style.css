@@ -1249,27 +1249,27 @@ textarea:focus-visible {
   border: 0;
   border-radius: 0;
   background: transparent;
-  padding: 0 var(--space-4) 0 0;
-  border-right: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3) 0 0;
+  border-right: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   display: flex;
   flex-direction: column;
   min-height: 100%;
   overflow: hidden;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .ai-settings {
-  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-soft) 40%, transparent);
-  padding: 8px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 4px 2px;
 }
 
 .ai-instruction-title {
-  font-size: 13px;
-  color: var(--text);
+  font-size: 11px;
+  color: var(--text-muted);
   margin-bottom: 2px;
-  letter-spacing: 0.25px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
   font-weight: 600;
 }
@@ -1393,10 +1393,15 @@ textarea:focus-visible {
   justify-content: space-between;
   gap: var(--space-2);
   margin-bottom: 0;
+  padding: 2px 2px;
 }
 
 .ai-sessions-title {
-  font-size: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
   margin: 0;
 }
 
@@ -1404,46 +1409,57 @@ textarea:focus-visible {
   margin: 0;
   flex-shrink: 0;
   font-size: 11px;
-  padding: 6px 10px;
-  gap: 6px 10px;
+  padding: 4px 6px;
+  gap: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
 }
 
 .ai-session-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
   padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--border) 40%, transparent) transparent;
 }
 
 .ai-session-search {
-  margin-bottom: 8px;
-  min-height: 36px;
+  margin-bottom: 4px;
+  min-height: 34px;
   font-size: 13px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  padding: 7px 10px;
+}
+
+.ai-session-search:focus {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  background: var(--bg-elev);
 }
 
 .ai-session-item {
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
-  padding: 8px 10px;
+  padding: 10px 10px;
   cursor: pointer;
-  transition:
-    background var(--dur-fast) var(--ease-standard),
-    transform var(--dur-fast) var(--ease-standard);
+  transition: background var(--dur-fast) var(--ease-standard);
 }
 
 .ai-session-item:hover {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .ai-session-item.active {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .ai-session-title {
@@ -1579,24 +1595,25 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  margin-bottom: var(--space-2);
+  padding: var(--space-2) 0;
+  flex-shrink: 0;
 }
 
 .ai-active-session-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .ai-chat-head-icon-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--border) 84%, var(--accent) 16%);
-  background: color-mix(in srgb, var(--bg-soft) 72%, transparent);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
   color: var(--text-muted);
   padding: 0;
   display: inline-flex;
@@ -1605,14 +1622,12 @@ textarea:focus-visible {
   cursor: pointer;
   transition:
     background var(--dur-fast) var(--ease-standard),
-    border-color var(--dur-fast) var(--ease-standard),
-    color var(--dur-fast) var(--ease-standard),
-    transform var(--dur-fast) var(--ease-standard);
+    color var(--dur-fast) var(--ease-standard);
 }
 
 .ai-chat-head-icon-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   stroke: currentColor;
   stroke-width: 1.8;
   fill: none;
@@ -1622,13 +1637,11 @@ textarea:focus-visible {
 
 .ai-chat-head-icon-btn:hover {
   color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-soft));
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
 .ai-chat-head-icon-btn:active {
-  transform: translateY(0);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
 }
 
 .ai-label {
@@ -1651,8 +1664,7 @@ textarea:focus-visible {
 }
 
 .ai-textarea:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  outline-offset: 1px;
+  outline: none;
 }
 
 .ai-settings-actions {
@@ -1668,13 +1680,16 @@ textarea:focus-visible {
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  padding: 0 0 170px;
+  padding: var(--space-4) 0 140px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-5);
+  align-items: center;
   border: 0;
   border-radius: 0;
   background: transparent;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--border) 40%, transparent) transparent;
 }
 
 .ai-chat-log.ai-chat-log-empty {
@@ -1685,12 +1700,27 @@ textarea:focus-visible {
 }
 
 .ai-chat-log.ai-chat-log-empty .empty-state {
-  max-width: 420px;
-  line-height: 1.55;
+  max-width: 480px;
+  line-height: 1.65;
+}
+
+.ai-empty-greeting {
+  font-size: clamp(1.4rem, 2.8vw, 2rem);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.2px;
+  margin-bottom: var(--space-2);
+}
+
+.ai-empty-hint {
+  font-size: 14px;
+  color: var(--text-muted);
 }
 
 .ai-msg {
   display: flex;
+  width: 100%;
+  max-width: 720px;
 }
 
 .ai-msg-user {
@@ -1702,38 +1732,40 @@ textarea:focus-visible {
 }
 
 .ai-bubble {
-  max-width: min(100%, 720px);
-  padding: 10px 12px;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-  background: color-mix(in srgb, var(--bg-soft) 84%, var(--bg-elev));
-  box-shadow: var(--shadow-sm);
-  font-size: 14px;
-  line-height: 1.55;
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 14.5px;
+  line-height: 1.6;
   white-space: pre-wrap;
+  color: var(--text);
 }
 
 .ai-bubble.ai-streaming::after {
   content: "";
   display: inline-block;
-  width: 0.55em;
-  height: 1.05em;
+  width: 0.5em;
+  height: 1em;
   margin-left: 3px;
-  vertical-align: -0.12em;
+  vertical-align: -0.1em;
   border-radius: 2px;
-  background: color-mix(in srgb, var(--accent) 72%, #ffffff 28%);
+  background: var(--accent);
+  opacity: 0.7;
   animation: aiCaretBlink 0.95s steps(1, end) infinite;
 }
 
 .ai-msg-user .ai-bubble {
-  border-radius: 16px 16px 6px 16px;
-  border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
-  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev));
-  color: var(--text);
+  border-radius: 20px 20px 6px 20px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-soft));
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
 }
 
 .ai-msg-assistant .ai-bubble {
-  border-radius: 16px 16px 16px 6px;
+  border-radius: 0;
+  padding: 2px 0;
 }
 
 .ai-compose {
@@ -1745,36 +1777,48 @@ textarea:focus-visible {
   left: auto;
   transform: none;
   align-self: center;
-  width: 40%;
-  min-width: 360px;
+  width: 100%;
   max-width: 720px;
   bottom: 0;
-  background: transparent;
-  padding: var(--space-2) 0 var(--space-3);
+  background: var(--bg);
+  padding: var(--space-3) var(--space-4);
   z-index: 2;
 }
 
 .module-ai .ai-textarea#ai-user-input {
-  min-height: 84px;
-  padding-right: 52px;
-  background: color-mix(in srgb, var(--bg-soft) 86%, var(--bg-elev));
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  min-height: 52px;
+  max-height: 180px;
+  padding: 14px 52px 14px 18px;
+  background: var(--bg-elev);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 26px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  resize: none;
+  transition:
+    border-color var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.module-ai .ai-textarea#ai-user-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .module-ai .ai-compose {
-  background: transparent;
+  background: linear-gradient(to top, var(--bg) 60%, color-mix(in srgb, var(--bg) 0%, transparent));
 }
 
 .ai-send-btn {
   position: absolute;
-  right: 10px;
-  top: 20px;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
-  background: color-mix(in srgb, var(--accent) 18%, var(--bg-soft));
-  color: var(--accent-strong);
+  right: 26px;
+  bottom: 22px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--accent);
+  color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1782,36 +1826,34 @@ textarea:focus-visible {
   cursor: pointer;
   transition:
     transform var(--dur-fast) var(--ease-standard),
-    border-color var(--dur-fast) var(--ease-standard),
-    filter var(--dur-fast) var(--ease-standard),
-    opacity var(--dur-fast) var(--ease-standard);
+    opacity var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard);
 }
 
 .ai-send-btn svg {
   width: 16px;
   height: 16px;
   stroke: currentColor;
-  stroke-width: 1.9;
+  stroke-width: 2;
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .ai-send-btn:hover {
-  filter: brightness(1.06);
-  transform: translateY(-1px);
+  background: var(--accent-strong);
+  transform: scale(1.06);
 }
 
 .ai-send-btn:active {
-  transform: translateY(0);
+  transform: scale(0.96);
 }
 
 .ai-send-btn:disabled,
 .ai-chat-head-icon-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.35;
   cursor: not-allowed;
   transform: none;
-  filter: none;
 }
 
 .module-ai.ai-busy .ai-send-btn,
@@ -1969,9 +2011,11 @@ textarea:focus-visible {
     height: auto;
   }
   .ai-sessions-panel {
-    min-height: 220px;
+    min-height: 180px;
     padding-right: 0;
     border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    padding-bottom: var(--space-3);
   }
   .ai-chat {
     min-height: calc(100vh - 320px);
@@ -1985,10 +2029,15 @@ textarea:focus-visible {
     left: auto;
     transform: none;
     align-self: center;
-    width: min(92%, 680px);
+    width: 100%;
+    max-width: 680px;
     min-width: 0;
     margin: 0 auto;
-    padding-bottom: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+  .module-ai .ai-textarea#ai-user-input {
+    min-height: 46px;
+    border-radius: 22px;
   }
   .ai-chat-head {
     margin-top: 2px;
