@@ -1700,28 +1700,29 @@ function collectGalleryPhotos() {
   return photos.sort((a, b) => new Date(b.at) - new Date(a.at));
 }
 
+let galleryPhotos = [];
+
 function renderPhotoGallery() {
   const summaryEl = document.getElementById("photo-gallery-summary");
   const galleryEl = document.getElementById("photo-gallery");
   if (!summaryEl || !galleryEl) return;
-  const photos = collectGalleryPhotos();
-  if (!photos.length) {
+  galleryPhotos = collectGalleryPhotos();
+  if (!galleryPhotos.length) {
     summaryEl.textContent = "";
     galleryEl.innerHTML = `<div class="empty-state">暂无照片</div>`;
     return;
   }
-  const daySet = new Set(photos.map((p) => toLocalDateKey(p.at)));
-  summaryEl.textContent = `${photos.length} 张照片，${daySet.size} 天`;
+  const daySet = new Set(galleryPhotos.map((p) => toLocalDateKey(p.at)));
+  summaryEl.textContent = `${galleryPhotos.length} 张照片，${daySet.size} 天`;
   galleryEl.innerHTML = "";
   const frag = document.createDocumentFragment();
-  for (const photo of photos) {
+  galleryPhotos.forEach((photo, idx) => {
     const item = document.createElement("article");
     item.className = "gallery-item";
-    const link = document.createElement("a");
-    link.href = photo.url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.className = "gallery-link";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "gallery-link";
+    btn.addEventListener("click", () => openLightbox(idx));
     const img = document.createElement("img");
     img.src = photo.url;
     img.alt = `${photo.categoryLabel}`;
@@ -1730,12 +1731,57 @@ function renderPhotoGallery() {
     const meta = document.createElement("div");
     meta.className = "gallery-meta";
     meta.textContent = `${formatDateHeader(photo.at)} · ${photo.categoryLabel}`;
-    link.appendChild(img);
-    item.appendChild(link);
+    btn.appendChild(img);
+    item.appendChild(btn);
     item.appendChild(meta);
     frag.appendChild(item);
-  }
+  });
   galleryEl.appendChild(frag);
+}
+
+/* ── Lightbox ── */
+let lightboxIndex = 0;
+
+function openLightbox(idx) {
+  lightboxIndex = idx;
+  updateLightboxContent();
+  document.getElementById("lightbox").classList.add("is-open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeLightbox() {
+  document.getElementById("lightbox").classList.remove("is-open");
+  document.body.style.overflow = "";
+}
+
+function updateLightboxContent() {
+  const photo = galleryPhotos[lightboxIndex];
+  if (!photo) return;
+  document.getElementById("lightbox-img").src = photo.url;
+  document.getElementById("lightbox-caption").textContent =
+    `${formatDateHeader(photo.at)} · ${photo.categoryLabel}`;
+  document.getElementById("lightbox-prev").style.display = lightboxIndex > 0 ? "" : "none";
+  document.getElementById("lightbox-next").style.display = lightboxIndex < galleryPhotos.length - 1 ? "" : "none";
+}
+
+function initLightbox() {
+  document.getElementById("lightbox-close").addEventListener("click", closeLightbox);
+  document.getElementById("lightbox-prev").addEventListener("click", () => {
+    if (lightboxIndex > 0) { lightboxIndex--; updateLightboxContent(); }
+  });
+  document.getElementById("lightbox-next").addEventListener("click", () => {
+    if (lightboxIndex < galleryPhotos.length - 1) { lightboxIndex++; updateLightboxContent(); }
+  });
+  document.getElementById("lightbox").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeLightbox();
+  });
+  document.addEventListener("keydown", (e) => {
+    const lb = document.getElementById("lightbox");
+    if (!lb.classList.contains("is-open")) return;
+    if (e.key === "Escape") closeLightbox();
+    else if (e.key === "ArrowLeft" && lightboxIndex > 0) { lightboxIndex--; updateLightboxContent(); }
+    else if (e.key === "ArrowRight" && lightboxIndex < galleryPhotos.length - 1) { lightboxIndex++; updateLightboxContent(); }
+  });
 }
 
 function renderTimeline() {
@@ -2535,6 +2581,7 @@ async function init() {
   const completionCount = [profile.name, profile.birthDate, profile.gender, profile.blood, profile.avatar].filter(Boolean).length;
   profileEditorOpen = completionCount < 4;
   initModuleNavigation();
+  initLightbox();
   syncAiInstructionField();
   renderCategories();
   populateFilter();
