@@ -435,7 +435,7 @@ function initModuleNavigation() {
   const nav = document.getElementById("module-nav");
   if (!nav) return;
   nav.addEventListener("click", (ev) => {
-    const target = /** @type {HTMLElement|null} */ (ev.target instanceof HTMLElement ? ev.target.closest(".module-nav-item") : null);
+    const target = /** @type {HTMLElement|null} */ (ev.target instanceof Element ? ev.target.closest(".module-nav-item") : null);
     if (!target) return;
     const moduleId = target.getAttribute("data-module");
     if (!moduleId) return;
