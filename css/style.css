@@ -638,7 +638,8 @@ body {
 }
 
 .profile-fields input,
-.profile-fields select {
+.profile-fields select,
+.profile-fields .cd-trigger {
   width: 100%;
   min-height: 44px;
   padding: 10px 14px;
@@ -651,23 +652,9 @@ body {
   transition: border-color var(--dur-fast) var(--ease-standard);
 }
 
-.profile-fields select option {
-  background: var(--bg-elev);
-  color: var(--text);
-  padding: 6px 8px;
-}
-
-.profile-fields select option:checked {
-  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev));
-  color: var(--accent-strong);
-}
-
-.profile-fields select option:hover {
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
-}
-
 .profile-fields input:focus,
-.profile-fields select:focus {
+.profile-fields select:focus,
+.profile-fields .cd-trigger:focus {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   outline: none;
 }
@@ -712,6 +699,120 @@ textarea {
 select option {
   background: var(--bg-elev);
   color: var(--text);
+}
+select option:checked {
+  background: color-mix(in srgb, var(--text) 8%, var(--bg-elev));
+  color: var(--text);
+}
+select option:hover {
+  background: color-mix(in srgb, var(--text) 5%, var(--bg-elev));
+}
+
+/* ── Custom Dropdown ── */
+.cd-wrap {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+}
+.cd-native-hidden {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+.cd-trigger {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+.cd-trigger::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--text-muted);
+  border-bottom: 1.5px solid var(--text-muted);
+  transform: rotate(45deg);
+  flex-shrink: 0;
+  margin-top: -3px;
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+.cd-wrap.is-open .cd-trigger::after {
+  transform: rotate(-135deg);
+  margin-top: 2px;
+}
+.cd-trigger:focus {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  outline: none;
+}
+.cd-list {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-elev);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+  z-index: 800;
+  scrollbar-width: thin;
+}
+.cd-wrap.is-open .cd-list {
+  display: block;
+}
+.cd-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.cd-option:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.cd-option.is-selected {
+  background: transparent;
+}
+.cd-option.is-selected:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.cd-option-label {
+  flex: 1;
+  min-width: 0;
+}
+.cd-check {
+  width: 16px;
+  height: 16px;
+  stroke: var(--text);
+  stroke-width: 2.2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+  margin-left: 8px;
 }
 
 .toolbar {
@@ -793,6 +894,7 @@ textarea:focus-visible {
   margin-bottom: var(--space-4);
 }
 .tl-controls select,
+.tl-controls .cd-trigger,
 .tl-controls input[type="date"] {
   min-height: 34px;
   padding: 6px 10px;
@@ -805,6 +907,7 @@ textarea:focus-visible {
   transition: border-color var(--dur-fast) var(--ease-standard);
 }
 .tl-controls select:focus,
+.tl-controls .cd-trigger:focus,
 .tl-controls input[type="date"]:focus {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   outline: none;
@@ -1229,6 +1332,7 @@ textarea:focus-visible {
   margin-top: 6px;
 }
 .stats-controls select,
+.stats-controls .cd-trigger,
 .stats-controls input[type="date"] {
   min-height: 34px;
   padding: 6px 10px;
@@ -1241,6 +1345,7 @@ textarea:focus-visible {
   transition: border-color var(--dur-fast) var(--ease-standard);
 }
 .stats-controls select:focus,
+.stats-controls .cd-trigger:focus,
 .stats-controls input[type="date"]:focus {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   outline: none;
@@ -1363,7 +1468,8 @@ textarea:focus-visible {
   gap: 6px;
   align-items: center;
 }
-.vac-controls select {
+.vac-controls select,
+.vac-controls .cd-trigger {
   min-height: 34px;
   padding: 6px 10px;
   border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
@@ -1374,7 +1480,8 @@ textarea:focus-visible {
   font-size: 13px;
   transition: border-color var(--dur-fast) var(--ease-standard);
 }
-.vac-controls select:focus {
+.vac-controls select:focus,
+.vac-controls .cd-trigger:focus {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   outline: none;
 }
@@ -1618,6 +1725,7 @@ textarea:focus-visible {
 }
 .form-row input,
 .form-row select,
+.form-row .cd-trigger,
 .form-row textarea {
   border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
   border-radius: 10px;
@@ -1626,6 +1734,7 @@ textarea:focus-visible {
 }
 .form-row input:focus,
 .form-row select:focus,
+.form-row .cd-trigger:focus,
 .form-row textarea:focus {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   outline: none;
@@ -2558,14 +2667,17 @@ textarea:focus-visible {
   .stats-grid { grid-template-columns: 1fr; }
   .stats-controls-row { flex-direction: column; }
   .stats-controls select,
+  .stats-controls .cd-wrap,
   .stats-controls input[type="date"],
   .stats-apply-btn { width: 100%; }
   .tl-controls { flex-direction: column; align-items: stretch; }
   .tl-controls select,
+  .tl-controls .cd-wrap,
   .tl-controls input[type="date"] { width: 100%; }
   .tl-controls-aux { margin-left: 0; }
   .vac-controls-row { flex-direction: column; }
   .vac-controls select,
+  .vac-controls .cd-wrap,
   .vac-action-btn { width: 100%; }
   .inline-form .btn { grid-column: auto; }
 }
