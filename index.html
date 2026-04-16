@@ -200,10 +200,12 @@
                   </div>
                   <div id="ai-chat-log" class="ai-chat-log" aria-live="polite"></div>
                   <div class="ai-compose">
-                    <textarea id="ai-user-input" class="ai-textarea" rows="3" placeholder="输入问题并回车发送（Shift+Enter 换行）"></textarea>
-                    <button type="button" id="btn-ai-send" class="ai-send-btn" aria-label="发送消息">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5l14.5-6-6 14.5-1.8-6.7L4 11.5z"></path><path d="M10.7 13.3L18.5 5.5"></path></svg>
-                    </button>
+                    <div class="ai-input-wrap">
+                      <textarea id="ai-user-input" class="ai-textarea" rows="1" placeholder="输入问题并回车发送（Shift+Enter 换行）"></textarea>
+                      <button type="button" id="btn-ai-send" class="ai-send-btn" aria-label="发送消息">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5"></path><path d="M5 12l7-7 7 7"></path></svg>
+                      </button>
+                    </div>
                     <div id="ai-status" class="muted-line ai-status-line" aria-live="polite"></div>
                   </div>
                 </div>

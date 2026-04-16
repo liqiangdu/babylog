@@ -2239,9 +2239,9 @@ textarea:focus-visible {
 }
 
 .module-ai .ai-textarea#ai-user-input {
-  min-height: 52px;
+  min-height: 40px;
   max-height: 180px;
-  padding: 14px 52px 14px 18px;
+  padding: 10px 44px 10px 16px;
   background: var(--bg-elev);
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: 26px;
@@ -2262,51 +2262,53 @@ textarea:focus-visible {
   background: linear-gradient(to top, var(--bg) 60%, color-mix(in srgb, var(--bg) 0%, transparent));
 }
 
+.ai-input-wrap {
+  position: relative;
+}
+
 .ai-send-btn {
   position: absolute;
-  right: 26px;
-  bottom: 22px;
-  width: 36px;
-  height: 36px;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: 0;
-  background: var(--accent);
-  color: #fff;
+  background: none;
+  color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   cursor: pointer;
   transition:
-    transform var(--dur-fast) var(--ease-standard),
-    opacity var(--dur-fast) var(--ease-standard),
-    background var(--dur-fast) var(--ease-standard);
+    color var(--dur-fast) var(--ease-standard),
+    opacity var(--dur-fast) var(--ease-standard);
 }
 
 .ai-send-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: 1.8;
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .ai-send-btn:hover {
-  background: var(--accent-strong);
-  transform: scale(1.06);
+  color: var(--text);
 }
 
 .ai-send-btn:active {
-  transform: scale(0.96);
+  color: var(--text-sec);
 }
 
 .ai-send-btn:disabled,
 .ai-chat-head-icon-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
-  transform: none;
 }
 
 .module-ai.ai-busy .ai-send-btn,
