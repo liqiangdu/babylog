@@ -118,7 +118,7 @@
             <div class="profile-page">
               <div class="profile-hero">
                 <div id="profile-avatar-display" class="profile-avatar-lg">宝</div>
-                <label class="profile-avatar-edit-label" for="baby-avatar" title="更换头像">
+                <label class="profile-avatar-edit-label profile-edit-only" for="baby-avatar" title="更换头像">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                 </label>
                 <input type="file" id="baby-avatar" accept="image/*" class="hidden" />
@@ -129,7 +129,17 @@
                 <div class="profile-age-display">设置生日后显示月龄</div>
               </div>
 
-              <form id="profile-form" class="profile-fields" onsubmit="return false">
+              <div id="profile-display" class="profile-display">
+                <dl class="profile-dl">
+                  <div class="profile-dl-item"><dt>昵称</dt><dd id="profile-d-name">—</dd></div>
+                  <div class="profile-dl-item"><dt>生日</dt><dd id="profile-d-birth">—</dd></div>
+                  <div class="profile-dl-item"><dt>性别</dt><dd id="profile-d-gender">—</dd></div>
+                  <div class="profile-dl-item"><dt>血型</dt><dd id="profile-d-blood">—</dd></div>
+                </dl>
+                <button type="button" class="profile-edit-btn" id="btn-enter-edit">编辑</button>
+              </div>
+
+              <form id="profile-form" class="profile-fields profile-edit-only" onsubmit="return false">
                 <div class="profile-field-row">
                   <label class="profile-field-label" for="baby-name">昵称</label>
                   <input type="text" id="baby-name" placeholder="小米粒" />
@@ -150,7 +160,10 @@
                   <label class="profile-field-label" for="baby-blood">血型</label>
                   <input type="text" id="baby-blood" placeholder="A / B / O / AB" />
                 </div>
-                <button type="button" class="profile-save-btn" id="btn-save-profile">保存</button>
+                <div class="profile-form-actions">
+                  <button type="button" class="profile-cancel-btn" id="btn-cancel-edit">取消</button>
+                  <button type="button" class="profile-save-btn" id="btn-save-profile">保存</button>
+                </div>
               </form>
             </div>
             <span id="profile-showcase-status" class="hidden"></span>

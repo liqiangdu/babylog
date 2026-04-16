@@ -910,6 +910,8 @@ function renderCategories() {
   }
 }
 
+const GENDER_MAP = { boy: "\u7537", girl: "\u5973" };
+
 function renderProfile() {
   const nameEl = /** @type {HTMLInputElement} */ (document.getElementById("baby-name"));
   const birthEl = /** @type {HTMLInputElement} */ (document.getElementById("baby-birth"));
@@ -921,9 +923,9 @@ function renderProfile() {
   genderEl.value = profile.gender || "";
   bloodEl.value = profile.blood || "";
 
-  const nameText = profile.name || "宝宝档案";
+  const nameText = profile.name || "\u5b9d\u5b9d\u6863\u6848";
   const ageText = getAgeText();
-  const initial = profile.name ? profile.name.trim().slice(0, 1).toUpperCase() : "宝";
+  const initial = profile.name ? profile.name.trim().slice(0, 1).toUpperCase() : "\u5b9d";
 
   const avatarEl = document.getElementById("profile-avatar-display");
   if (avatarEl) {
@@ -943,8 +945,30 @@ function renderProfile() {
     const nameDisplay = summaryEl.querySelector(".profile-name-display");
     const ageDisplay = summaryEl.querySelector(".profile-age-display");
     if (nameDisplay) nameDisplay.textContent = nameText;
-    if (ageDisplay) ageDisplay.textContent = profile.birthDate ? ageText : "设置生日后显示月龄";
+    if (ageDisplay) ageDisplay.textContent = profile.birthDate ? ageText : "\u8bbe\u7f6e\u751f\u65e5\u540e\u663e\u793a\u6708\u9f84";
   }
+
+  const dn = document.getElementById("profile-d-name");
+  const db = document.getElementById("profile-d-birth");
+  const dg = document.getElementById("profile-d-gender");
+  const dbl = document.getElementById("profile-d-blood");
+  if (dn) dn.textContent = profile.name || "\u2014";
+  if (db) db.textContent = profile.birthDate || "\u2014";
+  if (dg) dg.textContent = GENDER_MAP[profile.gender] || "\u2014";
+  if (dbl) dbl.textContent = profile.blood || "\u2014";
+
+  syncProfileEditState();
+}
+
+function setProfileEditing(editing) {
+  profileEditorOpen = editing;
+  syncProfileEditState();
+}
+
+function syncProfileEditState() {
+  const mod = document.getElementById("module-profile");
+  if (!mod) return;
+  mod.classList.toggle("is-editing", profileEditorOpen);
 }
 
 async function saveProfileFromForm() {
@@ -973,7 +997,7 @@ async function saveProfileFromForm() {
     }
   }
   saveProfile();
-  const completionCount = [profile.name, profile.birthDate, profile.gender, profile.blood, profile.avatar].filter(Boolean).length;
+  setProfileEditing(false);
   renderProfile();
   renderVaccines();
   showToast("已保存");
@@ -2608,6 +2632,8 @@ async function init() {
     renderTimeline();
   });
   document.getElementById("btn-save-profile").addEventListener("click", saveProfileFromForm);
+  document.getElementById("btn-enter-edit").addEventListener("click", () => setProfileEditing(true));
+  document.getElementById("btn-cancel-edit").addEventListener("click", () => { setProfileEditing(false); renderProfile(); });
   document.getElementById("btn-toggle-profile-editor").addEventListener("click", toggleProfileEditor);
   document.getElementById("baby-avatar").addEventListener("change", handleAvatarChange);
   document.getElementById("btn-clear-avatar").addEventListener("click", clearAvatar);

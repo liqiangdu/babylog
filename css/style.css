@@ -550,9 +550,76 @@ body {
   color: var(--text-muted);
 }
 
-.profile-fields {
+/* display / edit toggle */
+.profile-edit-only { display: none !important; }
+.module-profile.is-editing .profile-edit-only { display: flex !important; }
+.module-profile.is-editing .profile-edit-only.profile-avatar-edit-label { display: flex !important; }
+.module-profile.is-editing .profile-display { display: none; }
+
+.profile-display {
   width: 100%;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+.profile-dl {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+.profile-dl-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 2px;
+}
+.profile-dl-item dt {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.profile-dl-item dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+.profile-edit-btn {
+  background: none;
+  border: none;
+  padding: 6px 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--accent);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+.profile-edit-btn:hover { color: var(--accent-strong); }
+
+.profile-form-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.profile-cancel-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 22px;
+  border: 0;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text-sec);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.profile-cancel-btn:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.profile-fields {
+  width: 100%;
   flex-direction: column;
   gap: var(--space-3);
 }
@@ -607,8 +674,7 @@ body {
 }
 
 .profile-save-btn {
-  margin-top: var(--space-2);
-  width: 100%;
+  flex: 1;
   padding: 12px;
   border-radius: 22px;
   border: 0;
@@ -618,16 +684,11 @@ body {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+  transition: background var(--dur-fast) var(--ease-standard);
 }
 
 .profile-save-btn:hover {
   background: var(--accent-strong);
-  transform: scale(1.01);
-}
-
-.profile-save-btn:active {
-  transform: scale(0.98);
 }
 
 .inline-form {
