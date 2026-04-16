@@ -331,25 +331,27 @@
             <header class="module-head">
               <div>
                 <h2 class="module-title">时间轴</h2>
-                <p class="module-desc">按时间回看记录，支持筛选、导入与导出。</p>
+                <p class="module-desc">回看记录。</p>
               </div>
             </header>
-            <div id="timeline-module-summary" class="module-summary-bar"></div>
-            <section class="panel card-stack timeline-workspace">
-              <div class="toolbar timeline-toolbar">
-                <select id="filter-category" aria-label="按类型筛选"></select>
-                <input type="date" id="filter-day" aria-label="按日期筛选" />
-                <button type="button" id="btn-export" class="text-btn">导出记录</button>
-                <label class="text-btn timeline-import-btn">
-                  导入记录
+
+            <div class="tl-controls">
+              <select id="filter-category" aria-label="按类型筛选"></select>
+              <input type="date" id="filter-day" aria-label="按日期筛选" />
+              <div class="tl-controls-aux">
+                <button type="button" id="btn-export" class="tl-aux-btn">导出</button>
+                <label class="tl-aux-btn">
+                  导入
                   <input type="file" id="import-file" accept="application/json" class="hidden" />
                 </label>
               </div>
-              <ul id="timeline" class="timeline" aria-live="polite"></ul>
-              <div id="timeline-more-wrap" class="timeline-more-wrap hidden">
-                <button type="button" id="btn-more-timeline" class="text-btn">更多</button>
-              </div>
-            </section>
+            </div>
+
+            <ul id="timeline" class="timeline" aria-live="polite"></ul>
+            <div id="timeline-more-wrap" class="timeline-more-wrap hidden">
+              <button type="button" id="btn-more-timeline" class="tl-more-btn">加载更多</button>
+            </div>
+            <div id="timeline-module-summary" class="module-summary-bar"></div>
           </section>
 
           <section id="module-gallery" class="scene module-panel module-gallery">

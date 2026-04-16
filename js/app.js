@@ -882,7 +882,6 @@ async function submitModal() {
 }
 
 async function deleteEntry(id) {
-  if (!confirm("确定删除这条记录？")) return;
   entries = entries.filter((e) => e.id !== id);
   if (apiReady) {
     try {
@@ -890,12 +889,12 @@ async function deleteEntry(id) {
     } catch {
       apiReady = false;
       save();
-      alert("后端暂不可用，已回退到本地存储。");
     }
   } else {
     save();
   }
   render();
+  showToast("已删除");
 }
 
 function renderCategories() {
@@ -1750,7 +1749,7 @@ function renderTimeline() {
   if (day) data = data.filter((e) => toLocalDateKey(e.at) === day);
 
   if (data.length === 0) {
-    list.innerHTML = `<li class="empty-state">暂无记录，点上方图标快速添加。</li>`;
+    list.innerHTML = `<li class="empty-state">暂无记录</li>`;
     moreWrap.classList.add("hidden");
     return;
   }
@@ -1779,12 +1778,12 @@ function renderTimeline() {
     li.innerHTML = `
       <span class="tl-time">${formatTime(e.at)}</span>
       <div class="tl-body">
-        <div class="tl-label">${cat.emoji} ${cat.label}</div>
+        <span class="tl-label">${cat.emoji} ${cat.label}</span>
         <div class="tl-meta"></div>
       </div>
       <div class="tl-actions">
         <button type="button" class="icon-btn" data-edit title="编辑">✎</button>
-        <button type="button" class="icon-btn" data-del title="删除">🗑</button>
+        <button type="button" class="icon-btn" data-del title="删除">✕</button>
       </div>
     `;
     const bodyEl = li.querySelector(".tl-body");
@@ -1817,7 +1816,31 @@ function renderTimeline() {
       bodyEl.appendChild(wrap);
     }
     li.querySelector("[data-edit]").addEventListener("click", () => openModal(e.categoryId, e));
-    li.querySelector("[data-del]").addEventListener("click", () => deleteEntry(e.id));
+    li.querySelector("[data-del]").addEventListener("click", () => {
+      if (li.classList.contains("tl-delete-pending")) return;
+      li.classList.add("tl-delete-pending");
+      const actions = li.querySelector(".tl-actions");
+      if (actions) actions.classList.add("hidden");
+      const row = document.createElement("div");
+      row.className = "tl-confirm-row";
+      row.innerHTML = `
+        <span class="tl-confirm-label">删除？</span>
+        <div class="tl-confirm-btns">
+          <button type="button" class="tl-confirm-btn tl-confirm-cancel" title="取消">
+            <svg viewBox="0 0 24 24"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>
+          </button>
+          <button type="button" class="tl-confirm-btn tl-confirm-ok" title="确认删除">
+            <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"></path></svg>
+          </button>
+        </div>`;
+      row.querySelector(".tl-confirm-cancel").addEventListener("click", () => {
+        li.classList.remove("tl-delete-pending");
+        row.remove();
+        if (actions) actions.classList.remove("hidden");
+      });
+      row.querySelector(".tl-confirm-ok").addEventListener("click", () => deleteEntry(e.id));
+      li.appendChild(row);
+    });
     frag.appendChild(li);
   }
   list.innerHTML = "";
