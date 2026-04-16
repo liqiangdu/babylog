@@ -780,7 +780,7 @@ function openModal(categoryId, existing) {
   const photoRow = document.createElement("div");
   photoRow.className = "form-row";
   photoRow.innerHTML = `
-    <label for="field-photos">照片（可选，最多 ${MAX_ENTRY_PHOTOS} 张，需后端；存对象存储+URL）</label>
+    <label for="field-photos">照片（可选，最多 ${MAX_ENTRY_PHOTOS} 张）</label>
     <input type="file" id="field-photos" accept="image/*" multiple />
     <div id="photo-previews" class="photo-previews" aria-live="polite"></div>
   `;
