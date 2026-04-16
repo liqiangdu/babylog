@@ -38,6 +38,16 @@ let sidebarOpen = false;
 let sidebarCollapsedDesktop = false;
 let profileEditorOpen = true;
 let aiInstruction = DEFAULT_AI_INSTRUCTION;
+
+let _toastTimer = 0;
+function showToast(msg, duration = 2200) {
+  const el = document.getElementById("app-toast");
+  if (!el) return;
+  clearTimeout(_toastTimer);
+  el.textContent = msg;
+  el.classList.add("app-toast--visible");
+  _toastTimer = setTimeout(() => el.classList.remove("app-toast--visible"), duration);
+}
 /**
  * @typedef {{role: 'user'|'assistant', content: string, ts: string}} AiMessage
  * @typedef {{id: string, title: string, createdAt: string, updatedAt: string, messages: AiMessage[]}} AiSession
@@ -2019,7 +2029,7 @@ function saveAiInstructionFromForm() {
   saveAiProject();
   syncAiInstructionField();
   closeAiInstructionEditor();
-  alert("项目指令已保存到本机");
+  showToast("指令已保存");
 }
 
 function openAiInstructionEditor() {
@@ -2658,17 +2668,19 @@ async function init() {
   if (btnSaveAiInstr) btnSaveAiInstr.addEventListener("click", saveAiInstructionFromForm);
   const btnEditAiInstr = document.getElementById("btn-edit-ai-instruction");
   if (btnEditAiInstr) btnEditAiInstr.addEventListener("click", openAiInstructionEditor);
-  const btnCancelAiInstr = document.getElementById("btn-cancel-ai-instruction");
-  if (btnCancelAiInstr) {
-    btnCancelAiInstr.addEventListener("click", () => {
-      syncAiInstructionField();
-      closeAiInstructionEditor();
-    });
-  }
   const aiInstrModal = document.getElementById("ai-instruction-modal");
   if (aiInstrModal) {
     aiInstrModal.addEventListener("click", (ev) => {
-      if (ev.target === aiInstrModal) closeAiInstructionEditor();
+      if (ev.target === aiInstrModal) {
+        syncAiInstructionField();
+        closeAiInstructionEditor();
+      }
+    });
+    aiInstrModal.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        syncAiInstructionField();
+        closeAiInstructionEditor();
+      }
     });
   }
   const btnAiNewSession = document.getElementById("btn-ai-new-session");
