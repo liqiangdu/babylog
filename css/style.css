@@ -648,7 +648,6 @@ body {
   font: inherit;
   font-size: 14.5px;
   color: var(--text);
-  color-scheme: light dark;
   transition: border-color var(--dur-fast) var(--ease-standard);
 }
 
@@ -707,8 +706,12 @@ textarea {
   padding: 10px 12px;
   background: var(--bg-soft);
   color: var(--text);
-  color-scheme: light dark;
   font: inherit;
+}
+
+select option {
+  background: var(--bg-elev);
+  color: var(--text);
 }
 
 .toolbar {
@@ -799,7 +802,6 @@ textarea:focus-visible {
   color: var(--text);
   font: inherit;
   font-size: 13px;
-  color-scheme: light dark;
   transition: border-color var(--dur-fast) var(--ease-standard);
 }
 .tl-controls select:focus,
@@ -1236,7 +1238,6 @@ textarea:focus-visible {
   color: var(--text);
   font: inherit;
   font-size: 13px;
-  color-scheme: light dark;
   transition: border-color var(--dur-fast) var(--ease-standard);
 }
 .stats-controls select:focus,
@@ -1371,7 +1372,6 @@ textarea:focus-visible {
   color: var(--text);
   font: inherit;
   font-size: 13px;
-  color-scheme: light dark;
   transition: border-color var(--dur-fast) var(--ease-standard);
 }
 .vac-controls select:focus {
@@ -1448,7 +1448,6 @@ textarea:focus-visible {
   color: var(--text);
   font: inherit;
   font-size: 13px;
-  color-scheme: light dark;
   margin-bottom: var(--space-3);
 }
 .vac-editor-input:focus {
