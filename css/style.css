@@ -1691,24 +1691,28 @@ textarea:focus-visible {
   background: color-mix(in srgb, var(--bg) 60%, transparent);
   backdrop-filter: blur(6px);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
+  padding: 24px 16px;
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-mid) var(--ease-standard);
 }
 .modal-overlay.open { opacity: 1; pointer-events: auto; }
 .modal {
-  width: min(100%, 480px);
+  width: min(100%, 440px);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
   background: var(--bg-elev);
   border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-  border-bottom: 0;
-  border-radius: 16px 16px 0 0;
+  border-radius: 14px;
   padding: var(--space-5) var(--space-4) var(--space-4);
-  transform: translateY(100%);
-  transition: transform var(--dur-mid) var(--ease-standard);
+  opacity: 0;
+  transform: scale(0.97);
+  transition: opacity var(--dur-mid) var(--ease-standard), transform var(--dur-mid) var(--ease-standard);
+  scrollbar-width: thin;
 }
-.modal-overlay.open .modal { transform: translateY(0); }
+.modal-overlay.open .modal { opacity: 1; transform: scale(1); }
 .modal h2 {
   margin: 0 0 var(--space-4);
   font-size: 16px;
