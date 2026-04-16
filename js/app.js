@@ -48,6 +48,8 @@ let aiProject = { instruction: DEFAULT_AI_INSTRUCTION, activeSessionId: "", cont
 let aiStreamRenderScheduled = false;
 let aiBusy = false;
 let aiSessionSearchKeyword = "";
+/** @type {string|null} 列表内删除确认：当前待确认的会话 id */
+let aiSessionDeletePendingId = null;
 
 const VACCINE_TEMPLATES = {
   cn: [
@@ -2045,17 +2047,41 @@ function renderAiSessionList() {
     const body = s.messages.slice(-6).map((m) => String(m.content || "")).join("\n");
     return `${s.title}\n${body}`.toLowerCase().includes(keyword);
   });
+  if (aiSessionDeletePendingId && !filtered.some((s) => s.id === aiSessionDeletePendingId)) {
+    aiSessionDeletePendingId = null;
+  }
   if (filtered.length === 0) {
     root.innerHTML = `<div class="empty-state">没有匹配的会话</div>`;
     return;
   }
   for (const s of filtered) {
     const item = document.createElement("div");
-    item.className = `ai-session-item ${s.id === aiProject.activeSessionId ? "active" : ""}`;
+    const isPending = aiSessionDeletePendingId === s.id;
+    item.className = `ai-session-item ${s.id === aiProject.activeSessionId ? "active" : ""}${isPending ? " ai-session-item--delete-pending" : ""}`;
     item.dataset.sid = s.id;
     const lastMsg = s.messages[s.messages.length - 1];
     const lastText = lastMsg?.content ? String(lastMsg.content).replace(/\s+/g, " ").trim() : "暂无消息";
     const updatedText = new Date(s.updatedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const actionsHtml = isPending
+      ? `<div class="ai-session-confirm-row" role="group" aria-label="确认删除会话">
+          <span class="ai-session-confirm-label">删除此会话？</span>
+          <div class="ai-session-actions ai-session-actions--visible">
+            <button type="button" class="ai-session-action-btn ai-session-action-btn--cancel" data-ai-delete-cancel aria-label="取消删除" title="取消">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>
+            </button>
+            <button type="button" class="ai-session-action-btn ai-session-action-btn--confirm" data-ai-delete-confirm aria-label="确认删除" title="确认删除">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+            </button>
+          </div>
+        </div>`
+      : `<div class="ai-session-actions">
+        <button type="button" class="ai-session-action-btn" data-ai-rename aria-label="重命名会话" title="重命名">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25z"></path><path d="M14.06 4.19l3.75 3.75"></path></svg>
+        </button>
+        <button type="button" class="ai-session-action-btn" data-ai-delete aria-label="删除会话" title="删除">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 12h10l1-12"></path><path d="M9 7V5h6v2"></path></svg>
+        </button>
+      </div>`;
     item.innerHTML = `
       <div class="ai-session-title">${escapeHtml(s.title || "新会话")}</div>
       <div class="ai-session-meta">
@@ -2063,16 +2089,12 @@ function renderAiSessionList() {
         <span>${updatedText}</span>
       </div>
       <div class="ai-session-last">${escapeHtml(lastText.slice(0, 36) || "暂无消息")}</div>
-      <div class="ai-session-actions">
-        <button type="button" class="ai-session-action-btn" data-ai-rename aria-label="重命名会话" title="重命名">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25z"></path><path d="M14.06 4.19l3.75 3.75"></path></svg>
-        </button>
-        <button type="button" class="ai-session-action-btn" data-ai-delete aria-label="删除会话" title="删除">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 12h10l1-12"></path><path d="M9 7V5h6v2"></path></svg>
-        </button>
-      </div>
+      ${actionsHtml}
     `;
-    item.addEventListener("click", () => switchAiSession(s.id));
+    item.addEventListener("click", () => {
+      if (isPending) return;
+      switchAiSession(s.id);
+    });
     const btnRename = item.querySelector("[data-ai-rename]");
     if (btnRename) {
       btnRename.addEventListener("click", (ev) => {
@@ -2084,7 +2106,21 @@ function renderAiSessionList() {
     if (btnDelete) {
       btnDelete.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        deleteAiSession(s.id);
+        requestAiSessionDelete(s.id);
+      });
+    }
+    const btnCancelDel = item.querySelector("[data-ai-delete-cancel]");
+    if (btnCancelDel) {
+      btnCancelDel.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        cancelPendingAiSessionDelete();
+      });
+    }
+    const btnConfirmDel = item.querySelector("[data-ai-delete-confirm]");
+    if (btnConfirmDel) {
+      btnConfirmDel.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        confirmPendingAiSessionDelete(s.id);
       });
     }
     root.appendChild(item);
@@ -2096,6 +2132,7 @@ function switchAiSession(sessionId) {
     alert("请等待当前回答完成后再切换会话");
     return;
   }
+  aiSessionDeletePendingId = null;
   if (!aiProject.sessions.some((s) => s.id === sessionId)) return;
   aiProject.activeSessionId = sessionId;
   saveAiProject();
@@ -2109,6 +2146,7 @@ function createAiSession() {
     alert("请等待当前回答完成后再新建会话");
     return;
   }
+  aiSessionDeletePendingId = null;
   const s = makeAiSession("新会话");
   aiProject.sessions.unshift(s);
   aiProject.activeSessionId = s.id;
@@ -2133,6 +2171,7 @@ function renameAiSession(sessionId) {
     alert("请等待当前回答完成后再重命名");
     return;
   }
+  aiSessionDeletePendingId = null;
   const target = aiProject.sessions.find((s) => s.id === sessionId);
   if (!target) return;
   const next = window.prompt("请输入新的会话名称", target.title || "新会话");
@@ -2145,15 +2184,34 @@ function renameAiSession(sessionId) {
   renderAiSessionList();
 }
 
-function deleteAiSession(sessionId) {
+function requestAiSessionDelete(sessionId) {
   if (aiBusy) {
     alert("请等待当前回答完成后再删除");
     return;
   }
+  if (!aiProject.sessions.some((s) => s.id === sessionId)) return;
+  aiSessionDeletePendingId = sessionId;
+  renderAiSessionList();
+}
+
+function cancelPendingAiSessionDelete() {
+  aiSessionDeletePendingId = null;
+  renderAiSessionList();
+}
+
+function confirmPendingAiSessionDelete(sessionId) {
+  if (aiBusy) {
+    alert("请等待当前回答完成后再删除");
+    return;
+  }
+  if (aiSessionDeletePendingId !== sessionId) return;
+  performAiSessionDelete(sessionId);
+}
+
+function performAiSessionDelete(sessionId) {
   const target = aiProject.sessions.find((s) => s.id === sessionId);
   if (!target) return;
-  const ok = window.confirm(`确认删除会话「${target.title || "新会话"}」？`);
-  if (!ok) return;
+  aiSessionDeletePendingId = null;
   aiProject.sessions = aiProject.sessions.filter((s) => s.id !== sessionId);
   if (aiProject.sessions.length === 0) {
     const created = makeAiSession("新会话");

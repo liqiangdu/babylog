@@ -1374,7 +1374,7 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  margin-bottom: var(--space-2);
+  margin-bottom: 0;
 }
 
 .ai-sessions-title {
@@ -1382,10 +1382,20 @@ textarea:focus-visible {
   margin: 0;
 }
 
+.module-ai .ai-sessions-panel > .ai-sessions-summary.module-summary-bar {
+  margin: 0;
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 6px 10px;
+  gap: 6px 10px;
+}
+
 .ai-session-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding-right: 2px;
 }
@@ -1483,16 +1493,67 @@ textarea:focus-visible {
   background: color-mix(in srgb, var(--bg-soft) 68%, transparent);
 }
 
+.ai-session-item--delete-pending {
+  cursor: default;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 42%, var(--border));
+}
+
+.ai-session-confirm-row {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 88%, var(--danger) 12%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-session-confirm-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+}
+
+.ai-session-actions--visible {
+  opacity: 1;
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+
+.ai-session-action-btn--cancel:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-soft) 76%, transparent);
+}
+
+.ai-session-action-btn--confirm {
+  color: var(--danger);
+}
+
+.ai-session-action-btn--confirm:hover {
+  color: #fff;
+  background: color-mix(in srgb, var(--danger) 88%, #000);
+}
+
+.module-ai.ai-busy .ai-session-item--delete-pending {
+  cursor: default;
+}
+
+.module-ai.ai-busy .ai-session-item--delete-pending .ai-session-action-btn {
+  opacity: 1;
+}
+
 .ai-chat {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
   min-height: calc(100vh - 220px);
   display: flex;
   flex-direction: column;
-  padding-left: var(--space-4);
-  border-left: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--border) 82%, var(--accent) 12%);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
 
 .ai-chat-head {
@@ -1661,6 +1722,10 @@ textarea:focus-visible {
 
 .module-ai .ai-textarea#ai-user-input {
   min-height: 84px;
+}
+
+.module-ai .ai-compose {
+  background: linear-gradient(to top, var(--bg-elev) 78%, transparent);
 }
 
 .ai-compose-foot {
@@ -1870,8 +1935,7 @@ textarea:focus-visible {
   }
   .ai-chat {
     min-height: calc(100vh - 320px);
-    padding-left: 0;
-    border-left: 0;
+    padding: var(--space-3);
   }
   .ai-chat-head {
     margin-top: 2px;
