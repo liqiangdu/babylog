@@ -62,7 +62,7 @@ cargo run
 - **默认启用 HttpOnly Cookie 会话**（`BABYLOG_COOKIE_MODE=1`）：登录成功后后端把 session token 写入 `Set-Cookie: babylog_session=...; HttpOnly; SameSite=Lax`，前端完全不接触 token，也不写 `localStorage`，抗 XSS 窃取。写请求通过 `babylog_csrf` Cookie + `X-CSRF-Token` 头双提交防 CSRF。设置 `BABYLOG_COOKIE_MODE=0` 可退回纯 Bearer 模式（仅推荐跨域 API 场景）。
 - 本地开发前端（`npx serve .`，默认 `http://localhost:3000`）访问 API 时使用 `http://localhost:8787/api`，和前端同 site（`localhost`），`SameSite=Lax` Cookie 可以正常带上。如果换成 `127.0.0.1` 访问前端，请同时把 API 地址也改成 `127.0.0.1:8787`，保持同 site。
 - 所有业务接口（profile / entries / vaccines / stats / uploads / chat）都按登录态授权，数据按 `user_id` 隔离，不同账号彼此不可见。
-- 旧数据（无 user 归属）会迁移到 `__legacy__` 账号并对登录用户隐藏。
+- 历史遗留的 pre-auth 数据（multi-user 迁移时临时落户到虚拟 `__legacy__` 账号的记录，以及老版本的单行表 `profile` / `vaccine_settings` / `vaccine_templates`）不再保留：启动时会自动 DELETE / DROP 掉，并把只被其引用的照片对象文件一并清掉。日志会打印本次清理的行数（若无则静默）。
 - 后端不可达时前端可切换「仅在本机使用」，走 `localStorage` 回退（仅此场景使用本地缓存）。
 
 安全加固相关环境变量（可选）：
@@ -127,7 +127,7 @@ cargo run --release
 
 ### 一键启动（前端 + Rust API）
 
-在项目根目录执行：
+**Windows（PowerShell）**：
 
 ```powershell
 .\start.ps1
@@ -145,6 +145,28 @@ cargo run --release
 ```powershell
 .\start.ps1 -NoNewWindow
 ```
+
+**macOS / Linux（bash）**：
+
+```bash
+chmod +x ./start.sh   # 首次运行前赋权
+./start.sh
+```
+
+同一个终端里同时跑前后端，Ctrl-C 一起停。默认端口 `3000` / `8787`，可覆盖：
+
+```bash
+FRONTEND_PORT=5173 BACKEND_PORT=9000 ./start.sh
+```
+
+依赖：
+
+- Node.js（`npx serve` 提供前端静态站）；没有 Node 时脚本会回退到 `python3 -m http.server`。
+- Rust 工具链（`cargo`）；macOS 上最省心的装法是 `brew install rustup-init && rustup-init`，或 `xcode-select --install` 后 `curl https://sh.rustup.rs -sSf | sh`。
+- SQLite / OpenSSL 这些底层库在 macOS 上由 rusqlite 的 `bundled` feature 和 rustls 处理，通常不需要额外安装。
+- 如果是 Apple Silicon，首次 `cargo run` 会拉整套 crates 并编译约 1~2 分钟。
+
+浏览器打开 `http://localhost:3000` 开始用；**请保持 `localhost` 访问**（不要换成 `127.0.0.1`），否则 session cookie 会因为和后端不同 site 而带不上来，表现为刷新后要求重新登录。
 
 前端会优先调用 Rust API（记录、宝宝信息、疫苗计划/设置/自定义模板），当 API 不可用时自动回退到 `localStorage`。
 

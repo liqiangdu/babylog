@@ -333,7 +333,7 @@ async fn bootstrap_state() -> AppState {
         let _ = fs::create_dir_all(parent).await;
     }
     let _ = fs::create_dir_all(&objects_dir).await;
-    if let Err(e) = ensure_schema(&db_path) {
+    if let Err(e) = ensure_schema(&db_path, &objects_dir) {
         tracing::error!("failed to initialize sqlite schema: {}", e);
         std::process::exit(1);
     }
@@ -511,63 +511,36 @@ pub(crate) fn open_conn(db_path: &PathBuf) -> rusqlite::Result<Connection> {
     Ok(conn)
 }
 
-fn ensure_schema(db_path: &PathBuf) -> rusqlite::Result<()> {
+fn ensure_schema(db_path: &PathBuf, objects_dir: &std::path::Path) -> rusqlite::Result<()> {
     let conn = open_conn(db_path)?;
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS entries (
           id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
           category_id TEXT NOT NULL,
           at TEXT NOT NULL,
           day TEXT NOT NULL,
           fields_json TEXT NOT NULL DEFAULT '{}',
-          note TEXT NOT NULL DEFAULT ''
+          note TEXT NOT NULL DEFAULT '',
+          photos_json TEXT NOT NULL DEFAULT '[]'
         );
-        CREATE INDEX IF NOT EXISTS idx_entries_at ON entries(at DESC);
-        CREATE INDEX IF NOT EXISTS idx_entries_day ON entries(day);
-        CREATE INDEX IF NOT EXISTS idx_entries_category ON entries(category_id);
-        CREATE INDEX IF NOT EXISTS idx_entries_category_day ON entries(category_id, day);
+        CREATE INDEX IF NOT EXISTS idx_entries_user_at ON entries(user_id, at DESC);
+        CREATE INDEX IF NOT EXISTS idx_entries_user_day ON entries(user_id, day);
+        CREATE INDEX IF NOT EXISTS idx_entries_user_category ON entries(user_id, category_id);
+        CREATE INDEX IF NOT EXISTS idx_entries_user_category_day ON entries(user_id, category_id, day);
 
         CREATE TABLE IF NOT EXISTS vaccines (
           id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
           name TEXT NOT NULL,
           dose TEXT NOT NULL,
           due_date TEXT NOT NULL,
           status TEXT NOT NULL,
           done_at TEXT NOT NULL DEFAULT ''
         );
-        CREATE INDEX IF NOT EXISTS idx_vaccines_due_date ON vaccines(due_date);
-        CREATE INDEX IF NOT EXISTS idx_vaccines_status ON vaccines(status);
-        ",
-    )?;
-    migrate_entries_photos_column(&conn)?;
-    auth::ensure_auth_schema(&conn)?;
-    migrate_user_scoping(&conn)?;
-    Ok(())
-}
-
-/// Per-user data isolation migration.
-/// - Adds `user_id` columns to entries/vaccines if missing.
-/// - Rewrites profile/vaccine_settings/vaccine_templates as per-user tables.
-/// - Any pre-existing rows are attributed to a special `__legacy__` owner so no
-///   data is lost; that account is not reachable via login (no users row).
-fn migrate_user_scoping(conn: &Connection) -> rusqlite::Result<()> {
-    let legacy = "__legacy__";
-
-    add_column_if_missing(conn, "entries", "user_id", &format!("TEXT NOT NULL DEFAULT '{}'", legacy))?;
-    add_column_if_missing(conn, "vaccines", "user_id", &format!("TEXT NOT NULL DEFAULT '{}'", legacy))?;
-    conn.execute_batch(
-        "
-        CREATE INDEX IF NOT EXISTS idx_entries_user_at ON entries(user_id, at DESC);
-        CREATE INDEX IF NOT EXISTS idx_entries_user_day ON entries(user_id, day);
-        CREATE INDEX IF NOT EXISTS idx_entries_user_category ON entries(user_id, category_id);
-        CREATE INDEX IF NOT EXISTS idx_entries_user_category_day ON entries(user_id, category_id, day);
         CREATE INDEX IF NOT EXISTS idx_vaccines_user_due ON vaccines(user_id, due_date);
-        ",
-    )?;
 
-    conn.execute_batch(
-        "
         CREATE TABLE IF NOT EXISTS user_profile (
           user_id TEXT PRIMARY KEY,
           name TEXT NOT NULL DEFAULT '',
@@ -593,30 +566,115 @@ fn migrate_user_scoping(conn: &Connection) -> rusqlite::Result<()> {
         );
         ",
     )?;
+    // Upgrade path for DBs that predate the per-user refactor.
+    add_column_if_missing(&conn, "entries", "user_id", "TEXT NOT NULL DEFAULT ''")?;
+    add_column_if_missing(&conn, "vaccines", "user_id", "TEXT NOT NULL DEFAULT ''")?;
+    migrate_entries_photos_column(&conn)?;
+    auth::ensure_auth_schema(&conn)?;
+    purge_legacy_data(&conn, objects_dir)?;
+    Ok(())
+}
 
-    if table_exists(conn, "profile")? {
-        conn.execute(
-            "INSERT OR IGNORE INTO user_profile (user_id, name, birth_date, gender, blood)
-             SELECT ?1, name, birth_date, gender, blood FROM profile WHERE id = 1",
-            params![legacy],
-        )?;
+/// One-time cleanup of data that predates the multi-user schema.
+///
+/// Earlier versions of Babylog stored a single family's records in un-scoped
+/// tables (`profile`, `vaccine_settings`, `vaccine_templates`) and in
+/// `entries` / `vaccines` rows without a `user_id`. When multi-user support
+/// landed we temporarily parked all of that under a synthetic `__legacy__`
+/// owner so no data was silently dropped on upgrade. Nobody can log in as
+/// that owner, so the rows are just dead weight.
+///
+/// This routine runs on every startup, finds anything still attributed to
+/// `__legacy__` (plus the old single-row tables), deletes it, drops the
+/// tables, and unlinks any photo objects the deleted entries referenced.
+/// It's idempotent: on a clean DB all counts are zero and it does nothing.
+fn purge_legacy_data(
+    conn: &Connection,
+    objects_dir: &std::path::Path,
+) -> rusqlite::Result<()> {
+    let legacy = "__legacy__";
+
+    let mut photo_files: Vec<String> = Vec::new();
+    {
+        let mut stmt = conn.prepare("SELECT photos_json FROM entries WHERE user_id = ?1")?;
+        let rows = stmt.query_map(params![legacy], |r| r.get::<_, String>(0))?;
+        for row in rows {
+            let raw = row.unwrap_or_default();
+            if let Ok(serde_json::Value::Array(arr)) =
+                serde_json::from_str::<serde_json::Value>(&raw)
+            {
+                for v in arr {
+                    if let Some(s) = v.as_str() {
+                        if let Some(name) = s.rsplit('/').next() {
+                            if !name.is_empty() {
+                                photo_files.push(name.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
-    if table_exists(conn, "vaccine_settings")? {
-        conn.execute(
-            "INSERT OR IGNORE INTO user_vaccine_settings
-               (user_id, region, reminder_days, notifications_enabled, notified_map_json)
-             SELECT ?1, region, reminder_days, notifications_enabled, notified_map_json
-             FROM vaccine_settings WHERE id = 1",
-            params![legacy],
-        )?;
+
+    let old_tables = ["profile", "vaccine_settings", "vaccine_templates"];
+    let mut present_old: Vec<&str> = Vec::new();
+    for t in &old_tables {
+        if table_exists(conn, t)? {
+            present_old.push(*t);
+        }
     }
-    if table_exists(conn, "vaccine_templates")? {
-        conn.execute(
-            "INSERT OR IGNORE INTO user_vaccine_templates (user_id, template_id, label, items_json)
-             SELECT ?1, template_id, label, items_json FROM vaccine_templates",
-            params![legacy],
-        )?;
+
+    let tx = conn.unchecked_transaction()?;
+    let del_entries = tx.execute("DELETE FROM entries WHERE user_id = ?1", params![legacy])?;
+    let del_vaccines = tx.execute("DELETE FROM vaccines WHERE user_id = ?1", params![legacy])?;
+    let del_profile = tx.execute(
+        "DELETE FROM user_profile WHERE user_id = ?1",
+        params![legacy],
+    )?;
+    let del_vset = tx.execute(
+        "DELETE FROM user_vaccine_settings WHERE user_id = ?1",
+        params![legacy],
+    )?;
+    let del_vtpl = tx.execute(
+        "DELETE FROM user_vaccine_templates WHERE user_id = ?1",
+        params![legacy],
+    )?;
+    for t in &present_old {
+        tx.execute(&format!("DROP TABLE IF EXISTS {}", t), [])?;
     }
+    tx.commit()?;
+    let dropped = present_old;
+
+    let touched = del_entries + del_vaccines + del_profile + del_vset + del_vtpl;
+    if touched == 0 && dropped.is_empty() {
+        return Ok(());
+    }
+
+    let mut removed_files = 0usize;
+    let mut missing_files = 0usize;
+    for name in &photo_files {
+        let path = objects_dir.join(name);
+        match std::fs::remove_file(&path) {
+            Ok(()) => removed_files += 1,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => missing_files += 1,
+            Err(e) => {
+                tracing::warn!("failed to delete legacy object {}: {}", path.display(), e);
+            }
+        }
+    }
+
+    tracing::info!(
+        "legacy data purged: entries={} vaccines={} profile={} vaccine_settings={} \
+         vaccine_templates={} dropped_tables={:?} photos_removed={} photos_missing={}",
+        del_entries,
+        del_vaccines,
+        del_profile,
+        del_vset,
+        del_vtpl,
+        dropped,
+        removed_files,
+        missing_files,
+    );
 
     Ok(())
 }
