@@ -339,26 +339,28 @@
             </header>
 
             <div class="stats-controls">
-              <div class="stats-controls-row">
-                <select id="stats-preset" aria-label="统计快捷范围">
-                  <option value="7d">最近 7 天</option>
-                  <option value="30d">最近 30 天</option>
-                  <option value="today">今天</option>
-                  <option value="all">全部</option>
-                  <option value="custom">自定义</option>
-                </select>
-                <input type="date" id="stats-start" />
-                <input type="date" id="stats-end" />
-                <button type="button" class="stats-apply-btn" id="btn-apply-stats">应用</button>
-              </div>
-              <div class="stats-controls-row stats-controls-secondary">
-                <select id="stats-mode" aria-label="展示模式">
-                  <option value="cards">卡片</option>
-                  <option value="chart">图表</option>
-                </select>
-                <span id="stats-chart-metric-wrap">
-                  <select id="chart-metric" aria-label="图表指标"></select>
-                </span>
+              <div class="stats-toolbar">
+                <div class="stats-controls-group stats-controls-group--range">
+                  <select id="stats-preset" aria-label="统计快捷范围">
+                    <option value="7d">最近 7 天</option>
+                    <option value="30d">最近 30 天</option>
+                    <option value="today">今天</option>
+                    <option value="all">全部</option>
+                    <option value="custom">自定义</option>
+                  </select>
+                  <input type="date" id="stats-start" />
+                  <input type="date" id="stats-end" />
+                  <button type="button" class="stats-apply-btn" id="btn-apply-stats">应用</button>
+                  <div class="stats-mode-toggle" role="group" aria-label="展示模式">
+                    <button type="button" class="stats-mode-btn is-active" data-mode="cards" aria-pressed="true">卡片</button>
+                    <button type="button" class="stats-mode-btn" data-mode="chart" aria-pressed="false">图表</button>
+                  </div>
+                </div>
+                <div class="stats-controls-group stats-controls-group--view">
+                  <span id="stats-chart-metric-wrap">
+                    <select id="chart-metric" aria-label="图表指标"></select>
+                  </span>
+                </div>
               </div>
               <span id="stats-range-hint" class="stats-range-hint">最近 7 天</span>
             </div>

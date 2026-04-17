@@ -1484,11 +1484,18 @@ function openStatsMetric(metricId) {
   if (!metricId) return;
   statsMode = "chart";
   chartMetricId = metricId;
-  const modeSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("stats-mode"));
-  if (modeSel) modeSel.value = "chart";
   const metricSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("chart-metric"));
   if (metricSel) metricSel.value = metricId;
   renderStats();
+}
+
+function syncStatsModeButtons() {
+  document.querySelectorAll(".stats-mode-btn").forEach((btn) => {
+    const mode = btn.getAttribute("data-mode") || "cards";
+    const active = mode === statsMode;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+  });
 }
 
 function renderStats() {
@@ -1535,6 +1542,7 @@ function renderStats() {
       sub: `日均 ${(inRangeEntries.length / dayCount).toFixed(1)} 条`,
       delta: formatDelta(inRangeEntries.length, prevEntries.length),
       tone: "priority",
+      section: "core",
     },
     {
       k: "喂奶总量（本周期）",
@@ -1543,29 +1551,44 @@ function renderStats() {
       delta: formatDelta(feedMl, prevFeedMl),
       tone: "priority",
       metricId: "feeding.amountMl",
+      section: "core",
     },
     {
       k: "睡眠时长（本周期）",
       v: `${sleepMin} 分钟`,
       sub: `日均 ${Math.round(sleepMin / dayCount)} 分钟`,
       delta: formatDelta(sleepMin, prevSleepMin),
+      tone: "priority",
       metricId: "sleep.durationMin",
+      section: "core",
     },
-    { k: "关注项", v: summarizeAttention(inRangeEntries, dayCount), tone: "attention" },
-    { k: "尿布统计", v: `小便 ${wetCount} / 大便 ${dirtyCount}` },
-    { k: "洗澡次数", v: `${bathCount} 次` },
-    { k: "用药次数", v: `${medicineCount} 次` },
-    { k: "疫苗完成进度", v: vaccines.length ? `${doneVaccines}/${vaccines.length}` : "未生成", tone: "muted" },
-    { k: "累计总记录", v: `${entries.length} 条`, tone: "muted" },
+    { k: "尿布统计（本周期）", v: `小便 ${wetCount} / 大便 ${dirtyCount}`, tone: "priority", section: "core" },
+    { k: "关注项（本周期）", v: summarizeAttention(inRangeEntries, dayCount), tone: "attention", section: "care" },
+    { k: "洗澡次数（本周期）", v: `${bathCount} 次`, section: "care" },
+    { k: "用药次数（本周期）", v: `${medicineCount} 次`, section: "care" },
+    { k: "疫苗完成进度", v: vaccines.length ? `${doneVaccines}/${vaccines.length}` : "未生成", tone: "muted", section: "quality" },
+    { k: "累计总记录", v: `${entries.length} 条`, tone: "muted", section: "quality" },
   ];
-  grid.innerHTML = cards
-    .map((c) => {
+
+  const sectionMeta = [
+    { key: "core", title: "核心健康指标", compact: false },
+    { key: "care", title: "健康关注与事件", compact: true },
+    { key: "quality", title: "累计与质量", compact: true },
+  ];
+  const renderCard = (c) => {
       const clickable = c.metricId ? " stat-card--clickable" : "";
       const attrs = c.metricId ? ` data-metric-id="${c.metricId}"` : "";
       const deltaHtml = c.delta
         ? `<div class="stat-delta stat-delta--${c.delta.tone || "flat"}"><span class="stat-delta-arrow">${c.delta.arrow || "→"}</span>${c.delta.text} vs 上周期</div>`
         : "";
       return `<div class="stat-card ${c.tone || ""}${clickable}"${attrs}><div class="k">${c.k}</div><div class="v">${c.v}</div>${c.sub ? `<div class="stat-sub">${c.sub}</div>` : ""}${deltaHtml}</div>`;
+  };
+  grid.innerHTML = sectionMeta
+    .map((section) => {
+      const sectionCards = cards.filter((card) => card.section === section.key);
+      if (sectionCards.length === 0) return "";
+      const gridClass = section.compact ? "stats-section-grid stats-section-grid--compact" : "stats-section-grid";
+      return `<section class="stats-section"><h3 class="stats-section-title">${section.title}</h3><div class="${gridClass}">${sectionCards.map(renderCard).join("")}</div></section>`;
     })
     .join("");
   grid.querySelectorAll(".stat-card--clickable").forEach((card) => {
@@ -1575,6 +1598,7 @@ function renderStats() {
     });
   });
   const chartMode = statsMode === "chart";
+  syncStatsModeButtons();
   if (chartMetricWrap) chartMetricWrap.classList.toggle("hidden", !chartMode);
   if (chartMetricSel) {
     chartMetricSel.disabled = !chartMode;
@@ -1644,7 +1668,9 @@ function renderTrendChart() {
   if (points.length === 0) {
     ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
     ctx.font = '13px "SF Pro Text", "Helvetica Neue", Arial';
-    ctx.fillText("当前范围暂无可绘制数据", 16, 28);
+    const metricName = trend.metricLabel || "当前指标";
+    ctx.fillText(`${metricName} 在当前范围暂无数据`, 16, 28);
+    ctx.fillText("建议切换时间范围，或改为其他指标查看趋势", 16, 50);
     return;
   }
   const maxY = Math.max(10, ...vals);
@@ -1772,14 +1798,14 @@ function onChartHover(ev) {
 function buildTrendData() {
   const metrics = getNumericMetricOptions();
   const metric = metrics.find((m) => m.id === chartMetricId) || metrics[0];
-  if (!metric) return { mode: "range-line", points: [], unit: "数值" };
+  if (!metric) return { mode: "range-line", points: [], unit: "数值", metricLabel: "当前指标" };
   const legend = document.getElementById("chart-legend-text");
   if (legend) legend.textContent = metric.label;
 
   const range = { start: statsRange.start, end: statsRange.end };
   const source = getEntriesByRange(range.start, range.end);
   const data = [];
-  if (!range.start || !range.end) return { mode: "range-line", points: data };
+  if (!range.start || !range.end) return { mode: "range-line", points: data, unit: metric.unit, metricLabel: metric.label };
   const start = new Date(`${range.start}T00:00:00`);
   const end = new Date(`${range.end}T00:00:00`);
   const resolution = getChartResolutionByRange(start, end);
@@ -1801,7 +1827,7 @@ function buildTrendData() {
         };
       })
       .sort((a, b) => a.t - b.t);
-    return { mode: "day-points", points: dayPoints, unit: metric.unit };
+    return { mode: "day-points", points: dayPoints, unit: metric.unit, metricLabel: metric.label };
   }
   const metricEntries = source.filter((e) => e.categoryId === metric.categoryId);
   if (resolution === "day") {
@@ -1846,7 +1872,7 @@ function buildTrendData() {
       cursor.setMonth(cursor.getMonth() + 1);
     }
   }
-  return { mode: "range-line", points: data, unit: metric.unit };
+  return { mode: "range-line", points: data, unit: metric.unit, metricLabel: metric.label };
 }
 
 function getEntriesByRange(start, end) {
@@ -3524,9 +3550,13 @@ async function init() {
     applyPresetRange(preset);
   });
   document.getElementById("btn-apply-stats").addEventListener("click", applyCustomStatsRange);
-  document.getElementById("stats-mode").addEventListener("change", (ev) => {
-    statsMode = /** @type {HTMLSelectElement} */ (ev.target).value;
-    renderStats();
+  document.querySelectorAll(".stats-mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const nextMode = btn.getAttribute("data-mode");
+      if (!nextMode || nextMode === statsMode) return;
+      statsMode = nextMode;
+      renderStats();
+    });
   });
   document.getElementById("chart-metric").addEventListener("change", (ev) => {
     chartMetricId = /** @type {HTMLSelectElement} */ (ev.target).value;
