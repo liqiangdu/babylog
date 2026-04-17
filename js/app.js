@@ -37,6 +37,7 @@ const TREND_LINE_COLOR = "#1d9bf0";
 let chartResolution = "auto";
 let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
+let statsRangeApplyTimer = null;
 let apiReady = false;
 /** @type {{token: string, user: {id: string, username: string} | null, localOnly: boolean, csrf: string}} */
 let authState = { token: "", user: null, localOnly: false, csrf: "" };
@@ -926,9 +927,10 @@ function getNumericMetricOptions() {
   for (const c of CATEGORIES) {
     for (const f of c.fields) {
       if (f.type !== "number") continue;
+      const metricName = stripFieldUnit(String(f.label || f.key || "数值"));
       opts.push({
         id: `${c.id}.${f.key}`,
-        label: `${c.emoji} ${c.label} · ${f.label}`,
+        label: `${c.emoji} ${c.label} · ${metricName}`,
         categoryId: c.id,
         fieldKey: f.key,
         unit: inferMetricUnit(f),
@@ -936,6 +938,11 @@ function getNumericMetricOptions() {
     }
   }
   return opts;
+}
+
+function stripFieldUnit(label) {
+  // Remove trailing unit hints like "(ml)" / "（分钟）" for display labels.
+  return String(label).replace(/\s*[（(][^()（）]{1,10}[)）]\s*$/u, "").trim();
 }
 
 function inferMetricUnit(field) {
@@ -1484,8 +1491,6 @@ function openStatsMetric(metricId) {
   if (!metricId) return;
   statsMode = "chart";
   chartMetricId = metricId;
-  const metricSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("chart-metric"));
-  if (metricSel) metricSel.value = metricId;
   renderStats();
 }
 
@@ -1502,8 +1507,6 @@ function renderStats() {
   const grid = document.getElementById("stats-grid");
   const chartWrap = document.getElementById("stats-chart-wrap");
   const rangeHint = document.getElementById("stats-range-hint");
-  const chartMetricWrap = document.getElementById("stats-chart-metric-wrap");
-  const chartMetricSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("chart-metric"));
   const inRangeEntries = getEntriesByRange(statsRange.start, statsRange.end);
   const rangeStartDate = statsRange.start ? new Date(`${statsRange.start}T00:00:00`) : null;
   const rangeEndDate = statsRange.end ? new Date(`${statsRange.end}T00:00:00`) : null;
@@ -1533,11 +1536,12 @@ function renderStats() {
 
   if (rangeHint) {
     rangeHint.textContent = `当前范围：${rangeLabel}`;
+    rangeHint.classList.remove("is-error");
   }
 
   const cards = [
     {
-      k: "记录总数（本周期）",
+      k: "记录总数",
       v: `${inRangeEntries.length} 条`,
       sub: `日均 ${(inRangeEntries.length / dayCount).toFixed(1)} 条`,
       delta: formatDelta(inRangeEntries.length, prevEntries.length),
@@ -1545,7 +1549,7 @@ function renderStats() {
       section: "core",
     },
     {
-      k: "喂奶总量（本周期）",
+      k: "喂奶总量",
       v: `${feedMl} ml`,
       sub: `日均 ${Math.round(feedMl / dayCount)} ml`,
       delta: formatDelta(feedMl, prevFeedMl),
@@ -1554,7 +1558,7 @@ function renderStats() {
       section: "core",
     },
     {
-      k: "睡眠时长（本周期）",
+      k: "睡眠时长",
       v: `${sleepMin} 分钟`,
       sub: `日均 ${Math.round(sleepMin / dayCount)} 分钟`,
       delta: formatDelta(sleepMin, prevSleepMin),
@@ -1562,10 +1566,10 @@ function renderStats() {
       metricId: "sleep.durationMin",
       section: "core",
     },
-    { k: "尿布统计（本周期）", v: `小便 ${wetCount} / 大便 ${dirtyCount}`, tone: "priority", section: "core" },
-    { k: "关注项（本周期）", v: summarizeAttention(inRangeEntries, dayCount), tone: "attention", section: "care" },
-    { k: "洗澡次数（本周期）", v: `${bathCount} 次`, section: "care" },
-    { k: "用药次数（本周期）", v: `${medicineCount} 次`, section: "care" },
+    { k: "尿布统计", v: `小便 ${wetCount} / 大便 ${dirtyCount}`, tone: "priority", section: "core" },
+    { k: "关注项", v: summarizeAttention(inRangeEntries, dayCount), tone: "attention", section: "care" },
+    { k: "洗澡次数", v: `${bathCount} 次`, section: "care" },
+    { k: "用药次数", v: `${medicineCount} 次`, section: "care" },
     { k: "疫苗完成进度", v: vaccines.length ? `${doneVaccines}/${vaccines.length}` : "未生成", tone: "muted", section: "quality" },
     { k: "累计总记录", v: `${entries.length} 条`, tone: "muted", section: "quality" },
   ];
@@ -1599,10 +1603,7 @@ function renderStats() {
   });
   const chartMode = statsMode === "chart";
   syncStatsModeButtons();
-  if (chartMetricWrap) chartMetricWrap.classList.toggle("hidden", !chartMode);
-  if (chartMetricSel) {
-    chartMetricSel.disabled = !chartMode;
-  }
+  if (!chartMode) hideChartMetricMenu();
   if (statsMode === "chart") {
     grid.classList.add("hidden");
     chartWrap.classList.remove("hidden");
@@ -1752,7 +1753,9 @@ function renderTrendChart() {
   ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
   points.forEach((p, i) => {
     if (i % Math.ceil(points.length / 6) !== 0 && i !== points.length - 1) return;
-    ctx.fillText(p.label, mapX(i) - 12, cssHeight - 8);
+    const x = mapX(i) - 12;
+    const y = cssHeight - 8;
+    ctx.fillText(p.label, x, y);
   });
 }
 
@@ -1760,6 +1763,50 @@ function hideChartTooltip() {
   const tip = document.getElementById("chart-tooltip");
   if (!tip) return;
   tip.classList.add("hidden");
+}
+
+function renderChartMetricMenuItems() {
+  const menu = document.getElementById("chart-metric-menu");
+  if (!menu) return;
+  const opts = getNumericMetricOptions();
+  menu.innerHTML = opts
+    .map((o) => `<button type="button" class="chart-metric-menu-item${o.id === chartMetricId ? " is-active" : ""}" data-metric-id="${o.id}" role="menuitem">${o.label}</button>`)
+    .join("");
+}
+
+function hideChartMetricMenu() {
+  const menu = document.getElementById("chart-metric-menu");
+  if (!menu) return;
+  menu.classList.add("hidden");
+}
+
+function openChartMetricMenu(clientX, clientY) {
+  const wrap = document.getElementById("stats-chart-wrap");
+  const menu = document.getElementById("chart-metric-menu");
+  if (!wrap || !menu) return;
+  renderChartMetricMenuItems();
+  const wrapRect = wrap.getBoundingClientRect();
+  menu.classList.remove("hidden");
+  const menuW = menu.offsetWidth || 220;
+  const menuH = menu.offsetHeight || 180;
+  const left = Math.min(
+    wrapRect.width - menuW - 8,
+    Math.max(8, clientX - wrapRect.left - menuW / 2),
+  );
+  const top = Math.min(
+    wrapRect.height - menuH - 8,
+    Math.max(8, clientY - wrapRect.top - menuH - 12),
+  );
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(top)}px`;
+}
+
+function openChartMetricMenuByLegend() {
+  if (statsMode !== "chart") return;
+  const trigger = document.getElementById("chart-legend-trigger");
+  if (!trigger) return;
+  const rect = trigger.getBoundingClientRect();
+  openChartMetricMenu(rect.left + rect.width / 2, rect.top);
 }
 
 function onChartHover(ev) {
@@ -1917,16 +1964,34 @@ function syncStatsRangeInputs() {
   presetEl.value = statsRange.preset || "custom";
 }
 
+function setStatsRangeHintMessage(message, tone = "default") {
+  const hint = document.getElementById("stats-range-hint");
+  if (!hint) return;
+  hint.textContent = message;
+  hint.classList.toggle("is-error", tone === "error");
+}
+
 function applyCustomStatsRange() {
   const start = /** @type {HTMLInputElement} */ (document.getElementById("stats-start")).value;
   const end = /** @type {HTMLInputElement} */ (document.getElementById("stats-end")).value;
+  if ((start && !end) || (!start && end)) {
+    setStatsRangeHintMessage("请选择完整的开始和结束日期", "error");
+    return;
+  }
   if (start && end && start > end) {
-    alert("开始日期不能晚于结束日期");
+    setStatsRangeHintMessage("开始日期不能晚于结束日期", "error");
     return;
   }
   statsRange = { start, end, preset: "custom" };
   syncStatsRangeInputs();
-  render();
+  renderStats();
+}
+
+function scheduleAutoApplyCustomStatsRange() {
+  if (statsRangeApplyTimer) clearTimeout(statsRangeApplyTimer);
+  statsRangeApplyTimer = setTimeout(() => {
+    applyCustomStatsRange();
+  }, 180);
 }
 
 function buildVaccinePlan() {
@@ -3076,17 +3141,9 @@ function populateFilter() {
 }
 
 function populateChartMetricOptions() {
-  const sel = /** @type {HTMLSelectElement} */ (document.getElementById("chart-metric"));
   const opts = getNumericMetricOptions();
-  sel.innerHTML = "";
-  for (const o of opts) {
-    const el = document.createElement("option");
-    el.value = o.id;
-    el.textContent = o.label;
-    sel.appendChild(el);
-  }
   if (!opts.some((x) => x.id === chartMetricId) && opts[0]) chartMetricId = opts[0].id;
-  sel.value = chartMetricId;
+  renderChartMetricMenuItems();
 }
 
 function exportData() {
@@ -3549,7 +3606,10 @@ async function init() {
     if (preset === "custom") return;
     applyPresetRange(preset);
   });
-  document.getElementById("btn-apply-stats").addEventListener("click", applyCustomStatsRange);
+  const statsStartEl = /** @type {HTMLInputElement|null} */ (document.getElementById("stats-start"));
+  const statsEndEl = /** @type {HTMLInputElement|null} */ (document.getElementById("stats-end"));
+  if (statsStartEl) statsStartEl.addEventListener("input", scheduleAutoApplyCustomStatsRange);
+  if (statsEndEl) statsEndEl.addEventListener("input", scheduleAutoApplyCustomStatsRange);
   document.querySelectorAll(".stats-mode-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const nextMode = btn.getAttribute("data-mode");
@@ -3558,10 +3618,19 @@ async function init() {
       renderStats();
     });
   });
-  document.getElementById("chart-metric").addEventListener("change", (ev) => {
-    chartMetricId = /** @type {HTMLSelectElement} */ (ev.target).value;
-    if (statsMode === "chart") renderTrendChart();
-  });
+  const chartMetricMenu = document.getElementById("chart-metric-menu");
+  if (chartMetricMenu) {
+    chartMetricMenu.addEventListener("click", (ev) => {
+      const target = /** @type {HTMLElement|null} */ (ev.target);
+      const item = target ? target.closest("[data-metric-id]") : null;
+      if (!item) return;
+      const nextMetricId = item.getAttribute("data-metric-id") || "";
+      if (!nextMetricId || nextMetricId === chartMetricId) return;
+      chartMetricId = nextMetricId;
+      hideChartMetricMenu();
+      if (statsMode === "chart") renderTrendChart();
+    });
+  }
   document.querySelectorAll(".chart-res-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const next = btn.getAttribute("data-resolution") || "auto";
@@ -3576,6 +3645,28 @@ async function init() {
   const chartCanvas = document.getElementById("stats-chart");
   chartCanvas.addEventListener("mousemove", onChartHover);
   chartCanvas.addEventListener("mouseleave", hideChartTooltip);
+  const chartLegendTrigger = document.getElementById("chart-legend-trigger");
+  if (chartLegendTrigger) {
+    chartLegendTrigger.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      openChartMetricMenuByLegend();
+    });
+    chartLegendTrigger.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        openChartMetricMenuByLegend();
+      }
+    });
+  }
+  document.addEventListener("click", (ev) => {
+    const target = /** @type {HTMLElement|null} */ (ev.target);
+    if (!target) return;
+    if (target.closest("#chart-metric-menu") || target.closest("#stats-chart") || target.closest("#chart-legend-trigger")) return;
+    hideChartMetricMenu();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") hideChartMetricMenu();
+  });
   document.getElementById("btn-export").addEventListener("click", exportData);
   document.getElementById("import-file").addEventListener("change", (ev) => {
     const f = /** @type {HTMLInputElement} */ (ev.target).files?.[0];

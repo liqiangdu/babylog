@@ -350,16 +350,10 @@
                   </select>
                   <input type="date" id="stats-start" />
                   <input type="date" id="stats-end" />
-                  <button type="button" class="stats-apply-btn" id="btn-apply-stats">应用</button>
                   <div class="stats-mode-toggle" role="group" aria-label="展示模式">
                     <button type="button" class="stats-mode-btn is-active" data-mode="cards" aria-pressed="true">卡片</button>
                     <button type="button" class="stats-mode-btn" data-mode="chart" aria-pressed="false">图表</button>
                   </div>
-                </div>
-                <div class="stats-controls-group stats-controls-group--view">
-                  <span id="stats-chart-metric-wrap">
-                    <select id="chart-metric" aria-label="图表指标"></select>
-                  </span>
                 </div>
               </div>
               <span id="stats-range-hint" class="stats-range-hint">最近 7 天</span>
@@ -368,17 +362,21 @@
             <div id="stats-grid" class="stats-grid"></div>
 
             <div id="stats-chart-wrap" class="stats-chart-wrap hidden">
-              <div class="chart-toolbar" role="tablist" aria-label="图表分辨率切换">
-                <button type="button" class="chart-res-btn is-active" data-resolution="auto">自动</button>
-                <button type="button" class="chart-res-btn" data-resolution="day">天</button>
-                <button type="button" class="chart-res-btn" data-resolution="week">周</button>
-                <button type="button" class="chart-res-btn" data-resolution="month">月</button>
+              <div class="stats-chart-head">
+                <div class="chart-toolbar" role="tablist" aria-label="图表分辨率切换">
+                  <button type="button" class="chart-res-btn is-active" data-resolution="auto">自动</button>
+                  <button type="button" class="chart-res-btn" data-resolution="day">天</button>
+                  <button type="button" class="chart-res-btn" data-resolution="week">周</button>
+                  <button type="button" class="chart-res-btn" data-resolution="month">月</button>
+                </div>
               </div>
               <canvas id="stats-chart" width="900" height="320"></canvas>
+              <div id="chart-metric-menu" class="chart-metric-menu hidden" role="menu" aria-label="图表指标切换"></div>
               <div id="chart-tooltip" class="chart-tooltip hidden"></div>
-              <div class="chart-legend">
+              <div id="chart-legend-trigger" class="chart-legend" role="button" tabindex="0" aria-label="点击切换图表指标">
                 <span class="chart-legend-dot"></span>
                 <span id="chart-legend-text">趋势指标</span>
+                <span class="chart-metric-hint">点击图例可切换指标</span>
               </div>
             </div>
           </section>

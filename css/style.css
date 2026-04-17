@@ -1387,10 +1387,6 @@ textarea:focus-visible {
 .stats-controls-group--range {
   flex: 1 1 520px;
 }
-.stats-controls-group--view {
-  flex: 1 1 220px;
-  justify-content: flex-start;
-}
 .stats-mode-toggle {
   display: inline-flex;
   align-items: center;
@@ -1442,27 +1438,14 @@ textarea:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   outline: none;
 }
-.stats-apply-btn {
-  min-height: 36px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  color: var(--text);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-standard);
-}
-.stats-apply-btn:hover {
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-}
 .stats-range-hint {
   display: inline-block;
   margin-top: 10px;
   font-size: 12px;
   color: var(--text-muted);
+}
+.stats-range-hint.is-error {
+  color: var(--danger);
 }
 .stats-grid {
   display: flex;
@@ -1563,15 +1546,23 @@ textarea:focus-visible {
 }
 .stats-chart-wrap {
   margin-top: var(--space-3);
-  padding: 36px 10px 0;
+  padding: 56px 10px 0;
   position: relative;
   border-radius: 10px;
 }
-.chart-toolbar {
+.stats-chart-head {
   position: absolute;
   top: 8px;
-  right: 8px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   z-index: 6;
+}
+.chart-toolbar {
+  position: static;
   display: inline-flex;
   gap: 4px;
   margin: 0;
@@ -1585,7 +1576,7 @@ textarea:focus-visible {
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.1px;
   line-height: 1;
@@ -1647,6 +1638,54 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
+  cursor: pointer;
+  width: fit-content;
+  border-radius: 8px;
+  padding: 2px 4px;
+  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+}
+.chart-legend:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+.chart-metric-hint {
+  margin-left: 8px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--text-muted) 86%, var(--accent) 14%);
+}
+.chart-metric-menu {
+  position: absolute;
+  z-index: 8;
+  min-width: 180px;
+  max-width: min(280px, calc(100% - 20px));
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-md);
+}
+.chart-metric-menu-item {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.chart-metric-menu-item:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.chart-metric-menu-item.is-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .vac-controls {
@@ -2872,15 +2911,18 @@ textarea:focus-visible {
   .stats-controls select,
   .stats-mode-toggle,
   .stats-controls .cd-wrap,
-  .stats-controls input[type="date"],
-  .stats-apply-btn { width: 100%; }
+  .stats-controls input[type="date"] { width: 100%; }
   .stats-mode-btn {
     flex: 1;
     min-height: 34px;
   }
   .stats-section-grid,
   .stats-section-grid--compact { grid-template-columns: 1fr; }
-  .stats-chart-wrap { padding-top: 36px; }
+  .stats-chart-wrap { padding-top: 94px; }
+  .stats-chart-head {
+    left: 10px;
+    justify-content: flex-end;
+  }
   .tl-controls { flex-direction: column; align-items: stretch; }
   .tl-controls select,
   .tl-controls .cd-wrap,
