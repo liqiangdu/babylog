@@ -1442,6 +1442,55 @@ function renderModuleSummaries() {
   }
 }
 
+function getPreviousRange(start, end) {
+  if (!start || !end) return null;
+  const startDate = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+  const spanDays = Math.max(1, Math.floor((endDate - startDate) / 86400000) + 1);
+  const prevEnd = new Date(startDate);
+  prevEnd.setDate(prevEnd.getDate() - 1);
+  const prevStart = new Date(prevEnd);
+  prevStart.setDate(prevStart.getDate() - (spanDays - 1));
+  return { start: toLocalDateKey(prevStart), end: toLocalDateKey(prevEnd), spanDays };
+}
+
+function formatDelta(current, prev) {
+  if (prev <= 0) {
+    if (current > 0) return { text: "新增", tone: "new", arrow: "◆" };
+    return { text: "持平", tone: "flat", arrow: "→" };
+  }
+  const pct = Math.round(((current - prev) / prev) * 100);
+  if (Math.abs(pct) <= 2) return { text: "持平", tone: "flat", arrow: "→" };
+  if (pct > 0) return { text: `+${pct}%`, tone: "up", arrow: "↗" };
+  return { text: `${pct}%`, tone: "down", arrow: "↘" };
+}
+
+function summarizeAttention(inRangeEntries, dayCount) {
+  const notes = [];
+  const medicineCount = inRangeEntries.filter((e) => e.categoryId === "medicine").length;
+  const sleepMin = inRangeEntries
+    .filter((e) => e.categoryId === "sleep")
+    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
+  const avgSleep = dayCount > 0 ? sleepMin / dayCount : 0;
+  if (medicineCount >= Math.max(2, Math.ceil(dayCount / 2))) notes.push("用药记录较频繁");
+  if (dayCount >= 3 && avgSleep > 0 && avgSleep < 180) notes.push("日均睡眠偏低");
+  const coveredDays = new Set(inRangeEntries.map((e) => toLocalDateKey(e.at))).size;
+  const missingDays = Math.max(0, dayCount - coveredDays);
+  if (dayCount >= 3 && missingDays >= 2) notes.push(`缺少 ${missingDays} 天记录`);
+  return notes.length ? notes.join(" · ") : "暂无明显异常";
+}
+
+function openStatsMetric(metricId) {
+  if (!metricId) return;
+  statsMode = "chart";
+  chartMetricId = metricId;
+  const modeSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("stats-mode"));
+  if (modeSel) modeSel.value = "chart";
+  const metricSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("chart-metric"));
+  if (metricSel) metricSel.value = metricId;
+  renderStats();
+}
+
 function renderStats() {
   const grid = document.getElementById("stats-grid");
   const chartWrap = document.getElementById("stats-chart-wrap");
@@ -1449,10 +1498,23 @@ function renderStats() {
   const chartMetricWrap = document.getElementById("stats-chart-metric-wrap");
   const chartMetricSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("chart-metric"));
   const inRangeEntries = getEntriesByRange(statsRange.start, statsRange.end);
+  const rangeStartDate = statsRange.start ? new Date(`${statsRange.start}T00:00:00`) : null;
+  const rangeEndDate = statsRange.end ? new Date(`${statsRange.end}T00:00:00`) : null;
+  const dayCount = rangeStartDate && rangeEndDate
+    ? Math.max(1, Math.floor((rangeEndDate - rangeStartDate) / 86400000) + 1)
+    : new Set(inRangeEntries.map((e) => toLocalDateKey(e.at))).size || 1;
+  const prevRange = getPreviousRange(statsRange.start, statsRange.end);
+  const prevEntries = prevRange ? getEntriesByRange(prevRange.start, prevRange.end) : [];
   const feedMl = inRangeEntries
     .filter((e) => e.categoryId === "feeding")
     .reduce((sum, e) => sum + (Number(e.fields?.amountMl) || 0), 0);
+  const prevFeedMl = prevEntries
+    .filter((e) => e.categoryId === "feeding")
+    .reduce((sum, e) => sum + (Number(e.fields?.amountMl) || 0), 0);
   const sleepMin = inRangeEntries
+    .filter((e) => e.categoryId === "sleep")
+    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
+  const prevSleepMin = prevEntries
     .filter((e) => e.categoryId === "sleep")
     .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
   const wetCount = inRangeEntries.filter((e) => e.categoryId === "diaper" && ["wet", "both"].includes(String(e.fields?.subtype || ""))).length;
@@ -1467,18 +1529,51 @@ function renderStats() {
   }
 
   const cards = [
-    { k: "范围记录总数", v: `${inRangeEntries.length} 条`, tone: "priority" },
-    { k: "范围喂奶总量", v: `${feedMl} ml`, tone: "priority" },
-    { k: "范围睡眠时长", v: `${sleepMin} 分钟` },
-    { k: "范围尿布", v: `小便 ${wetCount} / 大便 ${dirtyCount}` },
-    { k: "范围洗澡次数", v: `${bathCount} 次` },
-    { k: "范围用药次数", v: `${medicineCount} 次` },
-    { k: "疫苗完成进度", v: vaccines.length ? `${doneVaccines}/${vaccines.length}` : "未生成" },
-    { k: "累计总记录", v: `${entries.length} 条` },
+    {
+      k: "记录总数（本周期）",
+      v: `${inRangeEntries.length} 条`,
+      sub: `日均 ${(inRangeEntries.length / dayCount).toFixed(1)} 条`,
+      delta: formatDelta(inRangeEntries.length, prevEntries.length),
+      tone: "priority",
+    },
+    {
+      k: "喂奶总量（本周期）",
+      v: `${feedMl} ml`,
+      sub: `日均 ${Math.round(feedMl / dayCount)} ml`,
+      delta: formatDelta(feedMl, prevFeedMl),
+      tone: "priority",
+      metricId: "feeding.amountMl",
+    },
+    {
+      k: "睡眠时长（本周期）",
+      v: `${sleepMin} 分钟`,
+      sub: `日均 ${Math.round(sleepMin / dayCount)} 分钟`,
+      delta: formatDelta(sleepMin, prevSleepMin),
+      metricId: "sleep.durationMin",
+    },
+    { k: "关注项", v: summarizeAttention(inRangeEntries, dayCount), tone: "attention" },
+    { k: "尿布统计", v: `小便 ${wetCount} / 大便 ${dirtyCount}` },
+    { k: "洗澡次数", v: `${bathCount} 次` },
+    { k: "用药次数", v: `${medicineCount} 次` },
+    { k: "疫苗完成进度", v: vaccines.length ? `${doneVaccines}/${vaccines.length}` : "未生成", tone: "muted" },
+    { k: "累计总记录", v: `${entries.length} 条`, tone: "muted" },
   ];
   grid.innerHTML = cards
-    .map((c) => `<div class="stat-card ${c.tone || ""}"><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`)
+    .map((c) => {
+      const clickable = c.metricId ? " stat-card--clickable" : "";
+      const attrs = c.metricId ? ` data-metric-id="${c.metricId}"` : "";
+      const deltaHtml = c.delta
+        ? `<div class="stat-delta stat-delta--${c.delta.tone || "flat"}"><span class="stat-delta-arrow">${c.delta.arrow || "→"}</span>${c.delta.text} vs 上周期</div>`
+        : "";
+      return `<div class="stat-card ${c.tone || ""}${clickable}"${attrs}><div class="k">${c.k}</div><div class="v">${c.v}</div>${c.sub ? `<div class="stat-sub">${c.sub}</div>` : ""}${deltaHtml}</div>`;
+    })
     .join("");
+  grid.querySelectorAll(".stat-card--clickable").forEach((card) => {
+    card.addEventListener("click", () => {
+      const metricId = card.getAttribute("data-metric-id") || "";
+      openStatsMetric(metricId);
+    });
+  });
   const chartMode = statsMode === "chart";
   if (chartMetricWrap) chartMetricWrap.classList.toggle("hidden", !chartMode);
   if (chartMetricSel) {
