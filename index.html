@@ -462,6 +462,12 @@
                   <input type="file" id="import-file" accept="application/json" class="hidden" />
                 </label>
               </div>
+              <div id="import-progress" class="import-progress hidden" aria-live="polite">
+                <div id="import-progress-text" class="import-progress-text">正在导入 0/0</div>
+                <div class="import-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                  <div id="import-progress-bar" class="import-progress-bar"></div>
+                </div>
+              </div>
             </div>
 
             <ul id="timeline" class="timeline" aria-live="polite"></ul>

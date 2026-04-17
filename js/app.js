@@ -59,6 +59,21 @@ function showToast(msg, duration = 2200) {
   el.classList.add("app-toast--visible");
   _toastTimer = setTimeout(() => el.classList.remove("app-toast--visible"), duration);
 }
+
+function setImportProgress(done, total, show) {
+  const wrap = document.getElementById("import-progress");
+  const text = document.getElementById("import-progress-text");
+  const bar = document.getElementById("import-progress-bar");
+  const track = wrap?.querySelector(".import-progress-track");
+  if (!wrap || !text || !bar || !track) return;
+  wrap.classList.toggle("hidden", !show);
+  const safeTotal = Math.max(0, total);
+  const safeDone = Math.max(0, Math.min(done, safeTotal));
+  const pct = safeTotal <= 0 ? 0 : Math.round((safeDone / safeTotal) * 100);
+  text.textContent = `正在导入 ${safeDone}/${safeTotal}`;
+  bar.style.width = `${pct}%`;
+  track.setAttribute("aria-valuenow", String(pct));
+}
 /**
  * @typedef {{role: 'user'|'assistant', content: string, ts: string}} AiMessage
  * @typedef {{id: string, title: string, createdAt: string, updatedAt: string, messages: AiMessage[]}} AiSession
@@ -2893,17 +2908,21 @@ function exportData() {
 function importData(file) {
   const reader = new FileReader();
   reader.onload = async () => {
+    const progressThreshold = 20;
     try {
       const arr = JSON.parse(/** @type {string} */ (reader.result));
       if (!Array.isArray(arr)) throw new Error("格式错误");
       const importedEntries = arr
         .filter((x) => x && x.id && x.categoryId && x.at)
         .map((x) => ({ ...x, photos: Array.isArray(x.photos) ? x.photos : [] }));
+      const shouldShowProgress = importedEntries.length >= progressThreshold;
+      setImportProgress(0, importedEntries.length, shouldShowProgress);
       const existingIds = new Set(entries.map((e) => e.id));
       const merged = new Map(entries.map((e) => [e.id, e]));
       for (const entry of importedEntries) merged.set(entry.id, entry);
       entries = Array.from(merged.values()).sort((a, b) => new Date(b.at) - new Date(a.at));
       if (apiReady) {
+        let processed = 0;
         for (const e of importedEntries) {
           if (existingIds.has(e.id)) {
             await apiRequest(`/entries/${e.id}`, {
@@ -2916,14 +2935,23 @@ function importData(file) {
               body: JSON.stringify(mapEntryToApi(e)),
             });
           }
+          processed += 1;
+          if (shouldShowProgress && (processed % 5 === 0 || processed === importedEntries.length)) {
+            setImportProgress(processed, importedEntries.length, true);
+          }
         }
       } else {
         save();
       }
       render();
-      alert(`已导入 ${importedEntries.length} 条记录，当前共 ${entries.length} 条`);
+      if (shouldShowProgress) {
+        setImportProgress(importedEntries.length, importedEntries.length, true);
+        setTimeout(() => setImportProgress(0, 0, false), 500);
+      }
+      showToast(`导入完成：新增/更新 ${importedEntries.length} 条，当前共 ${entries.length} 条`, 2800);
     } catch {
-      alert("导入失败：请确认是 Babylog 导出的 JSON");
+      setImportProgress(0, 0, false);
+      showToast("导入失败：请确认是 Babylog 导出的 JSON", 3200);
     }
   };
   reader.readAsText(file);
