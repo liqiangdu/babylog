@@ -10,11 +10,6 @@ const STORAGE_AI_INSTRUCTION_KEY = "babylog_ai_instruction_v1";
 const STORAGE_AI_PROJECT_KEY = "babylog_ai_project_v1";
 const STORAGE_AUTH_LOCAL_ONLY_KEY = "babylog_auth_local_only_v1";
 const AUTH_CSRF_COOKIE = "babylog_csrf";
-const LEGACY_AUTH_KEYS = [
-  "babylog_auth_token_v1",
-  "babylog_auth_user_v1",
-  "babylog_auth_csrf_v1",
-];
 const DEFAULT_AI_INSTRUCTION =
   "你是婴幼儿照护与成长数据助手，正在协助家长阅读「Babylog」里的记录。\n\n回答要清晰、可执行；不要夸大确定性。凡涉及疾病诊断、用药调整或紧急情况，必须提醒家长咨询医生或前往医院。";
 /**
@@ -317,14 +312,8 @@ function readCookie(name) {
   return "";
 }
 
-function sweepLegacyAuthStorage() {
-  for (const key of LEGACY_AUTH_KEYS) {
-    try { localStorage.removeItem(key); } catch { /* ignore */ }
-  }
-}
 
 function loadAuth() {
-  sweepLegacyAuthStorage();
   let localOnly = false;
   try {
     localOnly = localStorage.getItem(STORAGE_AUTH_LOCAL_ONLY_KEY) === "1";
@@ -2296,36 +2285,13 @@ function saveAiProject() {
   }
 }
 
-function migrateLegacyAiMessagesIfNeeded() {
-  if (aiProject.sessions.some((s) => Array.isArray(s.messages) && s.messages.length > 0)) return;
-  const legacy = Array.isArray(globalThis.aiMessages) ? globalThis.aiMessages : null;
-  if (!legacy || !legacy.length) return;
-  const first = getActiveAiSession();
-  if (!first) return;
-  first.messages = legacy
-    .filter((m) => m && (m.role === "user" || m.role === "assistant"))
-    .map((m) => ({ role: m.role, content: String(m.content || ""), ts: nowIso() }));
-  if (first.messages.length > 0 && (!first.title || first.title === "默认会话" || first.title === "新会话")) {
-    const lead = first.messages.find((m) => m.role === "user");
-    if (lead && lead.content) first.title = summarizeAsTitle(lead.content);
-  }
-  first.updatedAt = nowIso();
-}
-
 function loadAiInstruction() {
-  let legacyInstruction = DEFAULT_AI_INSTRUCTION;
-  try {
-    const raw = localStorage.getItem(STORAGE_AI_INSTRUCTION_KEY);
-    legacyInstruction = raw && String(raw).trim() ? String(raw) : DEFAULT_AI_INSTRUCTION;
-  } catch {
-    legacyInstruction = DEFAULT_AI_INSTRUCTION;
-  }
   try {
     const rawProject = localStorage.getItem(STORAGE_AI_PROJECT_KEY);
     if (rawProject) {
       const data = JSON.parse(rawProject);
       aiProject = {
-        instruction: String(data?.instruction || legacyInstruction || DEFAULT_AI_INSTRUCTION),
+        instruction: String(data?.instruction || DEFAULT_AI_INSTRUCTION),
         activeSessionId: String(data?.activeSessionId || ""),
         contextPolicy: String(data?.contextPolicy || "full_recent"),
         sessions: Array.isArray(data?.sessions)
@@ -2347,13 +2313,12 @@ function loadAiInstruction() {
           : [],
       };
     } else {
-      aiProject = { instruction: legacyInstruction, activeSessionId: "", contextPolicy: "full_recent", sessions: [] };
+      aiProject = { instruction: DEFAULT_AI_INSTRUCTION, activeSessionId: "", contextPolicy: "full_recent", sessions: [] };
     }
   } catch {
-    aiProject = { instruction: legacyInstruction, activeSessionId: "", contextPolicy: "full_recent", sessions: [] };
+    aiProject = { instruction: DEFAULT_AI_INSTRUCTION, activeSessionId: "", contextPolicy: "full_recent", sessions: [] };
   }
   ensureAiProjectConsistency();
-  migrateLegacyAiMessagesIfNeeded();
   aiInstruction = aiProject.instruction;
   saveAiProject();
 }
@@ -2931,21 +2896,32 @@ function importData(file) {
     try {
       const arr = JSON.parse(/** @type {string} */ (reader.result));
       if (!Array.isArray(arr)) throw new Error("格式错误");
-      entries = arr
+      const importedEntries = arr
         .filter((x) => x && x.id && x.categoryId && x.at)
         .map((x) => ({ ...x, photos: Array.isArray(x.photos) ? x.photos : [] }));
+      const existingIds = new Set(entries.map((e) => e.id));
+      const merged = new Map(entries.map((e) => [e.id, e]));
+      for (const entry of importedEntries) merged.set(entry.id, entry);
+      entries = Array.from(merged.values()).sort((a, b) => new Date(b.at) - new Date(a.at));
       if (apiReady) {
-        for (const e of entries) {
-          await apiRequest("/entries", {
-            method: "POST",
-            body: JSON.stringify(mapEntryToApi(e)),
-          });
+        for (const e of importedEntries) {
+          if (existingIds.has(e.id)) {
+            await apiRequest(`/entries/${e.id}`, {
+              method: "PATCH",
+              body: JSON.stringify(mapEntryToApi(e)),
+            });
+          } else {
+            await apiRequest("/entries", {
+              method: "POST",
+              body: JSON.stringify(mapEntryToApi(e)),
+            });
+          }
         }
       } else {
         save();
       }
       render();
-      alert(`已导入 ${entries.length} 条记录`);
+      alert(`已导入 ${importedEntries.length} 条记录，当前共 ${entries.length} 条`);
     } catch {
       alert("导入失败：请确认是 Babylog 导出的 JSON");
     }
