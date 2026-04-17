@@ -333,7 +333,7 @@ async fn bootstrap_state() -> AppState {
         let _ = fs::create_dir_all(parent).await;
     }
     let _ = fs::create_dir_all(&objects_dir).await;
-    if let Err(e) = ensure_schema(&db_path, &objects_dir) {
+    if let Err(e) = ensure_schema(&db_path) {
         tracing::error!("failed to initialize sqlite schema: {}", e);
         std::process::exit(1);
     }
@@ -511,7 +511,7 @@ pub(crate) fn open_conn(db_path: &PathBuf) -> rusqlite::Result<Connection> {
     Ok(conn)
 }
 
-fn ensure_schema(db_path: &PathBuf, objects_dir: &std::path::Path) -> rusqlite::Result<()> {
+fn ensure_schema(db_path: &PathBuf) -> rusqlite::Result<()> {
     let conn = open_conn(db_path)?;
     conn.execute_batch(
         "
@@ -571,113 +571,9 @@ fn ensure_schema(db_path: &PathBuf, objects_dir: &std::path::Path) -> rusqlite::
     add_column_if_missing(&conn, "vaccines", "user_id", "TEXT NOT NULL DEFAULT ''")?;
     migrate_entries_photos_column(&conn)?;
     auth::ensure_auth_schema(&conn)?;
-    purge_legacy_data(&conn, objects_dir)?;
     Ok(())
 }
 
-/// One-time cleanup of data that predates the multi-user schema.
-///
-/// Earlier versions of Babylog stored a single family's records in un-scoped
-/// tables (`profile`, `vaccine_settings`, `vaccine_templates`) and in
-/// `entries` / `vaccines` rows without a `user_id`. When multi-user support
-/// landed we temporarily parked all of that under a synthetic `__legacy__`
-/// owner so no data was silently dropped on upgrade. Nobody can log in as
-/// that owner, so the rows are just dead weight.
-///
-/// This routine runs on every startup, finds anything still attributed to
-/// `__legacy__` (plus the old single-row tables), deletes it, drops the
-/// tables, and unlinks any photo objects the deleted entries referenced.
-/// It's idempotent: on a clean DB all counts are zero and it does nothing.
-fn purge_legacy_data(
-    conn: &Connection,
-    objects_dir: &std::path::Path,
-) -> rusqlite::Result<()> {
-    let legacy = "__legacy__";
-
-    let mut photo_files: Vec<String> = Vec::new();
-    {
-        let mut stmt = conn.prepare("SELECT photos_json FROM entries WHERE user_id = ?1")?;
-        let rows = stmt.query_map(params![legacy], |r| r.get::<_, String>(0))?;
-        for row in rows {
-            let raw = row.unwrap_or_default();
-            if let Ok(serde_json::Value::Array(arr)) =
-                serde_json::from_str::<serde_json::Value>(&raw)
-            {
-                for v in arr {
-                    if let Some(s) = v.as_str() {
-                        if let Some(name) = s.rsplit('/').next() {
-                            if !name.is_empty() {
-                                photo_files.push(name.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let old_tables = ["profile", "vaccine_settings", "vaccine_templates"];
-    let mut present_old: Vec<&str> = Vec::new();
-    for t in &old_tables {
-        if table_exists(conn, t)? {
-            present_old.push(*t);
-        }
-    }
-
-    let tx = conn.unchecked_transaction()?;
-    let del_entries = tx.execute("DELETE FROM entries WHERE user_id = ?1", params![legacy])?;
-    let del_vaccines = tx.execute("DELETE FROM vaccines WHERE user_id = ?1", params![legacy])?;
-    let del_profile = tx.execute(
-        "DELETE FROM user_profile WHERE user_id = ?1",
-        params![legacy],
-    )?;
-    let del_vset = tx.execute(
-        "DELETE FROM user_vaccine_settings WHERE user_id = ?1",
-        params![legacy],
-    )?;
-    let del_vtpl = tx.execute(
-        "DELETE FROM user_vaccine_templates WHERE user_id = ?1",
-        params![legacy],
-    )?;
-    for t in &present_old {
-        tx.execute(&format!("DROP TABLE IF EXISTS {}", t), [])?;
-    }
-    tx.commit()?;
-    let dropped = present_old;
-
-    let touched = del_entries + del_vaccines + del_profile + del_vset + del_vtpl;
-    if touched == 0 && dropped.is_empty() {
-        return Ok(());
-    }
-
-    let mut removed_files = 0usize;
-    let mut missing_files = 0usize;
-    for name in &photo_files {
-        let path = objects_dir.join(name);
-        match std::fs::remove_file(&path) {
-            Ok(()) => removed_files += 1,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => missing_files += 1,
-            Err(e) => {
-                tracing::warn!("failed to delete legacy object {}: {}", path.display(), e);
-            }
-        }
-    }
-
-    tracing::info!(
-        "legacy data purged: entries={} vaccines={} profile={} vaccine_settings={} \
-         vaccine_templates={} dropped_tables={:?} photos_removed={} photos_missing={}",
-        del_entries,
-        del_vaccines,
-        del_profile,
-        del_vset,
-        del_vtpl,
-        dropped,
-        removed_files,
-        missing_files,
-    );
-
-    Ok(())
-}
 
 fn add_column_if_missing(
     conn: &Connection,
@@ -697,17 +593,6 @@ fn add_column_if_missing(
         [],
     )?;
     Ok(())
-}
-
-fn table_exists(conn: &Connection, name: &str) -> rusqlite::Result<bool> {
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?1",
-            params![name],
-            |r| r.get(0),
-        )
-        .unwrap_or(0);
-    Ok(count > 0)
 }
 
 fn migrate_entries_photos_column(conn: &Connection) -> rusqlite::Result<()> {
