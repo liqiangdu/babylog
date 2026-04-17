@@ -47,12 +47,82 @@ cargo run
 默认监听 `http://127.0.0.1:8787`，提供：
 
 - `GET /health`
+- `POST /api/auth/register`、`POST /api/auth/login`、`GET /api/auth/me`、`POST /api/auth/logout`
+- `GET /api/audit`（返回当前用户最近 100 条审计记录）
 - `GET/PUT /api/profile`
 - `GET/POST /api/entries`
 - `DELETE /api/entries/:id`
 - `POST /api/uploads`（multipart，字段名 `file`，返回 `{ "urls": ["…/media/<uuid>.jpg"] }`）
 - `GET /media/<file>`（静态图片，高性能直出）
 - `GET /api/stats`
+
+登录态说明：
+
+- 账号密码使用 Argon2 哈希，session token 保存在 `sessions` 表（默认 30 天有效）。
+- 前端登录成功后把 token 存在 `localStorage`，后续请求通过 `Authorization: Bearer <token>` 携带。
+- 所有业务接口（profile / entries / vaccines / stats / uploads / chat）都要求 Bearer token，数据按 `user_id` 隔离，不同账号彼此不可见。
+- 旧数据（无 user 归属）会迁移到 `__legacy__` 账号并对登录用户隐藏。
+- 后端不可达时前端可切换「仅在本机使用」，走 `localStorage` 回退。
+
+安全加固相关环境变量（可选）：
+
+- `BABYLOG_PEPPER`：密码 pepper。会通过 HMAC-SHA256 对密码做一层预杂凑再交给 Argon2；**强烈建议**在生产环境设置为一段高熵随机串。空值时会退化到纯 Argon2，启动时会打印告警。旧 hash 会在下次登录时自动兼容（不需要重置密码）。
+- `BABYLOG_COOKIE_MODE=1`：同域部署时开启 HttpOnly Cookie 会话。开启后 `/api/auth/login` 和 `/api/auth/register` 除了返回 `token` 外还会返回 `csrf_token`，同时 `Set-Cookie: babylog_session=...; HttpOnly; SameSite=Strict` 和非 HttpOnly 的 `babylog_csrf`；前端会自动在后续写请求头加上 `X-CSRF-Token`。未开启时保持原来的 Bearer 方式。
+- `BABYLOG_COOKIE_SECURE=1`：给 Cookie 加 `Secure` 属性（配合 HTTPS 使用）。
+- `BABYLOG_HSTS=1`：启用 HSTS 响应头（仅在 HTTPS 前端下设置）。
+- `BABYLOG_ALLOWED_ORIGINS`：逗号分隔的 CORS 允许源，例如 `https://app.example.com`；未设置时默认允许 `localhost`/`127.0.0.1` 的常见端口。凭证 Cookie 模式下 CORS 必须配置成具体的源（浏览器禁止 `*` + credentials）。
+- `BABYLOG_CORS_PERMISSIVE=1`：打开 `*` 宽松 CORS（仅供临时本地调试，不能和 Cookie 模式并用）。
+- `BABYLOG_TRUST_PROXY=1`：在反向代理后部署时启用，从 `X-Forwarded-For` / `X-Real-IP` 获取客户端 IP 供限流 / 审计 / 异地登录检测使用；未启用时头部会被忽略以防伪造。
+- `BABYLOG_PUBLIC_BASE`：对外可访问的 origin（影响上传返回的 `/media/...` URL），默认 `http://127.0.0.1:8787`。
+
+其他加固：
+
+- 密码使用 HMAC-SHA256(pepper, pwd) 预杂凑 + Argon2 存储，避免裸库泄露即离线爆破。
+- 注册时服务端做 zxcvbn 强度检查（score ≥ 3），过弱返回 400 并带反馈。
+- 登录/注册走内存滑动窗口限流：10 分钟 20 次（触及后返回 `429` 并带 `Retry-After`），累计 10 次失败直接锁 15 分钟；登录按 IP 与用户名双桶。
+- 注册冲突（用户名已存在）统一返回 `400 registration failed`，避免用户名枚举；登录失败统一 `401 invalid credentials`。
+- 异地登录检测：session 表记录 `last_ip` / `last_ua`，登录时若对当前用户从未见过此 IP 或 UA，响应里附带 `new_device: true`，前端会弹提醒。
+- 审计日志：`audit_log` 表记录 register / login / login_failed / logout / upload / entry_delete / profile_update，带 IP 和 User-Agent；用户可通过 `GET /api/audit` 查询自己的最近 100 条。
+- 所有 `/api` 响应自动带上 `X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Permissions-Policy: geolocation=(), microphone=(), camera=()`、`X-Frame-Options: DENY`；设置 `BABYLOG_HSTS=1` 时再加 HSTS。
+- Cookie 模式下所有写请求 (`POST` / `PUT` / `DELETE`) 都要求 `X-CSRF-Token` 与 `babylog_csrf` Cookie 常量时间比对；Bearer 模式不触发 CSRF 检查（浏览器无法自动注入 Authorization）。
+- JSON 接口默认 1 MB body 上限，`/api/uploads` 仍是 48 MB。
+- 过期 session 由后台任务每小时清理；上传文件名是服务端生成的 UUID 并按文件头探测扩展名，不接受客户端文件名。
+- 上传日志会记录 `user_id`（审计用）。
+
+### 反向代理模板（Caddy）
+
+推荐生产部署用 Caddy 做 HTTPS 终止 + 同域 Cookie 会话：
+
+```caddy
+app.example.com {
+  encode zstd gzip
+  # 前端静态资源
+  root * /var/www/babylog
+  file_server
+
+  # 后端 API 走同域前缀，Cookie 自然带过去
+  @api path /api/* /media/* /health
+  handle @api {
+    reverse_proxy 127.0.0.1:8787 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+}
+```
+
+同时后端启动环境：
+
+```bash
+BABYLOG_PEPPER="$(head -c 48 /dev/urandom | base64)" \
+BABYLOG_COOKIE_MODE=1 \
+BABYLOG_COOKIE_SECURE=1 \
+BABYLOG_HSTS=1 \
+BABYLOG_TRUST_PROXY=1 \
+BABYLOG_ALLOWED_ORIGINS=https://app.example.com \
+BABYLOG_PUBLIC_BASE=https://app.example.com \
+cargo run --release
+```
 
 ### 一键启动（前端 + Rust API）
 

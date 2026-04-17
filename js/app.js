@@ -8,6 +8,10 @@ const STORAGE_THEME_KEY = "babylog_theme_mode_v1";
 const STORAGE_SIDEBAR_COLLAPSED_KEY = "babylog_sidebar_collapsed_v1";
 const STORAGE_AI_INSTRUCTION_KEY = "babylog_ai_instruction_v1";
 const STORAGE_AI_PROJECT_KEY = "babylog_ai_project_v1";
+const STORAGE_AUTH_TOKEN_KEY = "babylog_auth_token_v1";
+const STORAGE_AUTH_USER_KEY = "babylog_auth_user_v1";
+const STORAGE_AUTH_LOCAL_ONLY_KEY = "babylog_auth_local_only_v1";
+const STORAGE_AUTH_CSRF_KEY = "babylog_auth_csrf_v1";
 const DEFAULT_AI_INSTRUCTION =
   "你是婴幼儿照护与成长数据助手，正在协助家长阅读「Babylog」里的记录。\n\n回答要清晰、可执行；不要夸大确定性。凡涉及疾病诊断、用药调整或紧急情况，必须提醒家长咨询医生或前往医院。";
 const API_BASE = "http://127.0.0.1:8787/api";
@@ -31,6 +35,10 @@ let chartRangeMode = "follow";
 let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
 let apiReady = false;
+/** @type {{token: string, user: {id: string, username: string} | null, localOnly: boolean, csrf: string}} */
+let authState = { token: "", user: null, localOnly: false, csrf: "" };
+let authMode = "login";
+let authBusy = false;
 let themeMode = "system";
 let activeModuleId = "profile";
 let sidebarOpen = false;
@@ -290,11 +298,258 @@ function saveCustomVaccineTemplates() {
   });
 }
 
-async function apiRequest(path, options = {}) {
+function loadAuth() {
+  try {
+    const token = localStorage.getItem(STORAGE_AUTH_TOKEN_KEY) || "";
+    const userRaw = localStorage.getItem(STORAGE_AUTH_USER_KEY) || "";
+    const localOnly = localStorage.getItem(STORAGE_AUTH_LOCAL_ONLY_KEY) === "1";
+    const csrf = localStorage.getItem(STORAGE_AUTH_CSRF_KEY) || "";
+    authState = {
+      token,
+      user: userRaw ? JSON.parse(userRaw) : null,
+      localOnly,
+      csrf,
+    };
+  } catch {
+    authState = { token: "", user: null, localOnly: false, csrf: "" };
+  }
+}
+
+function persistAuth() {
+  if (authState.token) localStorage.setItem(STORAGE_AUTH_TOKEN_KEY, authState.token);
+  else localStorage.removeItem(STORAGE_AUTH_TOKEN_KEY);
+  if (authState.user) localStorage.setItem(STORAGE_AUTH_USER_KEY, JSON.stringify(authState.user));
+  else localStorage.removeItem(STORAGE_AUTH_USER_KEY);
+  if (authState.localOnly) localStorage.setItem(STORAGE_AUTH_LOCAL_ONLY_KEY, "1");
+  else localStorage.removeItem(STORAGE_AUTH_LOCAL_ONLY_KEY);
+  if (authState.csrf) localStorage.setItem(STORAGE_AUTH_CSRF_KEY, authState.csrf);
+  else localStorage.removeItem(STORAGE_AUTH_CSRF_KEY);
+}
+
+function clearAuth() {
+  authState = { token: "", user: null, localOnly: false, csrf: "" };
+  persistAuth();
+  syncSidebarAccount();
+}
+
+/**
+ * Returns extra headers needed for authenticated requests. Adds the CSRF
+ * header whenever we have one cached — the backend only enforces it when the
+ * request is cookie-authenticated, so sending it on bearer requests is a no-op.
+ */
+function authHeaders(extra) {
+  const out = { ...(extra || {}) };
+  if (authState.token) out["Authorization"] = `Bearer ${authState.token}`;
+  if (authState.csrf) out["X-CSRF-Token"] = authState.csrf;
+  return out;
+}
+
+function showAuthOverlay(mode, message) {
+  const overlay = document.getElementById("auth-overlay");
+  if (!overlay) return;
+  authMode = mode === "register" ? "register" : "login";
+  overlay.classList.remove("hidden");
+  const title = document.getElementById("auth-title");
+  const submit = document.getElementById("btn-auth-submit");
+  const hint = document.getElementById("auth-switch-hint");
+  const swBtn = document.getElementById("btn-auth-switch");
+  const pwd = /** @type {HTMLInputElement|null} */ (document.getElementById("auth-password"));
+  if (title) title.textContent = authMode === "register" ? "注册" : "登录";
+  if (submit) submit.textContent = authMode === "register" ? "注册" : "登录";
+  if (hint) hint.textContent = authMode === "register" ? "已有账号？" : "还没有账号？";
+  if (swBtn) swBtn.textContent = authMode === "register" ? "去登录" : "去注册";
+  if (pwd) pwd.setAttribute("autocomplete", authMode === "register" ? "new-password" : "current-password");
+  setAuthError(message || "");
+  const usernameEl = /** @type {HTMLInputElement|null} */ (document.getElementById("auth-username"));
+  if (usernameEl && !message) setTimeout(() => usernameEl.focus(), 30);
+}
+
+function hideAuthOverlay() {
+  const overlay = document.getElementById("auth-overlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+function setAuthError(msg) {
+  const el = document.getElementById("auth-error");
+  if (el) el.textContent = msg || "";
+}
+
+function setAuthBusy(busy) {
+  authBusy = busy;
+  const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById("btn-auth-submit"));
+  if (btn) {
+    btn.disabled = busy;
+    btn.textContent = busy
+      ? (authMode === "register" ? "注册中…" : "登录中…")
+      : (authMode === "register" ? "注册" : "登录");
+  }
+}
+
+function syncSidebarAccount() {
+  const box = document.getElementById("sidebar-account");
+  const name = document.getElementById("sidebar-account-name");
+  if (!box || !name) return;
+  if (authState.user && authState.token) {
+    box.classList.remove("hidden");
+    name.textContent = authState.user.username;
+  } else {
+    box.classList.add("hidden");
+    name.textContent = "";
+  }
+}
+
+/**
+ * Maps backend error responses to a user-facing message that doesn't leak
+ * implementation details, while still surfacing rate-limit hints.
+ */
+function authErrorMessage(status, body) {
+  if (status === 429) {
+    const retry = body?.retry_after;
+    return retry ? `请求过于频繁，请稍后再试（约 ${retry} 秒）` : "请求过于频繁，请稍后再试";
+  }
+  if (status === 400) {
+    const raw = String(body?.error || "");
+    if (raw.startsWith("weak password")) return "密码强度不足，请使用更复杂的密码（建议包含大小写字母、数字和符号）";
+    return "请检查用户名和密码格式";
+  }
+  if (status === 401) return "用户名或密码错误";
+  if (status === 403) return "请刷新页面后重试";
+  if (status === 409) return "注册失败";
+  return "请求失败，请稍后重试";
+}
+
+/**
+ * Calls an auth API without touching the shared apiRequest helper (so 401 flows
+ * don't recursively clear state while we're still trying to authenticate).
+ */
+async function authApi(path, payload) {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
   });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(authErrorMessage(res.status, data));
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function validateAuthInputs(username, password) {
+  if (!username || !password) return "请填写用户名和密码";
+  if (username.length > 48) return "用户名过长";
+  if (!/^[A-Za-z0-9_.\-]+$/.test(username)) return "用户名只能包含字母、数字、_ - .";
+  if (password.length < 6) return "密码至少 6 位";
+  if (password.length > 128) return "密码过长";
+  return "";
+}
+
+async function submitAuthForm() {
+  if (authBusy) return;
+  const u = /** @type {HTMLInputElement} */ (document.getElementById("auth-username"));
+  const p = /** @type {HTMLInputElement} */ (document.getElementById("auth-password"));
+  const username = (u?.value || "").trim();
+  const password = p?.value || "";
+  const validationMsg = validateAuthInputs(username, password);
+  if (validationMsg) {
+    setAuthError(validationMsg);
+    return;
+  }
+  setAuthBusy(true);
+  setAuthError("");
+  try {
+    const path = authMode === "register" ? "/auth/register" : "/auth/login";
+    const data = await authApi(path, { username, password });
+    authState = {
+      token: String(data?.token || ""),
+      user: data?.user ? { id: String(data.user.id), username: String(data.user.username) } : null,
+      localOnly: false,
+      csrf: String(data?.csrf_token || ""),
+    };
+    persistAuth();
+    hideAuthOverlay();
+    if (p) p.value = "";
+    showToast(authMode === "register" ? "注册成功" : "登录成功");
+    if (data?.new_device) {
+      setTimeout(() => showToast("检测到新设备登录，如非本人请立即修改密码", 4200), 600);
+    }
+    syncSidebarAccount();
+    resetInMemoryUserData();
+    await initDataSource();
+    render();
+  } catch (err) {
+    setAuthError(err?.message || "请求失败");
+  } finally {
+    setAuthBusy(false);
+  }
+}
+
+function resetInMemoryUserData() {
+  entries = [];
+  profile = { name: "", birthDate: "", gender: "", blood: "", avatar: "" };
+  vaccines = [];
+  vaccineSettings = { region: "cn", reminderDays: 3, notificationsEnabled: false, notifiedMap: {} };
+  customVaccineTemplates = {};
+  timelineVisibleCount = 20;
+  try { render(); } catch { /* render may not be ready yet */ }
+}
+
+async function logout() {
+  const hadToken = Boolean(authState.token) || Boolean(authState.csrf);
+  if (hadToken) {
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: "POST",
+        headers: authHeaders(),
+        credentials: "include",
+      });
+    } catch {
+      // best-effort
+    }
+  }
+  clearAuth();
+  apiReady = false;
+  resetInMemoryUserData();
+  showToast("已退出登录");
+  showAuthOverlay("login");
+}
+
+/**
+ * Verifies a stored token via /auth/me; returns true if still valid.
+ */
+async function verifyStoredToken() {
+  if (!authState.token && !authState.csrf) return false;
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      headers: authHeaders(),
+      credentials: "include",
+    });
+    if (!res.ok) return false;
+    const data = await res.json().catch(() => ({}));
+    if (data?.user) {
+      authState.user = { id: String(data.user.id), username: String(data.user.username) };
+      persistAuth();
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function apiRequest(path, options = {}) {
+  const headers = authHeaders({ "Content-Type": "application/json", ...(options.headers || {}) });
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
+  if (res.status === 401 && (authState.token || authState.csrf)) {
+    clearAuth();
+    showAuthOverlay("login", "登录状态已过期，请重新登录");
+  }
   if (!res.ok) {
     throw new Error(`API ${res.status}`);
   }
@@ -644,8 +899,14 @@ async function uploadPhotosToServer(files) {
   }
   const res = await fetch(`${API_ORIGIN}/api/uploads`, {
     method: "POST",
+    headers: authHeaders(),
+    credentials: "include",
     body: form,
   });
+  if (res.status === 401 && (authState.token || authState.csrf)) {
+    clearAuth();
+    showAuthOverlay("login", "登录状态已过期，请重新登录");
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data?.error || `upload ${res.status}`);
@@ -2444,11 +2705,18 @@ function renderAiChat() {
  * @param {(chunk: string) => void} onChunk
  */
 async function consumeSseChatStream(payload, onChunk) {
+  const chatHeaders = authHeaders({ "Content-Type": "application/json" });
   const res = await fetch(`${API_BASE}/chat/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: chatHeaders,
+    credentials: "include",
     body: JSON.stringify(payload),
   });
+  if (res.status === 401 && (authState.token || authState.csrf)) {
+    clearAuth();
+    showAuthOverlay("login", "登录状态已过期，请重新登录");
+    throw new Error("登录状态已过期");
+  }
   const ct = res.headers.get("content-type") || "";
   if (!res.ok) {
     if (ct.includes("application/json")) {
@@ -2619,12 +2887,87 @@ function importData(file) {
   reader.readAsText(file);
 }
 
+function initAuthUi() {
+  const form = document.getElementById("auth-form");
+  if (form) {
+    form.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      submitAuthForm();
+    });
+  }
+  const submit = document.getElementById("btn-auth-submit");
+  if (submit) {
+    submit.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      submitAuthForm();
+    });
+  }
+  const sw = document.getElementById("btn-auth-switch");
+  if (sw) {
+    sw.addEventListener("click", () => {
+      showAuthOverlay(authMode === "login" ? "register" : "login");
+    });
+  }
+  const local = document.getElementById("btn-auth-local");
+  if (local) {
+    local.addEventListener("click", () => {
+      authState.localOnly = true;
+      authState.token = "";
+      authState.user = null;
+      persistAuth();
+      hideAuthOverlay();
+      syncSidebarAccount();
+      showToast("已进入本机模式");
+    });
+  }
+  const logoutBtn = document.getElementById("btn-logout");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      logout();
+    });
+  }
+}
+
+/**
+ * Returns true if the backend /health endpoint is reachable.
+ */
+async function backendReachable() {
+  try {
+    const res = await fetch(`${API_ORIGIN}/health`, { method: "GET" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function init() {
   initTheme();
   initSidebarCollapse();
   loadProfile();
   loadAiInstruction();
-  await initDataSource();
+  loadAuth();
+  initAuthUi();
+
+  const reachable = await backendReachable();
+  if (reachable && !authState.localOnly) {
+    const valid = (authState.token || authState.csrf) ? await verifyStoredToken() : false;
+    if (!valid) {
+      authState.token = "";
+      authState.user = null;
+      authState.csrf = "";
+      persistAuth();
+      showAuthOverlay("login");
+      // Skip backend data pulls until the user authenticates. initDataSource
+      // would just 401 everywhere and briefly show empty state.
+    } else {
+      hideAuthOverlay();
+      await initDataSource();
+    }
+  } else {
+    hideAuthOverlay();
+    await initDataSource();
+  }
+  syncSidebarAccount();
   const completionCount = [profile.name, profile.birthDate, profile.gender, profile.blood, profile.avatar].filter(Boolean).length;
   profileEditorOpen = completionCount < 4;
   initModuleNavigation();

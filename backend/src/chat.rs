@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use axum::{
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{
         sse::{Event, KeepAlive, Sse},
         IntoResponse,
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use crate::AppState;
+use crate::{auth, AppState};
 
 #[derive(Debug, Deserialize)]
 pub struct ChatStreamRequest {
@@ -38,7 +38,14 @@ const MAX_CONTEXT_LEN: usize = 200_000;
 const MAX_MESSAGES: usize = 40;
 const MAX_TURN_LEN: usize = 24_000;
 
-pub async fn chat_stream(State(state): State<AppState>, Json(req): Json<ChatStreamRequest>) -> impl IntoResponse {
+pub async fn chat_stream(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<ChatStreamRequest>,
+) -> impl IntoResponse {
+    if let Err(e) = auth::authenticate_unsafe(&state, &headers).await {
+        return auth::auth_err_response(e);
+    }
     if state.deepseek_api_key.trim().is_empty() {
         return (
             StatusCode::SERVICE_UNAVAILABLE,

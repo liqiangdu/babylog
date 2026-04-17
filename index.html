@@ -16,6 +16,38 @@
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
+    <div id="auth-overlay" class="auth-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <div class="auth-card">
+        <div class="auth-brand">
+          <img src="favicon.svg" width="36" height="36" alt="" aria-hidden="true" />
+          <div class="auth-brand-text">
+            <div class="auth-brand-title">Babylog</div>
+            <div class="auth-brand-sub">宝宝成长记录</div>
+          </div>
+        </div>
+        <h1 id="auth-title" class="auth-title">登录</h1>
+        <form id="auth-form" class="auth-form" onsubmit="return false">
+          <div class="auth-field">
+            <label for="auth-username">用户名</label>
+            <input type="text" id="auth-username" autocomplete="username" placeholder="字母、数字、_ - ." maxlength="48" />
+          </div>
+          <div class="auth-field">
+            <label for="auth-password">密码</label>
+            <input type="password" id="auth-password" autocomplete="current-password" placeholder="至少 6 位" maxlength="128" />
+          </div>
+          <div id="auth-error" class="auth-error" role="alert"></div>
+          <button type="submit" id="btn-auth-submit" class="auth-submit">登录</button>
+          <div class="auth-switch">
+            <span id="auth-switch-hint">还没有账号？</span>
+            <button type="button" id="btn-auth-switch" class="auth-link">去注册</button>
+          </div>
+          <div class="auth-local">
+            <button type="button" id="btn-auth-local" class="auth-link auth-link-muted">仅在本机使用（不登录）</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div id="mobile-topbar" class="mobile-topbar">
       <button type="button" id="btn-open-sidebar" class="icon-btn" aria-label="打开菜单">☰</button>
       <div id="mobile-topbar-title" class="mobile-topbar-title">Babylog</div>
@@ -92,6 +124,14 @@
           </button>
         </nav>
         <div class="sidebar-tools">
+          <div id="sidebar-account" class="sidebar-account hidden">
+            <div class="sidebar-account-row">
+              <span class="sidebar-account-name" id="sidebar-account-name">未登录</span>
+              <button type="button" id="btn-logout" class="sidebar-logout-btn" title="退出登录" aria-label="退出登录">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 12H3"></path><path d="M7 8l-4 4 4 4"></path><path d="M21 4v16"></path></svg>
+              </button>
+            </div>
+          </div>
           <div class="sidebar-tools-label" id="theme-toggle-label">主题</div>
           <div class="theme-toggle" role="group" aria-labelledby="theme-toggle-label">
             <button
