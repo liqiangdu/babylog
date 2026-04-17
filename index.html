@@ -356,13 +356,17 @@
                   <option value="cards">卡片</option>
                   <option value="chart">图表</option>
                 </select>
-                <select id="chart-metric" aria-label="图表指标"></select>
-                <select id="chart-range-mode" aria-label="图表范围">
-                  <option value="follow">跟随统计范围</option>
-                  <option value="7">近 7 天</option>
-                  <option value="30">近 30 天</option>
-                  <option value="90">近 90 天</option>
-                </select>
+                <span id="stats-chart-metric-wrap">
+                  <select id="chart-metric" aria-label="图表指标"></select>
+                </span>
+                <span id="stats-chart-range-wrap">
+                  <select id="chart-range-mode" aria-label="图表范围">
+                    <option value="follow">跟随统计范围</option>
+                    <option value="7">近 7 天</option>
+                    <option value="30">近 30 天</option>
+                    <option value="90">近 90 天</option>
+                  </select>
+                </span>
               </div>
               <span id="stats-range-hint" class="stats-range-hint">最近 7 天</span>
             </div>

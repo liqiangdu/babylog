@@ -817,16 +817,17 @@ select option:hover {
   font-size: 13px;
   color: var(--text);
   cursor: pointer;
+  background: transparent;
   transition: background var(--dur-fast) var(--ease-standard);
 }
 .cd-option:hover {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .cd-option.is-selected {
   background: transparent;
 }
 .cd-option.is-selected:hover {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .cd-option-label {
   flex: 1;

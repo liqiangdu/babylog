@@ -1446,6 +1446,10 @@ function renderStats() {
   const grid = document.getElementById("stats-grid");
   const chartWrap = document.getElementById("stats-chart-wrap");
   const rangeHint = document.getElementById("stats-range-hint");
+  const chartMetricWrap = document.getElementById("stats-chart-metric-wrap");
+  const chartRangeWrap = document.getElementById("stats-chart-range-wrap");
+  const chartMetricSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("chart-metric"));
+  const chartRangeModeSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("chart-range-mode"));
   const inRangeEntries = getEntriesByRange(statsRange.start, statsRange.end);
   const feedMl = inRangeEntries
     .filter((e) => e.categoryId === "feeding")
@@ -1477,6 +1481,15 @@ function renderStats() {
   grid.innerHTML = cards
     .map((c) => `<div class="stat-card ${c.tone || ""}"><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`)
     .join("");
+  const chartMode = statsMode === "chart";
+  if (chartMetricWrap) chartMetricWrap.classList.toggle("hidden", !chartMode);
+  if (chartRangeWrap) chartRangeWrap.classList.toggle("hidden", !chartMode);
+  if (chartMetricSel) {
+    chartMetricSel.disabled = !chartMode;
+  }
+  if (chartRangeModeSel) {
+    chartRangeModeSel.disabled = !chartMode;
+  }
   if (statsMode === "chart") {
     grid.classList.add("hidden");
     chartWrap.classList.remove("hidden");
@@ -3433,7 +3446,7 @@ async function init() {
 /* ── Custom Dropdown ── */
 function initCustomDropdowns() {
   document.querySelectorAll("select").forEach((sel) => {
-    if (sel.closest(".hidden") || sel.dataset.customized) return;
+    if (sel.dataset.customized) return;
     sel.dataset.customized = "1";
     const wrap = document.createElement("div");
     wrap.className = "cd-wrap";
