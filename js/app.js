@@ -2812,7 +2812,7 @@ async function sendAiMessage() {
   const text = input.value.trim();
   if (!text) return;
   if (!apiReady) {
-    alert("AI 对话需要后端：请先启动 babylog-api，并在进程环境中设置 DEEPSEEK_API_KEY。");
+    alert("问答需要后端：请先启动 babylog-api，并在进程环境中设置 DEEPSEEK_API_KEY。");
     return;
   }
   let active = getActiveAiSession();
@@ -2836,7 +2836,7 @@ async function sendAiMessage() {
   renderModuleSummaries();
   aiBusy = true;
   refreshAiUiState();
-  setAiStatus("AI 正在生成回复…");
+  setAiStatus("助手正在生成回复…");
   const assistant = assistantMsg;
   const messageWindow = active.messages.slice(0, -1).slice(-40).map((m) => ({ role: m.role, content: m.content }));
   const payload = {
