@@ -34,7 +34,7 @@ let statsRange = { start: "", end: "", preset: "7d" };
 let statsMode = "cards";
 let timelineVisibleCount = 20;
 const TREND_LINE_COLOR = "#1d9bf0";
-let chartRangeMode = "follow";
+let chartResolution = "auto";
 let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
 let apiReady = false;
@@ -1447,9 +1447,7 @@ function renderStats() {
   const chartWrap = document.getElementById("stats-chart-wrap");
   const rangeHint = document.getElementById("stats-range-hint");
   const chartMetricWrap = document.getElementById("stats-chart-metric-wrap");
-  const chartRangeWrap = document.getElementById("stats-chart-range-wrap");
   const chartMetricSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("chart-metric"));
-  const chartRangeModeSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("chart-range-mode"));
   const inRangeEntries = getEntriesByRange(statsRange.start, statsRange.end);
   const feedMl = inRangeEntries
     .filter((e) => e.categoryId === "feeding")
@@ -1483,12 +1481,8 @@ function renderStats() {
     .join("");
   const chartMode = statsMode === "chart";
   if (chartMetricWrap) chartMetricWrap.classList.toggle("hidden", !chartMode);
-  if (chartRangeWrap) chartRangeWrap.classList.toggle("hidden", !chartMode);
   if (chartMetricSel) {
     chartMetricSel.disabled = !chartMode;
-  }
-  if (chartRangeModeSel) {
-    chartRangeModeSel.disabled = !chartMode;
   }
   if (statsMode === "chart") {
     grid.classList.add("hidden");
@@ -1500,19 +1494,44 @@ function renderStats() {
   }
 }
 
-function getChartDateRange() {
-  if (chartRangeMode === "follow") {
-    return { start: statsRange.start, end: statsRange.end };
-  }
-  const days = Number(chartRangeMode) || 7;
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(end.getDate() - (days - 1));
-  const fmt = (d) => toLocalDateKey(d);
-  return { start: fmt(start), end: fmt(end) };
+function getChartResolutionByRange(startDate, endDate) {
+  if (chartResolution !== "auto") return chartResolution;
+  const spanDays = Math.max(1, Math.floor((endDate - startDate) / 86400000) + 1);
+  if (spanDays <= 31) return "day";
+  if (spanDays <= 120) return "week";
+  return "month";
+}
+
+function getWeekStartDate(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getMonthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getAggregationLabel(mode) {
+  if (mode === "day") return "按天";
+  if (mode === "week") return "按周";
+  if (mode === "month") return "按月";
+  return "自动";
+}
+
+function syncChartResolutionButtons() {
+  document.querySelectorAll(".chart-res-btn").forEach((btn) => {
+    const active = btn.getAttribute("data-resolution") === chartResolution;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+  });
 }
 
 function renderTrendChart() {
+  syncChartResolutionButtons();
   const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById("stats-chart"));
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -1662,14 +1681,18 @@ function buildTrendData() {
   const legend = document.getElementById("chart-legend-text");
   if (legend) legend.textContent = metric.label;
 
-  const range = getChartDateRange();
+  const range = { start: statsRange.start, end: statsRange.end };
   const source = getEntriesByRange(range.start, range.end);
   const data = [];
   if (!range.start || !range.end) return { mode: "range-line", points: data };
   const start = new Date(`${range.start}T00:00:00`);
   const end = new Date(`${range.end}T00:00:00`);
+  const resolution = getChartResolutionByRange(start, end);
+  const hint = document.getElementById("stats-range-hint");
+  const rangeLabel = `${range.start} 至 ${range.end}`;
+  if (hint) hint.textContent = `当前范围：${rangeLabel} · 图表聚合：${getAggregationLabel(resolution)}`;
   const isSingleDay = range.start === range.end;
-  if (isSingleDay) {
+  if (isSingleDay && resolution === "day") {
     const dayPoints = source
       .filter((e) => toLocalDateKey(e.at) === range.start && e.categoryId === metric.categoryId)
       .map((e) => {
@@ -1685,12 +1708,48 @@ function buildTrendData() {
       .sort((a, b) => a.t - b.t);
     return { mode: "day-points", points: dayPoints, unit: metric.unit };
   }
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const key = toLocalDateKey(d);
-    const label = `${d.getMonth() + 1}/${d.getDate()}`;
-    const dayEntries = source.filter((e) => toLocalDateKey(e.at) === key && e.categoryId === metric.categoryId);
-    const value = dayEntries.reduce((sum, e) => sum + (Number(e.fields?.[metric.fieldKey]) || 0), 0);
-    data.push({ label, value });
+  const metricEntries = source.filter((e) => e.categoryId === metric.categoryId);
+  if (resolution === "day") {
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const key = toLocalDateKey(d);
+      const label = `${d.getMonth() + 1}/${d.getDate()}`;
+      const dayEntries = metricEntries.filter((e) => toLocalDateKey(e.at) === key);
+      const value = dayEntries.reduce((sum, e) => sum + (Number(e.fields?.[metric.fieldKey]) || 0), 0);
+      data.push({ label, value });
+    }
+  } else if (resolution === "week") {
+    const buckets = new Map();
+    for (const e of metricEntries) {
+      const at = new Date(e.at);
+      const weekStart = getWeekStartDate(at);
+      const key = toLocalDateKey(weekStart);
+      const prev = buckets.get(key) || 0;
+      buckets.set(key, prev + (Number(e.fields?.[metric.fieldKey]) || 0));
+    }
+    let cursor = getWeekStartDate(start);
+    const endWeek = getWeekStartDate(end);
+    while (cursor <= endWeek) {
+      const key = toLocalDateKey(cursor);
+      const label = `${cursor.getMonth() + 1}/${cursor.getDate()}周`;
+      data.push({ label, value: buckets.get(key) || 0 });
+      cursor.setDate(cursor.getDate() + 7);
+    }
+  } else {
+    const buckets = new Map();
+    for (const e of metricEntries) {
+      const at = new Date(e.at);
+      const key = getMonthKey(at);
+      const prev = buckets.get(key) || 0;
+      buckets.set(key, prev + (Number(e.fields?.[metric.fieldKey]) || 0));
+    }
+    let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+    while (cursor <= endMonth) {
+      const key = getMonthKey(cursor);
+      const label = `${cursor.getFullYear()}/${cursor.getMonth() + 1}`;
+      data.push({ label, value: buckets.get(key) || 0 });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
   }
   return { mode: "range-line", points: data, unit: metric.unit };
 }
@@ -3378,9 +3437,13 @@ async function init() {
     chartMetricId = /** @type {HTMLSelectElement} */ (ev.target).value;
     if (statsMode === "chart") renderTrendChart();
   });
-  document.getElementById("chart-range-mode").addEventListener("change", (ev) => {
-    chartRangeMode = /** @type {HTMLSelectElement} */ (ev.target).value;
-    if (statsMode === "chart") renderTrendChart();
+  document.querySelectorAll(".chart-res-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.getAttribute("data-resolution") || "auto";
+      chartResolution = next;
+      if (statsMode === "chart") renderTrendChart();
+      else syncChartResolutionButtons();
+    });
   });
   window.addEventListener("resize", () => {
     if (statsMode === "chart") renderTrendChart();
