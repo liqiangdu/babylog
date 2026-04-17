@@ -26,6 +26,9 @@ const SESSION_TTL_SECS: i64 = 60 * 60 * 24 * 30;
 pub struct AuthUser {
     pub id: String,
     pub username: String,
+    /// Optional avatar as a data URL (client stores it inline for simplicity).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub avatar: String,
 }
 
 /// Internal result type from the blocking login task.
@@ -57,7 +60,8 @@ pub fn ensure_auth_schema(conn: &Connection) -> rusqlite::Result<()> {
           id TEXT PRIMARY KEY,
           username TEXT NOT NULL UNIQUE,
           password_hash TEXT NOT NULL,
-          created_at INTEGER NOT NULL
+          created_at INTEGER NOT NULL,
+          avatar TEXT NOT NULL DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS sessions (
@@ -100,6 +104,17 @@ pub fn ensure_auth_schema(conn: &Connection) -> rusqlite::Result<()> {
     if !cols.iter().any(|c| c == "last_ua") {
         conn.execute(
             "ALTER TABLE sessions ADD COLUMN last_ua TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
+    // users.avatar was added later; migrate existing installs.
+    let mut stmt = conn.prepare("PRAGMA table_info(users)")?;
+    let cols: Vec<String> = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<_, _>>()?;
+    if !cols.iter().any(|c| c == "avatar") {
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
             [],
         )?;
     }
@@ -307,6 +322,7 @@ pub async fn register(
             AuthUser {
                 id: user_id,
                 username: username_for_db,
+                avatar: String::new(),
             },
         ))
     })
@@ -408,17 +424,18 @@ pub async fn login(
         let conn = open_conn(&db_path)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let row = conn.query_row(
-            "SELECT id, username, password_hash FROM users WHERE username = ?1",
+            "SELECT id, username, password_hash, avatar FROM users WHERE username = ?1",
             params![username_for_db],
             |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, String>(1)?,
                     r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
                 ))
             },
         );
-        let (user_id, username, password_hash) = match row {
+        let (user_id, username, password_hash, avatar) = match row {
             Ok(v) => v,
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 return Err((StatusCode::UNAUTHORIZED, "invalid credentials".to_string()));
@@ -470,6 +487,7 @@ pub async fn login(
             user: AuthUser {
                 id: user_id,
                 username,
+                avatar,
             },
             new_device,
         })
@@ -719,6 +737,70 @@ pub async fn authenticate_unsafe(
     Ok(uid)
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AvatarPayload {
+    /// Data URL (data:image/...;base64,...) or empty string to clear.
+    pub avatar: String,
+}
+
+/// Maximum stored avatar size. Data URLs carry ~4/3 overhead; 256 KB is plenty
+/// for a profile picture and keeps sqlite rows small.
+const MAX_AVATAR_BYTES: usize = 256 * 1024;
+
+fn is_valid_avatar_data_url(s: &str) -> bool {
+    if s.is_empty() {
+        return true;
+    }
+    // Accept only data:image/{jpeg,png,webp,gif};base64,... and bounded length.
+    if s.len() > MAX_AVATAR_BYTES {
+        return false;
+    }
+    let lowered = s.to_ascii_lowercase();
+    let Some(rest) = lowered.strip_prefix("data:image/") else {
+        return false;
+    };
+    let Some((mime, payload)) = rest.split_once(";base64,") else {
+        return false;
+    };
+    matches!(mime, "jpeg" | "png" | "webp" | "gif") && !payload.is_empty()
+}
+
+pub async fn update_avatar(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<AvatarPayload>,
+) -> impl IntoResponse {
+    let user_id = match authenticate_unsafe(&state, &headers).await {
+        Ok(v) => v,
+        Err(e) => return auth_err_response(e),
+    };
+    if !is_valid_avatar_data_url(&payload.avatar) {
+        return err_json(
+            StatusCode::BAD_REQUEST,
+            "invalid avatar (must be a data:image/{jpeg,png,webp,gif} data URL ≤ 256 KB)",
+        );
+    }
+    let avatar = payload.avatar.clone();
+    let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let conn = open_conn(&state.db_path).map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE users SET avatar = ?1 WHERE id = ?2",
+            params![avatar, user_id],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await;
+    match result {
+        Ok(Ok(())) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "saved": true, "avatar": payload.avatar })),
+        )
+            .into_response(),
+        _ => err_json(StatusCode::INTERNAL_SERVER_ERROR, "failed to save avatar"),
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct AuditEntry {
     id: i64,
@@ -779,12 +861,22 @@ pub async fn me(State(state): State<AppState>, headers: HeaderMap) -> impl IntoR
         let conn = open_conn(&state.db_path)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let row = conn.query_row(
-            "SELECT id, username FROM users WHERE id = ?1",
+            "SELECT id, username, avatar FROM users WHERE id = ?1",
             params![user_id],
-            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            },
         );
         match row {
-            Ok((id, username)) => Ok(AuthUser { id, username }),
+            Ok((id, username, avatar)) => Ok(AuthUser {
+                id,
+                username,
+                avatar,
+            }),
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 Err((StatusCode::UNAUTHORIZED, "invalid or expired token".to_string()))
             }

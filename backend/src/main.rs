@@ -189,6 +189,7 @@ async fn main() {
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/me", get(auth::me))
         .route("/api/auth/logout", post(auth::logout))
+        .route("/api/auth/avatar", put(auth::update_avatar))
         .route("/api/audit", get(auth::list_audit))
         .route("/api/chat/stream", post(chat::chat_stream))
         .layer(DefaultBodyLimit::max(1024 * 1024));

@@ -304,9 +304,13 @@ function loadAuth() {
     const userRaw = localStorage.getItem(STORAGE_AUTH_USER_KEY) || "";
     const localOnly = localStorage.getItem(STORAGE_AUTH_LOCAL_ONLY_KEY) === "1";
     const csrf = localStorage.getItem(STORAGE_AUTH_CSRF_KEY) || "";
+    const user = userRaw ? JSON.parse(userRaw) : null;
+    if (user && typeof user === "object" && typeof user.avatar !== "string") {
+      user.avatar = "";
+    }
     authState = {
       token,
-      user: userRaw ? JSON.parse(userRaw) : null,
+      user,
       localOnly,
       csrf,
     };
@@ -385,16 +389,48 @@ function setAuthBusy(busy) {
   }
 }
 
+function avatarInitial(username) {
+  const s = String(username || "").trim();
+  if (!s) return "U";
+  const ch = s.charAt(0);
+  return ch.toUpperCase();
+}
+
+function renderAvatarInto(el, user) {
+  if (!el) return;
+  el.textContent = "";
+  const url = user?.avatar || "";
+  if (url) {
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = "";
+    el.appendChild(img);
+  } else {
+    el.textContent = avatarInitial(user?.username);
+  }
+}
+
 function syncSidebarAccount() {
   const box = document.getElementById("sidebar-account");
-  const name = document.getElementById("sidebar-account-name");
-  if (!box || !name) return;
-  if (authState.user && authState.token) {
+  const name = document.getElementById("user-avatar-name");
+  const avatar = document.getElementById("user-avatar");
+  const btn = document.getElementById("btn-user-menu");
+  if (!box) return;
+  const loggedIn = Boolean(authState.user && (authState.token || authState.csrf));
+  if (loggedIn) {
     box.classList.remove("hidden");
-    name.textContent = authState.user.username;
+    if (name) name.textContent = authState.user.username;
+    renderAvatarInto(avatar, authState.user);
+    if (btn) btn.title = authState.user.username;
   } else {
     box.classList.add("hidden");
-    name.textContent = "";
+    if (name) name.textContent = "";
+    if (avatar) avatar.textContent = "U";
+  }
+  // Keep settings dialog in sync if it's open.
+  const settingsOverlay = document.getElementById("settings-overlay");
+  if (settingsOverlay && !settingsOverlay.classList.contains("hidden")) {
+    syncSettingsDialog();
   }
 }
 
@@ -465,7 +501,13 @@ async function submitAuthForm() {
     const data = await authApi(path, { username, password });
     authState = {
       token: String(data?.token || ""),
-      user: data?.user ? { id: String(data.user.id), username: String(data.user.username) } : null,
+      user: data?.user
+        ? {
+            id: String(data.user.id),
+            username: String(data.user.username),
+            avatar: typeof data.user.avatar === "string" ? data.user.avatar : "",
+          }
+        : null,
       localOnly: false,
       csrf: String(data?.csrf_token || ""),
     };
@@ -530,7 +572,11 @@ async function verifyStoredToken() {
     if (!res.ok) return false;
     const data = await res.json().catch(() => ({}));
     if (data?.user) {
-      authState.user = { id: String(data.user.id), username: String(data.user.username) };
+      authState.user = {
+        id: String(data.user.id),
+        username: String(data.user.username),
+        avatar: typeof data.user.avatar === "string" ? data.user.avatar : "",
+      };
       persistAuth();
     }
     return true;
@@ -2923,8 +2969,272 @@ function initAuthUi() {
   const logoutBtn = document.getElementById("btn-logout");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
+      closeUserMenu();
       logout();
     });
+  }
+  initUserMenu();
+  initSettingsDialog();
+}
+
+// ---- User menu (anchored popover on avatar button) -------------------------
+
+function openUserMenu() {
+  const pop = document.getElementById("user-menu-pop");
+  const btn = document.getElementById("btn-user-menu");
+  if (!pop || !btn) return;
+  pop.classList.remove("hidden");
+  btn.setAttribute("aria-expanded", "true");
+  // Defer so the click that opened us doesn't immediately close us.
+  setTimeout(() => {
+    document.addEventListener("click", onUserMenuOutside, true);
+    document.addEventListener("keydown", onUserMenuKey, true);
+  }, 0);
+}
+
+function closeUserMenu() {
+  const pop = document.getElementById("user-menu-pop");
+  const btn = document.getElementById("btn-user-menu");
+  if (!pop || !btn) return;
+  pop.classList.add("hidden");
+  btn.setAttribute("aria-expanded", "false");
+  document.removeEventListener("click", onUserMenuOutside, true);
+  document.removeEventListener("keydown", onUserMenuKey, true);
+}
+
+function onUserMenuOutside(ev) {
+  const pop = document.getElementById("user-menu-pop");
+  const btn = document.getElementById("btn-user-menu");
+  if (!pop || !btn) return;
+  if (pop.contains(ev.target) || btn.contains(ev.target)) return;
+  closeUserMenu();
+}
+
+function onUserMenuKey(ev) {
+  if (ev.key === "Escape") {
+    closeUserMenu();
+  }
+}
+
+function initUserMenu() {
+  const btn = document.getElementById("btn-user-menu");
+  if (!btn) return;
+  btn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const pop = document.getElementById("user-menu-pop");
+    if (pop && !pop.classList.contains("hidden")) closeUserMenu();
+    else openUserMenu();
+  });
+  const openSettings = document.getElementById("btn-open-settings");
+  if (openSettings) {
+    openSettings.addEventListener("click", () => {
+      closeUserMenu();
+      openSettingsDialog();
+    });
+  }
+}
+
+// ---- Settings dialog ------------------------------------------------------
+
+function syncSettingsDialog() {
+  const u = authState.user;
+  const nameEl = document.getElementById("settings-username");
+  const avatarEl = document.getElementById("settings-user-avatar");
+  const clearBtn = document.getElementById("btn-clear-user-avatar");
+  if (nameEl) nameEl.textContent = u?.username || "未登录";
+  renderAvatarInto(avatarEl, u || { username: "", avatar: "" });
+  if (clearBtn) clearBtn.style.display = u?.avatar ? "" : "none";
+
+  const notifToggle = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-notif-toggle"));
+  const notifDays = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-notif-days"));
+  const notifStatus = document.getElementById("settings-notif-status");
+  if (notifToggle) notifToggle.checked = Boolean(vaccineSettings.notificationsEnabled);
+  if (notifDays) notifDays.value = String(vaccineSettings.reminderDays ?? 3);
+  if (notifStatus) {
+    const perm = "Notification" in window ? Notification.permission : "unsupported";
+    if (perm === "unsupported") notifStatus.textContent = "当前浏览器不支持通知";
+    else if (perm === "denied") notifStatus.textContent = "通知权限已被拒绝，请在浏览器地址栏处调整";
+    else if (!vaccineSettings.notificationsEnabled) notifStatus.textContent = "开启后在到期前弹出浏览器通知";
+    else notifStatus.textContent = "已开启。到期前会弹出浏览器通知";
+  }
+
+  syncThemeToggleUi();
+}
+
+function openSettingsDialog() {
+  const overlay = document.getElementById("settings-overlay");
+  if (!overlay) return;
+  overlay.classList.remove("hidden");
+  syncSettingsDialog();
+  document.addEventListener("keydown", onSettingsKey, true);
+}
+
+function closeSettingsDialog() {
+  const overlay = document.getElementById("settings-overlay");
+  if (!overlay) return;
+  overlay.classList.add("hidden");
+  document.removeEventListener("keydown", onSettingsKey, true);
+}
+
+function onSettingsKey(ev) {
+  if (ev.key === "Escape") closeSettingsDialog();
+}
+
+function initSettingsDialog() {
+  const overlay = document.getElementById("settings-overlay");
+  if (!overlay) return;
+  const closeBtn = document.getElementById("btn-close-settings");
+  if (closeBtn) closeBtn.addEventListener("click", closeSettingsDialog);
+  overlay.addEventListener("click", (ev) => {
+    if (ev.target === overlay) closeSettingsDialog();
+  });
+
+  const notifToggle = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-notif-toggle"));
+  if (notifToggle) {
+    notifToggle.addEventListener("change", async () => {
+      if (notifToggle.checked) {
+        if (!("Notification" in window)) {
+          showToast("当前浏览器不支持通知");
+          notifToggle.checked = false;
+          return;
+        }
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") {
+          showToast("通知权限未授予");
+          notifToggle.checked = false;
+          syncSettingsDialog();
+          return;
+        }
+        vaccineSettings.notificationsEnabled = true;
+        saveVaccineSettings();
+        showToast("通知已开启");
+        try { checkVaccineReminders(false); } catch { /* non-fatal */ }
+      } else {
+        vaccineSettings.notificationsEnabled = false;
+        saveVaccineSettings();
+      }
+      syncSettingsDialog();
+    });
+  }
+
+  const notifDays = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-notif-days"));
+  if (notifDays) {
+    const commit = () => {
+      const raw = Number(notifDays.value);
+      const next = Number.isFinite(raw) ? Math.max(0, Math.min(30, Math.round(raw))) : 3;
+      notifDays.value = String(next);
+      if (next !== vaccineSettings.reminderDays) {
+        vaccineSettings.reminderDays = next;
+        saveVaccineSettings();
+      }
+    };
+    notifDays.addEventListener("change", commit);
+    notifDays.addEventListener("blur", commit);
+  }
+
+  const avatarInput = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-avatar-input"));
+  if (avatarInput) {
+    avatarInput.addEventListener("change", onSettingsAvatarChange);
+  }
+  const clearBtn = document.getElementById("btn-clear-user-avatar");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", async () => {
+      await saveUserAvatar("");
+    });
+  }
+}
+
+async function onSettingsAvatarChange(ev) {
+  const input = /** @type {HTMLInputElement} */ (ev.target);
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  if (!/^image\//.test(file.type)) {
+    showToast("请选择图片文件");
+    return;
+  }
+  try {
+    const dataUrl = await compressImageToDataUrl(file, 256);
+    await saveUserAvatar(dataUrl);
+  } catch (err) {
+    console.warn("avatar processing failed", err);
+    showToast("头像处理失败");
+  }
+}
+
+/**
+ * Downscales an image to fit inside a square and re-encodes as JPEG. Returns
+ * a data URL below ~200 KB suitable for the /api/auth/avatar endpoint (which
+ * caps at 256 KB).
+ */
+function compressImageToDataUrl(file, edge = 256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error("read failed"));
+    reader.onload = () => {
+      const src = String(reader.result || "");
+      const img = new Image();
+      img.onerror = () => reject(new Error("image decode failed"));
+      img.onload = () => {
+        try {
+          const w = img.naturalWidth || img.width;
+          const h = img.naturalHeight || img.height;
+          const scale = Math.min(1, edge / Math.max(w, h));
+          const tw = Math.max(1, Math.round(w * scale));
+          const th = Math.max(1, Math.round(h * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = tw;
+          canvas.height = th;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { reject(new Error("canvas 2d unavailable")); return; }
+          ctx.drawImage(img, 0, 0, tw, th);
+          let quality = 0.88;
+          let out = canvas.toDataURL("image/jpeg", quality);
+          while (out.length > 200 * 1024 && quality > 0.4) {
+            quality -= 0.1;
+            out = canvas.toDataURL("image/jpeg", quality);
+          }
+          resolve(out);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function saveUserAvatar(dataUrl) {
+  const previous = authState.user?.avatar || "";
+  // Optimistic update for snappy UI.
+  if (authState.user) {
+    authState.user.avatar = dataUrl;
+    persistAuth();
+    syncSidebarAccount();
+    syncSettingsDialog();
+  }
+  if (authState.localOnly || (!authState.token && !authState.csrf)) {
+    // Local-only mode: persistAuth above is enough.
+    showToast(dataUrl ? "头像已更新" : "头像已移除");
+    return;
+  }
+  try {
+    await apiRequest("/auth/avatar", {
+      method: "PUT",
+      body: JSON.stringify({ avatar: dataUrl }),
+    });
+    showToast(dataUrl ? "头像已更新" : "头像已移除");
+  } catch (err) {
+    // Roll back on failure.
+    if (authState.user) {
+      authState.user.avatar = previous;
+      persistAuth();
+      syncSidebarAccount();
+      syncSettingsDialog();
+    }
+    console.warn("avatar update failed", err);
+    showToast("头像保存失败");
   }
 }
 
