@@ -360,7 +360,11 @@ async fn bootstrap_state() -> AppState {
              Set BABYLOG_PEPPER to a long random string before running in production."
         );
     }
-    let cookie_mode = env::var("BABYLOG_COOKIE_MODE").ok().as_deref() == Some("1");
+    let cookie_mode = env::var("BABYLOG_COOKIE_MODE")
+        .ok()
+        .as_deref()
+        .map(|v| v != "0")
+        .unwrap_or(true);
     let cookie_secure = env::var("BABYLOG_COOKIE_SECURE").ok().as_deref() == Some("1");
     // 20 failures per 10 min triggers lockout; 10 failures => locked for 15 min.
     let auth_limiter = Arc::new(ratelimit::RateLimiter::new(

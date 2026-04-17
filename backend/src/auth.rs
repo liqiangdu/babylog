@@ -553,7 +553,7 @@ pub fn user_agent(headers: &HeaderMap) -> String {
 /// Build a `Set-Cookie` header value for a session token.
 pub fn build_session_cookie(state: &AppState, token: &str) -> String {
     let base = format!(
-        "{}={}; Path=/; Max-Age={}; HttpOnly; SameSite=Strict",
+        "{}={}; Path=/; Max-Age={}; HttpOnly; SameSite=Lax",
         SESSION_COOKIE, token, SESSION_TTL_SECS
     );
     if state.cookie_secure {
@@ -566,7 +566,7 @@ pub fn build_session_cookie(state: &AppState, token: &str) -> String {
 /// Build a `Set-Cookie` header that clears the session cookie.
 pub fn clear_session_cookie(state: &AppState) -> String {
     let base = format!(
-        "{}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict",
+        "{}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
         SESSION_COOKIE
     );
     if state.cookie_secure {
@@ -589,7 +589,7 @@ pub fn generate_csrf_value() -> String {
 
 pub fn build_csrf_cookie(state: &AppState, value: &str) -> String {
     let base = format!(
-        "{}={}; Path=/; Max-Age={}; SameSite=Strict",
+        "{}={}; Path=/; Max-Age={}; SameSite=Lax",
         CSRF_COOKIE, value, SESSION_TTL_SECS
     );
     if state.cookie_secure {
@@ -600,7 +600,7 @@ pub fn build_csrf_cookie(state: &AppState, value: &str) -> String {
 }
 
 pub fn clear_csrf_cookie(state: &AppState) -> String {
-    let base = format!("{}=; Path=/; Max-Age=0; SameSite=Strict", CSRF_COOKIE);
+    let base = format!("{}=; Path=/; Max-Age=0; SameSite=Lax", CSRF_COOKIE);
     if state.cookie_secure {
         format!("{}; Secure", base)
     } else {

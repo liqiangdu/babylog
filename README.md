@@ -59,15 +59,16 @@ cargo run
 登录态说明：
 
 - 账号密码使用 Argon2 哈希，session token 保存在 `sessions` 表（默认 30 天有效）。
-- 前端登录成功后把 token 存在 `localStorage`，后续请求通过 `Authorization: Bearer <token>` 携带。
-- 所有业务接口（profile / entries / vaccines / stats / uploads / chat）都要求 Bearer token，数据按 `user_id` 隔离，不同账号彼此不可见。
+- **默认启用 HttpOnly Cookie 会话**（`BABYLOG_COOKIE_MODE=1`）：登录成功后后端把 session token 写入 `Set-Cookie: babylog_session=...; HttpOnly; SameSite=Lax`，前端完全不接触 token，也不写 `localStorage`，抗 XSS 窃取。写请求通过 `babylog_csrf` Cookie + `X-CSRF-Token` 头双提交防 CSRF。设置 `BABYLOG_COOKIE_MODE=0` 可退回纯 Bearer 模式（仅推荐跨域 API 场景）。
+- 本地开发前端（`npx serve .`，默认 `http://localhost:3000`）访问 API 时使用 `http://localhost:8787/api`，和前端同 site（`localhost`），`SameSite=Lax` Cookie 可以正常带上。如果换成 `127.0.0.1` 访问前端，请同时把 API 地址也改成 `127.0.0.1:8787`，保持同 site。
+- 所有业务接口（profile / entries / vaccines / stats / uploads / chat）都按登录态授权，数据按 `user_id` 隔离，不同账号彼此不可见。
 - 旧数据（无 user 归属）会迁移到 `__legacy__` 账号并对登录用户隐藏。
-- 后端不可达时前端可切换「仅在本机使用」，走 `localStorage` 回退。
+- 后端不可达时前端可切换「仅在本机使用」，走 `localStorage` 回退（仅此场景使用本地缓存）。
 
 安全加固相关环境变量（可选）：
 
 - `BABYLOG_PEPPER`：密码 pepper。会通过 HMAC-SHA256 对密码做一层预杂凑再交给 Argon2；**强烈建议**在生产环境设置为一段高熵随机串。空值时会退化到纯 Argon2，启动时会打印告警。旧 hash 会在下次登录时自动兼容（不需要重置密码）。
-- `BABYLOG_COOKIE_MODE=1`：同域部署时开启 HttpOnly Cookie 会话。开启后 `/api/auth/login` 和 `/api/auth/register` 除了返回 `token` 外还会返回 `csrf_token`，同时 `Set-Cookie: babylog_session=...; HttpOnly; SameSite=Strict` 和非 HttpOnly 的 `babylog_csrf`；前端会自动在后续写请求头加上 `X-CSRF-Token`。未开启时保持原来的 Bearer 方式。
+- `BABYLOG_COOKIE_MODE`：会话模式，默认 `1`（Cookie 模式）。`/api/auth/login` 和 `/api/auth/register` 成功后同时返回 JSON 中的 `token` / `csrf_token`（老客户端兼容），并 `Set-Cookie: babylog_session=...; HttpOnly; SameSite=Lax` + 非 HttpOnly 的 `babylog_csrf`；前端从 Cookie 读取 CSRF 并自动附加 `X-CSRF-Token`。设为 `0` 退回 Bearer 模式。
 - `BABYLOG_COOKIE_SECURE=1`：给 Cookie 加 `Secure` 属性（配合 HTTPS 使用）。
 - `BABYLOG_HSTS=1`：启用 HSTS 响应头（仅在 HTTPS 前端下设置）。
 - `BABYLOG_ALLOWED_ORIGINS`：逗号分隔的 CORS 允许源，例如 `https://app.example.com`；未设置时默认允许 `localhost`/`127.0.0.1` 的常见端口。凭证 Cookie 模式下 CORS 必须配置成具体的源（浏览器禁止 `*` + credentials）。

@@ -8,15 +8,23 @@ const STORAGE_THEME_KEY = "babylog_theme_mode_v1";
 const STORAGE_SIDEBAR_COLLAPSED_KEY = "babylog_sidebar_collapsed_v1";
 const STORAGE_AI_INSTRUCTION_KEY = "babylog_ai_instruction_v1";
 const STORAGE_AI_PROJECT_KEY = "babylog_ai_project_v1";
-const STORAGE_AUTH_TOKEN_KEY = "babylog_auth_token_v1";
-const STORAGE_AUTH_USER_KEY = "babylog_auth_user_v1";
 const STORAGE_AUTH_LOCAL_ONLY_KEY = "babylog_auth_local_only_v1";
-const STORAGE_AUTH_CSRF_KEY = "babylog_auth_csrf_v1";
+const AUTH_CSRF_COOKIE = "babylog_csrf";
+const LEGACY_AUTH_KEYS = [
+  "babylog_auth_token_v1",
+  "babylog_auth_user_v1",
+  "babylog_auth_csrf_v1",
+];
 const DEFAULT_AI_INSTRUCTION =
   "你是婴幼儿照护与成长数据助手，正在协助家长阅读「Babylog」里的记录。\n\n回答要清晰、可执行；不要夸大确定性。凡涉及疾病诊断、用药调整或紧急情况，必须提醒家长咨询医生或前往医院。";
-const API_BASE = "http://127.0.0.1:8787/api";
+/**
+ * API base. We use `localhost` (not `127.0.0.1`) so that the backend shares
+ * the same registrable site as the frontend dev server (`localhost:3000`),
+ * which lets `SameSite=Lax` cookies flow on cross-origin-but-same-site fetches.
+ */
+const API_BASE = "http://localhost:8787/api";
 /** Origin for uploads and /media (no /api suffix). */
-const API_ORIGIN = API_BASE.replace(/\/api\/?$/i, "") || "http://127.0.0.1:8787";
+const API_ORIGIN = API_BASE.replace(/\/api\/?$/i, "") || "http://localhost:8787";
 
 /** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string, photos?: string[]}>} */
 let entries = [];
@@ -298,36 +306,46 @@ function saveCustomVaccineTemplates() {
   });
 }
 
-function loadAuth() {
-  try {
-    const token = localStorage.getItem(STORAGE_AUTH_TOKEN_KEY) || "";
-    const userRaw = localStorage.getItem(STORAGE_AUTH_USER_KEY) || "";
-    const localOnly = localStorage.getItem(STORAGE_AUTH_LOCAL_ONLY_KEY) === "1";
-    const csrf = localStorage.getItem(STORAGE_AUTH_CSRF_KEY) || "";
-    const user = userRaw ? JSON.parse(userRaw) : null;
-    if (user && typeof user === "object" && typeof user.avatar !== "string") {
-      user.avatar = "";
-    }
-    authState = {
-      token,
-      user,
-      localOnly,
-      csrf,
-    };
-  } catch {
-    authState = { token: "", user: null, localOnly: false, csrf: "" };
+function readCookie(name) {
+  const raw = typeof document !== "undefined" ? document.cookie : "";
+  if (!raw) return "";
+  const needle = `${name}=`;
+  for (const part of raw.split(";")) {
+    const p = part.trim();
+    if (p.startsWith(needle)) return decodeURIComponent(p.slice(needle.length));
+  }
+  return "";
+}
+
+function sweepLegacyAuthStorage() {
+  for (const key of LEGACY_AUTH_KEYS) {
+    try { localStorage.removeItem(key); } catch { /* ignore */ }
   }
 }
 
+function loadAuth() {
+  sweepLegacyAuthStorage();
+  let localOnly = false;
+  try {
+    localOnly = localStorage.getItem(STORAGE_AUTH_LOCAL_ONLY_KEY) === "1";
+  } catch {
+    localOnly = false;
+  }
+  authState = {
+    token: "",
+    user: null,
+    localOnly,
+    csrf: readCookie(AUTH_CSRF_COOKIE),
+  };
+}
+
 function persistAuth() {
-  if (authState.token) localStorage.setItem(STORAGE_AUTH_TOKEN_KEY, authState.token);
-  else localStorage.removeItem(STORAGE_AUTH_TOKEN_KEY);
-  if (authState.user) localStorage.setItem(STORAGE_AUTH_USER_KEY, JSON.stringify(authState.user));
-  else localStorage.removeItem(STORAGE_AUTH_USER_KEY);
-  if (authState.localOnly) localStorage.setItem(STORAGE_AUTH_LOCAL_ONLY_KEY, "1");
-  else localStorage.removeItem(STORAGE_AUTH_LOCAL_ONLY_KEY);
-  if (authState.csrf) localStorage.setItem(STORAGE_AUTH_CSRF_KEY, authState.csrf);
-  else localStorage.removeItem(STORAGE_AUTH_CSRF_KEY);
+  try {
+    if (authState.localOnly) localStorage.setItem(STORAGE_AUTH_LOCAL_ONLY_KEY, "1");
+    else localStorage.removeItem(STORAGE_AUTH_LOCAL_ONLY_KEY);
+  } catch {
+    /* ignore quota/private-mode errors */
+  }
 }
 
 function clearAuth() {
@@ -337,14 +355,18 @@ function clearAuth() {
 }
 
 /**
- * Returns extra headers needed for authenticated requests. Adds the CSRF
- * header whenever we have one cached — the backend only enforces it when the
- * request is cookie-authenticated, so sending it on bearer requests is a no-op.
+ * Returns extra headers for authenticated requests. The session cookie is
+ * HttpOnly and sent automatically via `credentials: "include"`; we only need
+ * to echo the CSRF token (read fresh from the readable cookie) on every
+ * state-changing request.
  */
 function authHeaders(extra) {
   const out = { ...(extra || {}) };
-  if (authState.token) out["Authorization"] = `Bearer ${authState.token}`;
-  if (authState.csrf) out["X-CSRF-Token"] = authState.csrf;
+  const csrf = readCookie(AUTH_CSRF_COOKIE) || authState.csrf;
+  if (csrf) {
+    out["X-CSRF-Token"] = csrf;
+    authState.csrf = csrf;
+  }
   return out;
 }
 
@@ -416,7 +438,7 @@ function syncSidebarAccount() {
   const avatar = document.getElementById("user-avatar");
   const btn = document.getElementById("btn-user-menu");
   if (!box) return;
-  const loggedIn = Boolean(authState.user && (authState.token || authState.csrf));
+  const loggedIn = Boolean(authState.user && !authState.localOnly);
   if (loggedIn) {
     box.classList.remove("hidden");
     if (name) name.textContent = authState.user.username;
@@ -500,7 +522,7 @@ async function submitAuthForm() {
     const path = authMode === "register" ? "/auth/register" : "/auth/login";
     const data = await authApi(path, { username, password });
     authState = {
-      token: String(data?.token || ""),
+      token: "",
       user: data?.user
         ? {
             id: String(data.user.id),
@@ -509,7 +531,7 @@ async function submitAuthForm() {
           }
         : null,
       localOnly: false,
-      csrf: String(data?.csrf_token || ""),
+      csrf: readCookie(AUTH_CSRF_COOKIE) || String(data?.csrf_token || ""),
     };
     persistAuth();
     hideAuthOverlay();
@@ -540,17 +562,15 @@ function resetInMemoryUserData() {
 }
 
 async function logout() {
-  const hadToken = Boolean(authState.token) || Boolean(authState.csrf);
-  if (hadToken) {
-    try {
-      await fetch(`${API_BASE}/auth/logout`, {
-        method: "POST",
-        headers: authHeaders(),
-        credentials: "include",
-      });
-    } catch {
-      // best-effort
-    }
+  try {
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: "POST",
+      headers: authHeaders(),
+      credentials: "include",
+    });
+  } catch {
+    // best-effort; the server clears cookies on success, but we clear local
+    // state either way below
   }
   clearAuth();
   apiReady = false;
@@ -560,10 +580,11 @@ async function logout() {
 }
 
 /**
- * Verifies a stored token via /auth/me; returns true if still valid.
+ * Restores the current session by asking the backend who we are.
+ * The session cookie (if any) is sent automatically via credentials: "include".
+ * Returns true when /auth/me returns a valid user.
  */
-async function verifyStoredToken() {
-  if (!authState.token && !authState.csrf) return false;
+async function restoreSessionFromCookie() {
   try {
     const res = await fetch(`${API_BASE}/auth/me`, {
       headers: authHeaders(),
@@ -571,14 +592,13 @@ async function verifyStoredToken() {
     });
     if (!res.ok) return false;
     const data = await res.json().catch(() => ({}));
-    if (data?.user) {
-      authState.user = {
-        id: String(data.user.id),
-        username: String(data.user.username),
-        avatar: typeof data.user.avatar === "string" ? data.user.avatar : "",
-      };
-      persistAuth();
-    }
+    if (!data?.user) return false;
+    authState.user = {
+      id: String(data.user.id),
+      username: String(data.user.username),
+      avatar: typeof data.user.avatar === "string" ? data.user.avatar : "",
+    };
+    authState.csrf = readCookie(AUTH_CSRF_COOKIE) || authState.csrf;
     return true;
   } catch {
     return false;
@@ -592,7 +612,7 @@ async function apiRequest(path, options = {}) {
     headers,
     credentials: "include",
   });
-  if (res.status === 401 && (authState.token || authState.csrf)) {
+  if (res.status === 401 && authState.user && !authState.localOnly) {
     clearAuth();
     showAuthOverlay("login", "登录状态已过期，请重新登录");
   }
@@ -949,7 +969,7 @@ async function uploadPhotosToServer(files) {
     credentials: "include",
     body: form,
   });
-  if (res.status === 401 && (authState.token || authState.csrf)) {
+  if (res.status === 401 && authState.user && !authState.localOnly) {
     clearAuth();
     showAuthOverlay("login", "登录状态已过期，请重新登录");
   }
@@ -2758,7 +2778,7 @@ async function consumeSseChatStream(payload, onChunk) {
     credentials: "include",
     body: JSON.stringify(payload),
   });
-  if (res.status === 401 && (authState.token || authState.csrf)) {
+  if (res.status === 401 && authState.user && !authState.localOnly) {
     clearAuth();
     showAuthOverlay("login", "登录状态已过期，请重新登录");
     throw new Error("登录状态已过期");
@@ -2960,6 +2980,7 @@ function initAuthUi() {
       authState.localOnly = true;
       authState.token = "";
       authState.user = null;
+      authState.csrf = "";
       persistAuth();
       hideAuthOverlay();
       syncSidebarAccount();
@@ -3210,12 +3231,11 @@ async function saveUserAvatar(dataUrl) {
   // Optimistic update for snappy UI.
   if (authState.user) {
     authState.user.avatar = dataUrl;
-    persistAuth();
     syncSidebarAccount();
     syncSettingsDialog();
   }
-  if (authState.localOnly || (!authState.token && !authState.csrf)) {
-    // Local-only mode: persistAuth above is enough.
+  if (authState.localOnly || !authState.user) {
+    // Local-only or not logged in: nothing to push to the backend.
     showToast(dataUrl ? "头像已更新" : "头像已移除");
     return;
   }
@@ -3229,7 +3249,6 @@ async function saveUserAvatar(dataUrl) {
     // Roll back on failure.
     if (authState.user) {
       authState.user.avatar = previous;
-      persistAuth();
       syncSidebarAccount();
       syncSettingsDialog();
     }
@@ -3260,12 +3279,11 @@ async function init() {
 
   const reachable = await backendReachable();
   if (reachable && !authState.localOnly) {
-    const valid = (authState.token || authState.csrf) ? await verifyStoredToken() : false;
+    const valid = await restoreSessionFromCookie();
     if (!valid) {
       authState.token = "";
       authState.user = null;
       authState.csrf = "";
-      persistAuth();
       showAuthOverlay("login");
       // Skip backend data pulls until the user authenticates. initDataSource
       // would just 401 everywhere and briefly show empty state.
