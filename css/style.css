@@ -1450,24 +1450,46 @@ textarea:focus-visible {
 .stats-grid {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 .stats-section {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 2%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+}
+.stats-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 .stats-section-title {
   margin: 0;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
+  color: color-mix(in srgb, var(--text) 78%, var(--text-muted));
+  letter-spacing: 0.18px;
+}
+.stats-section-count {
+  font-size: 11px;
   color: var(--text-muted);
-  letter-spacing: 0.3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.stats-section-subtitle {
+  margin: -4px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 .stats-section-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 .stats-section-grid--compact {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1479,14 +1501,18 @@ textarea:focus-visible {
   border-radius: 10px;
 }
 .stat-card {
-  padding: 14px 16px;
-  transition: background var(--dur-fast) var(--ease-standard);
+  padding: 14px 14px 13px;
+  min-height: 104px;
+  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
 }
 .stat-card--clickable {
   cursor: pointer;
 }
 .stat-card:hover {
   background: color-mix(in srgb, var(--text) 5%, transparent);
+  border-color: color-mix(in srgb, var(--border) 78%, transparent);
+  transform: translateY(-1px);
 }
 .stat-card.priority {
   background: color-mix(in srgb, var(--accent) 9%, transparent);
@@ -1501,16 +1527,42 @@ textarea:focus-visible {
   background: color-mix(in srgb, #ffb347 12%, transparent);
 }
 .stat-card .k {
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 0.1px;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.stat-k-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.stat-k-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--text) 68%, var(--text-muted));
+  flex-shrink: 0;
+}
+.stat-k-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .stat-card .v {
-  margin-top: 4px;
+  margin-top: 6px;
   font-size: clamp(1.15rem, 2vw, 1.35rem);
-  font-weight: 600;
+  font-weight: 650;
   color: var(--text);
-  letter-spacing: -0.2px;
+  letter-spacing: -0.24px;
   line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 .stat-card.muted .v {
   font-size: clamp(1.02rem, 1.6vw, 1.1rem);
@@ -1518,9 +1570,10 @@ textarea:focus-visible {
   color: var(--text-muted);
 }
 .stat-sub {
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 6px;
+  font-size: 11.5px;
   color: var(--text-muted);
+  line-height: 1.35;
 }
 .stat-delta {
   margin-top: 6px;
@@ -1543,6 +1596,9 @@ textarea:focus-visible {
 .stat-delta--flat,
 .stat-delta--new {
   color: var(--text-muted);
+}
+.stat-card--long {
+  grid-column: span 2;
 }
 .stats-chart-wrap {
   margin-top: var(--space-3);
@@ -2918,6 +2974,7 @@ textarea:focus-visible {
   }
   .stats-section-grid,
   .stats-section-grid--compact { grid-template-columns: 1fr; }
+  .stat-card--long { grid-column: auto; }
   .stats-chart-wrap { padding-top: 94px; }
   .stats-chart-head {
     left: 10px;

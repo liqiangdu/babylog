@@ -1531,6 +1531,24 @@ function renderStats() {
   const dirtyCount = inRangeEntries.filter((e) => e.categoryId === "diaper" && ["dirty", "both"].includes(String(e.fields?.subtype || ""))).length;
   const bathCount = inRangeEntries.filter((e) => e.categoryId === "bath").length;
   const medicineCount = inRangeEntries.filter((e) => e.categoryId === "medicine").length;
+  const solidCount = inRangeEntries.filter((e) => e.categoryId === "solid").length;
+  const spitupCount = inRangeEntries.filter((e) => e.categoryId === "spitup").length;
+  const supplementCount = inRangeEntries.filter((e) => e.categoryId === "supplement").length;
+  const pumpCount = inRangeEntries.filter((e) => e.categoryId === "pump").length;
+  const customCount = inRangeEntries.filter((e) => e.categoryId === "custom").length;
+  const tummyMin = inRangeEntries
+    .filter((e) => e.categoryId === "tummy_time")
+    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
+  const outdoorMin = inRangeEntries
+    .filter((e) => e.categoryId === "outdoor")
+    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
+  const cryMin = inRangeEntries
+    .filter((e) => e.categoryId === "cry")
+    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
+  const tempEntries = inRangeEntries
+    .filter((e) => e.categoryId === "temperature")
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
+  const latestTemp = tempEntries.length ? Number(tempEntries[0].fields?.celsius) || null : null;
   const doneVaccines = vaccines.filter((v) => v.status === "done").length;
   const rangeLabel = statsRange.start && statsRange.end ? `${statsRange.start} 至 ${statsRange.end}` : "全部时间";
 
@@ -1547,6 +1565,7 @@ function renderStats() {
       delta: formatDelta(inRangeEntries.length, prevEntries.length),
       tone: "priority",
       section: "core",
+      icon: "records",
     },
     {
       k: "喂奶总量",
@@ -1556,6 +1575,7 @@ function renderStats() {
       tone: "priority",
       metricId: "feeding.amountMl",
       section: "core",
+      icon: "feeding",
     },
     {
       k: "睡眠时长",
@@ -1565,34 +1585,58 @@ function renderStats() {
       tone: "priority",
       metricId: "sleep.durationMin",
       section: "core",
+      icon: "sleep",
     },
-    { k: "尿布统计", v: `小便 ${wetCount} / 大便 ${dirtyCount}`, tone: "priority", section: "core" },
-    { k: "关注项", v: summarizeAttention(inRangeEntries, dayCount), tone: "attention", section: "care" },
-    { k: "洗澡次数", v: `${bathCount} 次`, section: "care" },
-    { k: "用药次数", v: `${medicineCount} 次`, section: "care" },
+    { k: "尿布统计", v: `小便 ${wetCount} / 大便 ${dirtyCount}`, tone: "priority", section: "core", icon: "diaper" },
+    { k: "用药次数", v: `${medicineCount} 次`, section: "care", icon: "medicine" },
+    { k: "体温记录", v: tempEntries.length ? `${tempEntries.length} 次` : "暂无", sub: latestTemp ? `最近 ${latestTemp.toFixed(1)} °C` : "" , section: "care", icon: "temperature" },
+    { k: "辅食次数", v: `${solidCount} 次`, section: "care", icon: "solid" },
+    { k: "哭闹时长", v: `${cryMin} 分钟`, sub: `日均 ${Math.round(cryMin / dayCount)} 分钟`, section: "care", icon: "cry" },
+    { k: "外出时长", v: `${outdoorMin} 分钟`, sub: `日均 ${Math.round(outdoorMin / dayCount)} 分钟`, section: "care", icon: "outdoor" },
+    { k: "趴玩时长", v: `${tummyMin} 分钟`, sub: `日均 ${Math.round(tummyMin / dayCount)} 分钟`, section: "care", icon: "tummy" },
+    { k: "洗澡次数", v: `${bathCount} 次`, section: "care", icon: "bath" },
+    { k: "其他记录覆盖", v: `${spitupCount + supplementCount + pumpCount + customCount} 条`, sub: `溢奶 ${spitupCount} · 补剂 ${supplementCount} · 吸奶 ${pumpCount} · 其他 ${customCount}`, section: "care" },
     { k: "疫苗完成进度", v: vaccines.length ? `${doneVaccines}/${vaccines.length}` : "未生成", tone: "muted", section: "quality" },
     { k: "累计总记录", v: `${entries.length} 条`, tone: "muted", section: "quality" },
   ];
 
   const sectionMeta = [
-    { key: "core", title: "核心健康指标", compact: false },
-    { key: "care", title: "健康关注与事件", compact: true },
-    { key: "quality", title: "累计与质量", compact: true },
+    { key: "core", title: "核心健康指标", subtitle: "高频、可对比的关键指标", compact: false },
+    { key: "care", title: "健康关注与事件", subtitle: "行为与状态的补充观察", compact: true },
+    { key: "quality", title: "累计与质量", subtitle: "长期覆盖与记录完整度", compact: true },
   ];
   const renderCard = (c) => {
       const clickable = c.metricId ? " stat-card--clickable" : "";
+      const extraClass = c.cardClass ? ` ${c.cardClass}` : "";
       const attrs = c.metricId ? ` data-metric-id="${c.metricId}"` : "";
+      const iconMap = {
+        records: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="2"></rect><path d="M9 9h6M9 13h6"></path></svg>',
+        feeding: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3v7a4 4 0 1 0 8 0V3"></path><path d="M10 7h8"></path><path d="M14 14v7"></path></svg>',
+        sleep: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 14a6 6 0 1 1-8-8 5 5 0 1 0 8 8z"></path></svg>',
+        diaper: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9a8 8 0 0 1 16 0v6H4z"></path><path d="M8 15v3M16 15v3"></path></svg>',
+        attention: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"></path><path d="M12 17h.01"></path><circle cx="12" cy="12" r="9"></circle></svg>',
+        medicine: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="10" width="18" height="4" rx="2"></rect><path d="M9 10V6M15 14v4"></path></svg>',
+        temperature: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a2 2 0 0 0-2 2v7.5a4 4 0 1 0 4 0V6a2 2 0 0 0-2-2z"></path><path d="M12 12v4"></path></svg>',
+        solid: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M7 8h10"></path><path d="M9 16h6"></path></svg>',
+        cry: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 15c1 1 2 1.5 4 1.5s3-.5 4-1.5"></path><circle cx="9" cy="10" r="1"></circle><circle cx="15" cy="10" r="1"></circle><circle cx="12" cy="12" r="8"></circle></svg>',
+        outdoor: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2"></path></svg>',
+        tummy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14c2.5-2 5.5-3 8-3s5.5 1 8 3"></path><path d="M7 10l2-2M17 10l-2-2"></path></svg>',
+        bath: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16"></path><path d="M6 11v3a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4v-3"></path><path d="M8 8V6a2 2 0 0 1 4 0"></path></svg>',
+      };
+      const keyHeader = c.icon
+        ? `<div class="stat-k-row"><span class="stat-k-icon">${iconMap[c.icon] || ""}</span><span class="k">${c.k}</span></div>`
+        : `<div class="k">${c.k}</div>`;
       const deltaHtml = c.delta
         ? `<div class="stat-delta stat-delta--${c.delta.tone || "flat"}"><span class="stat-delta-arrow">${c.delta.arrow || "→"}</span>${c.delta.text} vs 上周期</div>`
         : "";
-      return `<div class="stat-card ${c.tone || ""}${clickable}"${attrs}><div class="k">${c.k}</div><div class="v">${c.v}</div>${c.sub ? `<div class="stat-sub">${c.sub}</div>` : ""}${deltaHtml}</div>`;
+      return `<div class="stat-card ${c.tone || ""}${clickable}${extraClass}"${attrs}>${keyHeader}<div class="v">${c.v}</div>${c.sub ? `<div class="stat-sub">${c.sub}</div>` : ""}${deltaHtml}</div>`;
   };
   grid.innerHTML = sectionMeta
     .map((section) => {
       const sectionCards = cards.filter((card) => card.section === section.key);
       if (sectionCards.length === 0) return "";
       const gridClass = section.compact ? "stats-section-grid stats-section-grid--compact" : "stats-section-grid";
-      return `<section class="stats-section"><h3 class="stats-section-title">${section.title}</h3><div class="${gridClass}">${sectionCards.map(renderCard).join("")}</div></section>`;
+      return `<section class="stats-section"><header class="stats-section-head"><h3 class="stats-section-title">${section.title}</h3><span class="stats-section-count">${sectionCards.length} 项</span></header><p class="stats-section-subtitle">${section.subtitle || ""}</p><div class="${gridClass}">${sectionCards.map(renderCard).join("")}</div></section>`;
     })
     .join("");
   grid.querySelectorAll(".stat-card--clickable").forEach((card) => {
