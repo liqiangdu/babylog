@@ -11,7 +11,7 @@ if (-not (Test-Path $backend)) {
     throw "Backend directory not found: $backend"
 }
 
-$frontendCmd = "cd `"$root`"; npx --yes serve ."
+$frontendCmd = "cd `"$root`"; if (-not (Test-Path node_modules)) { npm install }; npm run dev"
 $backendCmd = "cd `"$backend`"; cargo run"
 
 # Force restart backend: stop current listener on 8787 first.

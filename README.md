@@ -16,24 +16,28 @@
 
 ## 技术栈
 
-- 纯前端静态应用（HTML + CSS + JavaScript）
+- 前端：HTML + CSS + **TypeScript**（Vite 开发与打包；入口 `src/main.ts`）
 - 浏览器 `localStorage` 持久化
 - 可选 Rust 后端（Axum + Tokio）用于高性能 API
 
 ## 快速开始
 
-### 方式 1：直接打开
-
-1. 进入项目目录
-2. 双击 `index.html` 用浏览器打开
-
-### 方式 2：本地静态服务（推荐）
+### 方式 1：Vite 开发服务器（推荐）
 
 ```bash
-npx --yes serve .
+npm install
+npm run dev
 ```
 
-打开终端输出的本地地址即可访问。
+浏览器打开终端提示的本地地址（默认 `http://localhost:3000`）。业务代码在 `src/`，由 Vite 编译 `index.html` 中的 `<script type="module" src="/src/main.ts">`。
+
+### 方式 2：生产静态资源
+
+```bash
+npm install
+npm run build
+npx --yes serve dist
+```
 
 ### 方式 3：运行 Rust API（可选）
 
@@ -60,7 +64,7 @@ cargo run
 
 - 账号密码使用 Argon2 哈希，session token 保存在 `sessions` 表（默认 30 天有效）。
 - **默认启用 HttpOnly Cookie 会话**（`BABYLOG_COOKIE_MODE=1`）：登录成功后后端把 session token 写入 `Set-Cookie: babylog_session=...; HttpOnly; SameSite=Lax`，前端完全不接触 token，也不写 `localStorage`，抗 XSS 窃取。写请求通过 `babylog_csrf` Cookie + `X-CSRF-Token` 头双提交防 CSRF。设置 `BABYLOG_COOKIE_MODE=0` 可退回纯 Bearer 模式（仅推荐跨域 API 场景）。
-- 本地开发前端（`npx serve .`，默认 `http://localhost:3000`）访问 API 时使用 `http://localhost:8787/api`，和前端同 site（`localhost`），`SameSite=Lax` Cookie 可以正常带上。如果换成 `127.0.0.1` 访问前端，请同时把 API 地址也改成 `127.0.0.1:8787`，保持同 site。
+- 本地开发前端（`npm run dev` / Vite，默认 `http://localhost:3000`）访问 API 时使用 `http://localhost:8787/api`，和前端同 site（`localhost`），`SameSite=Lax` Cookie 可以正常带上。如果换成 `127.0.0.1` 访问前端，请同时把 API 地址也改成 `127.0.0.1:8787`，保持同 site。
 - 所有业务接口（profile / entries / vaccines / stats / uploads / chat）都按登录态授权，数据按 `user_id` 隔离，不同账号彼此不可见。
 - 历史遗留的 pre-auth 数据（multi-user 迁移时临时落户到虚拟 `__legacy__` 账号的记录，以及老版本的单行表 `profile` / `vaccine_settings` / `vaccine_templates`）不再保留：启动时会自动 DELETE / DROP 掉，并把只被其引用的照片对象文件一并清掉。日志会打印本次清理的行数（若无则静默）。
 - 后端不可达时前端可切换「仅在本机使用」，走 `localStorage` 回退（仅此场景使用本地缓存）。
@@ -135,7 +139,7 @@ cargo run --release
 
 会自动打开两个 PowerShell 窗口：
 
-- 前端静态服务（`npx --yes serve .`）
+- 前端 Vite 开发服务（`npm run dev`）
 - Rust API（使用默认 MSVC 工具链执行 `cargo run`，需已安装 Visual Studio Build Tools 的 C++ 工作负载）
 
 脚本会在启动前**强制重启 backend**（结束占用 `127.0.0.1:8787` 的旧进程，再拉起新实例）。
@@ -161,7 +165,7 @@ FRONTEND_PORT=5173 BACKEND_PORT=9000 ./start.sh
 
 依赖：
 
-- Node.js（`npx serve` 提供前端静态站）；没有 Node 时脚本会回退到 `python3 -m http.server`。
+- Node.js + npm（`./start.sh` 会执行 `npm install` 如需，然后 `npm run dev` 起 Vite）。
 - Rust 工具链（`cargo`）；macOS 上最省心的装法是 `brew install rustup-init && rustup-init`，或 `xcode-select --install` 后 `curl https://sh.rustup.rs -sSf | sh`。
 - SQLite / OpenSSL 这些底层库在 macOS 上由 rusqlite 的 `bundled` feature 和 rustls 处理，通常不需要额外安装。
 - 如果是 Apple Silicon，首次 `cargo run` 会拉整套 crates 并编译约 1~2 分钟。
@@ -180,7 +184,7 @@ Rust API 持久化使用 SQLite（`backend/data/babylog.db`），并包含时间
 babylog/
   index.html      # 页面结构
   css/style.css   # 样式
-  js/app.js       # 业务逻辑
+  src/            # TypeScript 源码（Vite 入口 main.ts）
   scripts/        # 辅助脚本（如测试数据生成）
   backend/        # Rust API（可选）
   DESIGN.md       # UI 设计规范

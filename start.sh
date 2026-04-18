@@ -7,8 +7,7 @@
 #   BACKEND_PORT=8787 ./start.sh
 #
 # Both services are started as children of this script; Ctrl-C stops both.
-# Frontend: `npx --yes serve .` (falls back to `python3 -m http.server` if
-#           npx is not available).
+# Frontend: `npm run dev` (Vite + TypeScript) when package.json exists; requires Node.js.
 # Backend:  `cargo run` in ./backend.
 
 set -euo pipefail
@@ -77,13 +76,14 @@ trap cleanup INT TERM EXIT
 # --- frontend ---
 (
   cd "$SCRIPT_DIR"
-  if command -v npx >/dev/null 2>&1; then
-    exec npx --yes serve . --listen "$FRONTEND_PORT"
-  elif command -v python3 >/dev/null 2>&1; then
-    echo "[frontend] npx not found, falling back to python3 -m http.server"
-    exec python3 -m http.server "$FRONTEND_PORT"
+  if [[ -f package.json ]] && command -v npm >/dev/null 2>&1; then
+    if [[ ! -d node_modules ]]; then
+      echo "[frontend] running npm install (first time)…"
+      npm install
+    fi
+    exec npm run dev -- --port "$FRONTEND_PORT"
   else
-    echo "[frontend] neither npx nor python3 is installed; install Node.js or Python 3" >&2
+    echo "[frontend] This tree needs Node.js + npm (see package.json). Install Node, then: npm install && npm run dev" >&2
     exit 1
   fi
 ) 2>&1 | prefix_log "frontend" &
