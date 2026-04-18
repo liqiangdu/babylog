@@ -32,6 +32,30 @@ import { accumulateRangeStats } from "../stats/accumulate-range-stats";
 import { toLocalDateKey } from "../lib/dates";
 import { collectGalleryPhotosFromEntries } from "../gallery/collect-photos";
 
+/**
+ * RFC4122 v4 id. `crypto.randomUUID` is missing in non-secure HTTP contexts (e.g. LAN IP)
+ * and may be removed by hardening extensions; always fall back safely.
+ */
+function randomUuid() {
+  const c = typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
+  if (c && typeof c.randomUUID === "function") {
+    try {
+      return c.randomUUID();
+    } catch {
+      /* continue */
+    }
+  }
+  if (c && typeof c.getRandomValues === "function") {
+    const b = new Uint8Array(16);
+    c.getRandomValues(b);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+  return `id_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
 /** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string, photos?: string[]}>} */
 let entries = [];
 /** @type {{name: string, birthDate: string, gender: string, blood: string, avatar: string}} */
@@ -1253,7 +1277,7 @@ async function submitModal() {
     }
   } else {
     changedEntry = {
-      id: crypto.randomUUID(),
+      id: randomUuid(),
       categoryId: pendingCategoryId,
       at,
       fields,
@@ -2615,7 +2639,7 @@ function buildVaccinePlan() {
     const due = new Date(base);
     due.setDate(base.getDate() + v.day);
     return {
-      id: crypto.randomUUID(),
+      id: randomUuid(),
       name: v.name,
       dose: v.dose,
       dueDate: due.toISOString().slice(0, 10),
@@ -3129,7 +3153,7 @@ function nowIso() {
 
 function makeAiSession(title = "新会话") {
   const now = nowIso();
-  return { id: crypto.randomUUID(), title, createdAt: now, updatedAt: now, messages: [] };
+  return { id: randomUuid(), title, createdAt: now, updatedAt: now, messages: [] };
 }
 
 function getActiveAiSession() {
@@ -3179,7 +3203,7 @@ function loadAiInstruction() {
         syncSessionsDisclaimerAck: Boolean(data?.syncSessionsDisclaimerAck),
         sessions: Array.isArray(data?.sessions)
           ? data.sessions.map((s) => ({
-            id: String(s?.id || crypto.randomUUID()),
+            id: String(s?.id || randomUuid()),
             title: String(s?.title || "新会话"),
             createdAt: String(s?.createdAt || nowIso()),
             updatedAt: String(s?.updatedAt || nowIso()),
@@ -3805,7 +3829,7 @@ function draftApiToLogEntry(d) {
   const at = String(d.at || "").trim();
   if (!categoryId || !at) return null;
   return {
-    id: crypto.randomUUID(),
+    id: randomUuid(),
     categoryId,
     at,
     fields: d.fields && typeof d.fields === "object" ? d.fields : {},
