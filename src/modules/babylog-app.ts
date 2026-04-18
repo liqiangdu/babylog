@@ -48,6 +48,8 @@ let chartScrubIndex = null;
 /** @type {{ xs: number[], left: number, plotW: number, len: number }|null} */
 let chartPlotLayout = null;
 let statsRangeApplyTimer = null;
+/** Coalesces chart redraws during window resize (at most once per frame). */
+let chartResizeRafId = 0;
 let apiReady = false;
 /** @type {{token: string, user: {id: string, username: string} | null, localOnly: boolean, csrf: string}} */
 let authState = { token: "", user: null, localOnly: false, csrf: "" };
@@ -1255,7 +1257,7 @@ async function submitModal() {
     save();
   }
   closeModal();
-  render();
+  renderAfterEntriesMutated();
 }
 
 async function deleteEntry(id) {
@@ -1270,7 +1272,7 @@ async function deleteEntry(id) {
   } else {
     save();
   }
-  render();
+  renderAfterEntriesMutated();
   showToast("已删除");
 }
 
@@ -2544,7 +2546,7 @@ function buildVaccinePlan() {
     };
   }).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   saveVaccines();
-  render();
+  renderAfterVaccinesMutated();
 }
 
 function getVaccineReminderState(v) {
@@ -2792,7 +2794,7 @@ function toggleVaccineDone(id) {
     return { ...v, status: "done", doneAt: new Date().toISOString().slice(0, 10) };
   });
   saveVaccines();
-  render();
+  renderAfterVaccinesMutated();
 }
 
 function renderVaccines() {
@@ -3045,6 +3047,21 @@ function render() {
   renderPhotoGallery();
   renderTimeline();
   renderAiChat();
+}
+
+/** After entries changed: skip profile, vaccines, and full AI chat rebuild. */
+function renderAfterEntriesMutated() {
+  renderTimeline();
+  renderModuleSummaries();
+  renderStats();
+  renderPhotoGallery();
+}
+
+/** After vaccine list or status changed. */
+function renderAfterVaccinesMutated() {
+  renderVaccines();
+  renderStats();
+  renderModuleSummaries();
 }
 
 function nowIso() {
@@ -3591,7 +3608,10 @@ function refreshAiUiState() {
   const newSessionBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById("btn-ai-new-session"));
   const searchInput = /** @type {HTMLInputElement|null} */ (document.getElementById("ai-session-search"));
   const canSend = Boolean(input && input.value.trim()) && !aiBusy;
-  if (moduleEl) moduleEl.classList.toggle("ai-busy", aiBusy);
+  if (moduleEl) {
+    moduleEl.classList.toggle("ai-busy", aiBusy);
+    moduleEl.setAttribute("aria-busy", aiBusy ? "true" : "false");
+  }
   if (input) input.disabled = aiBusy;
   if (searchInput) searchInput.disabled = aiBusy;
   if (newSessionBtn) newSessionBtn.disabled = aiBusy;
@@ -3644,6 +3664,29 @@ function renderAiChat() {
   root.scrollTop = root.scrollHeight;
   renderAiDraftBanner();
   refreshAiUiState();
+}
+
+/**
+ * Updates only the streaming assistant bubble when DOM matches model; avoids rebuilding the whole log each token.
+ * @returns {boolean} true when patched
+ */
+function updateStreamingAssistantBubbleOnly() {
+  const root = document.getElementById("ai-chat-log");
+  if (!root || !aiBusy) return false;
+  const active = getActiveAiSession();
+  if (!active?.messages.length) return false;
+  const last = active.messages[active.messages.length - 1];
+  if (last.role !== "assistant") return false;
+  const lastRow = root.lastElementChild;
+  if (!lastRow || !lastRow.classList.contains("ai-msg-assistant")) return false;
+  const bubble = lastRow.querySelector(".ai-bubble");
+  if (!bubble || !bubble.classList.contains("ai-streaming")) return false;
+  const raw = last.content || "";
+  const streamMd = raw || (aiBusy ? "…" : "");
+  bubble.innerHTML = streamMd ? renderMarkdownToHtml(streamMd) : "";
+  root.scrollTop = root.scrollHeight;
+  refreshAiUiState();
+  return true;
 }
 
 /**
@@ -3703,7 +3746,7 @@ async function consumeSseChatStream(payload, onChunk, onDraft) {
         if (obj && typeof obj.c === "string" && obj.c) {
           onChunk(obj.c);
           await new Promise((resolve) => requestAnimationFrame(resolve));
-          renderAiChat();
+          if (!updateStreamingAssistantBubbleOnly()) scheduleAiChatRender();
         }
         if (obj && obj.draft && typeof obj.draft === "object" && onDraft) onDraft(obj.draft);
       }
@@ -3768,7 +3811,7 @@ async function confirmPendingAiEntryDraft() {
     save();
   }
   showToast("已从 AI 草稿写入一条记录");
-  render();
+  renderAfterEntriesMutated();
   setActiveModule("timeline");
 }
 
@@ -3915,7 +3958,7 @@ function importData(file) {
       } else {
         save();
       }
-      render();
+      renderAfterEntriesMutated();
       if (shouldShowProgress) {
         setImportProgress(importedEntries.length, importedEntries.length, true);
         setTimeout(() => setImportProgress(0, 0, false), 500);
@@ -4571,7 +4614,12 @@ export async function init() {
     });
   });
   window.addEventListener("resize", () => {
-    if (statsMode === "chart") renderTrendChart();
+    if (statsMode !== "chart") return;
+    if (chartResizeRafId) cancelAnimationFrame(chartResizeRafId);
+    chartResizeRafId = requestAnimationFrame(() => {
+      chartResizeRafId = 0;
+      if (statsMode === "chart") renderTrendChart();
+    });
   });
   const chartCanvas = document.getElementById("stats-chart");
   if (chartCanvas) {

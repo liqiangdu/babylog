@@ -4142,3 +4142,31 @@ html[data-theme="dark"] .module-ai::before {
   margin: 8px 4px 0;
   font-size: 12px;
 }
+
+/* --- Release polish: motion + touch --- */
+@media (prefers-reduced-motion: reduce) {
+  .ai-bubble.ai-streaming::after {
+    animation: none;
+    opacity: 0.45;
+  }
+  .ai-status-line.ai-status-busy::before {
+    animation: none;
+    box-shadow: none;
+  }
+  .app-toast {
+    transition-duration: 0.01ms;
+  }
+}
+
+@media (max-width: 760px) {
+  .tl-aux-btn {
+    min-height: 44px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+  .vac-aux-btn {
+    min-height: 44px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+}
