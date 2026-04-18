@@ -42,7 +42,6 @@ let vaccineSettings = { region: "cn", reminderDays: 3, notificationsEnabled: fal
 let customVaccineTemplates = {};
 /** @type {{start: string, end: string, preset: string}} */
 let statsRange = { start: "", end: "", preset: "7d" };
-let statsMode = "cards";
 let timelineVisibleCount = 20;
 let chartResolution = "day";
 let chartMetricId = "feeding.amountMl";
@@ -55,6 +54,11 @@ let chartPlotLayout = null;
 let statsRangeApplyTimer = null;
 /** Coalesces chart redraws during window resize (at most once per frame). */
 let chartResizeRafId = 0;
+/** @type {"summary"|"metricDetail"} */
+let statsView = "summary";
+let statsDetailPushed = false;
+let ignoreNextStatsDetailPopstate = false;
+
 let apiReady = false;
 /** @type {{token: string, user: {id: string, username: string} | null, localOnly: boolean, csrf: string}} */
 let authState = { token: "", user: null, localOnly: false, csrf: "" };
@@ -606,6 +610,22 @@ function setSidebarOpen(open) {
 }
 
 function setActiveModule(moduleId) {
+  if (activeModuleId === "stats" && moduleId !== "stats" && statsView === "metricDetail") {
+    statsView = "summary";
+    hideChartMetricMenu();
+    const shell = document.getElementById("stats-metric-detail");
+    const grid = document.getElementById("stats-grid");
+    if (shell) {
+      shell.classList.remove("stats-metric-detail--open");
+      shell.classList.add("hidden");
+    }
+    if (grid) grid.classList.remove("hidden");
+    if (statsDetailPushed) {
+      statsDetailPushed = false;
+      ignoreNextStatsDetailPopstate = true;
+      window.history.go(-1);
+    }
+  }
   activeModuleId = moduleId;
   document.querySelectorAll(".module-nav-item").forEach((el) => {
     const isActive = el.getAttribute("data-module") === moduleId;
@@ -1545,20 +1565,99 @@ function summarizeAttention(inRangeEntries, dayCount) {
   return notes.length ? notes.join(" · ") : "暂无明显异常";
 }
 
-function openStatsMetric(metricId) {
-  if (!metricId) return;
-  statsMode = "chart";
-  chartMetricId = metricId;
+function isLikelyIOS() {
+  const ua = navigator.userAgent || "";
+  if (/iPad|iPhone|iPod/i.test(ua)) return true;
+  if (typeof navigator.platform === "string" && navigator.platform === "MacIntel" && (navigator.maxTouchPoints || 0) > 1) {
+    return true;
+  }
+  return false;
+}
+
+function isStandaloneDisplayMode() {
+  try {
+    if (window.matchMedia("(display-mode: standalone)").matches) return true;
+  } catch {
+    /* ignore */
+  }
+  const nav = /** @type {{ standalone?: boolean }} */ (navigator);
+  if (nav.standalone === true) return true;
+  return false;
+}
+
+function shouldStatsDetailUseHistory() {
+  return isLikelyIOS() || isStandaloneDisplayMode();
+}
+
+function syncStatsDetailVisibility() {
+  const shell = document.getElementById("stats-metric-detail");
+  const grid = document.getElementById("stats-grid");
+  if (!shell || !grid) return;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (statsView === "metricDetail") {
+    grid.classList.add("hidden");
+    shell.classList.remove("hidden");
+    shell.classList.remove("stats-metric-detail--open");
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        shell.classList.add("stats-metric-detail--open");
+      });
+    });
+    return;
+  }
+  shell.classList.remove("stats-metric-detail--open");
+  const finish = () => {
+    shell.classList.add("hidden");
+    grid.classList.remove("hidden");
+  };
+  if (reduceMotion) {
+    finish();
+    return;
+  }
+  window.setTimeout(finish, 280);
+}
+
+function onStatsMetricDetailPopState() {
+  if (ignoreNextStatsDetailPopstate) {
+    ignoreNextStatsDetailPopstate = false;
+    return;
+  }
+  if (statsView !== "metricDetail" || !statsDetailPushed) return;
+  statsDetailPushed = false;
+  statsView = "summary";
+  hideChartMetricMenu();
+  syncStatsDetailVisibility();
   renderStats();
 }
 
-function syncStatsModeButtons() {
-  document.querySelectorAll(".stats-mode-btn").forEach((btn) => {
-    const mode = btn.getAttribute("data-mode") || "cards";
-    const active = mode === statsMode;
-    btn.classList.toggle("is-active", active);
-    btn.setAttribute("aria-pressed", active ? "true" : "false");
-  });
+function onStatsMetricDetailBackClick() {
+  hideChartMetricMenu();
+  if (statsDetailPushed && shouldStatsDetailUseHistory()) {
+    window.history.back();
+    return;
+  }
+  statsDetailPushed = false;
+  statsView = "summary";
+  syncStatsDetailVisibility();
+  renderStats();
+}
+
+function openStatsMetric(metricId) {
+  if (!metricId) return;
+  chartMetricId = metricId;
+  const wasDetail = statsView === "metricDetail";
+  statsView = "metricDetail";
+  if (shouldStatsDetailUseHistory()) {
+    if (!wasDetail) {
+      window.history.pushState({ statsMetricDetail: true }, "", window.location.href);
+      statsDetailPushed = true;
+    } else {
+      window.history.replaceState({ statsMetricDetail: true }, "", window.location.href);
+    }
+  } else if (!wasDetail) {
+    statsDetailPushed = false;
+  }
+  renderStats();
 }
 
 function renderStats() {
@@ -1828,7 +1927,7 @@ function renderStats() {
         <h3 class="stats-section-title">本周期摘要</h3>
         <span class="stats-section-count">${summaryCards.length} 项</span>
       </header>
-      <p class="stats-section-subtitle">节律与身体测量优先；点按带趋势的数据可查看图表。</p>
+      <p class="stats-section-subtitle">节律与身体测量优先；点按带趋势的数据可查看详细趋势。</p>
       <div class="stats-summary-grid">${summaryCards.map(renderCard).join("")}</div>
     </section>`;
 
@@ -1878,16 +1977,12 @@ function renderStats() {
     });
   });
 
-  const chartMode = statsMode === "chart";
-  syncStatsModeButtons();
-  if (!chartMode) hideChartMetricMenu();
-  if (statsMode === "chart") {
-    grid.classList.add("hidden");
-    chartWrap.classList.remove("hidden");
+  if (statsView === "summary") {
+    hideChartMetricMenu();
+  }
+  syncStatsDetailVisibility();
+  if (statsView === "metricDetail") {
     renderTrendChart();
-  } else {
-    chartWrap.classList.add("hidden");
-    grid.classList.remove("hidden");
   }
 }
 
@@ -2012,7 +2107,7 @@ function showChartTooltipForIndex(index, trend) {
 let chartPointerCaptureId = null;
 
 function onChartPointerMove(ev) {
-  if (statsMode !== "chart") return;
+  if (statsView !== "metricDetail") return;
   const trend = chartLastTrend;
   const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById("stats-chart"));
   if (!canvas || !trend || !chartPlotLayout || !trend.points?.length) return;
@@ -2038,7 +2133,7 @@ function onChartPointerMove(ev) {
 }
 
 function onChartPointerDown(ev) {
-  if (statsMode !== "chart") return;
+  if (statsView !== "metricDetail") return;
   if (ev.pointerType === "mouse" && ev.button !== 0) return;
   const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById("stats-chart"));
   if (!canvas) return;
@@ -2304,7 +2399,7 @@ function openChartMetricMenu(clientX, clientY) {
 }
 
 function openChartMetricMenuByLegend() {
-  if (statsMode !== "chart") return;
+  if (statsView !== "metricDetail") return;
   const trigger = document.getElementById("chart-legend-trigger");
   if (!trigger) return;
   const rect = trigger.getBoundingClientRect();
@@ -4588,14 +4683,8 @@ export async function init() {
   const statsEndEl = /** @type {HTMLInputElement|null} */ (document.getElementById("stats-end"));
   if (statsStartEl) statsStartEl.addEventListener("input", scheduleAutoApplyCustomStatsRange);
   if (statsEndEl) statsEndEl.addEventListener("input", scheduleAutoApplyCustomStatsRange);
-  document.querySelectorAll(".stats-mode-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const nextMode = btn.getAttribute("data-mode");
-      if (!nextMode || nextMode === statsMode) return;
-      statsMode = nextMode;
-      renderStats();
-    });
-  });
+  window.addEventListener("popstate", onStatsMetricDetailPopState);
+  document.getElementById("btn-stats-metric-back")?.addEventListener("click", onStatsMetricDetailBackClick);
   const chartMetricMenu = document.getElementById("chart-metric-menu");
   if (chartMetricMenu) {
     chartMetricMenu.addEventListener("click", (ev) => {
@@ -4606,23 +4695,23 @@ export async function init() {
       if (!nextMetricId || nextMetricId === chartMetricId) return;
       chartMetricId = nextMetricId;
       hideChartMetricMenu();
-      if (statsMode === "chart") renderTrendChart();
+      if (statsView === "metricDetail") renderTrendChart();
     });
   }
   document.querySelectorAll(".chart-res-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const next = btn.getAttribute("data-resolution") || "day";
       chartResolution = next;
-      if (statsMode === "chart") renderTrendChart();
+      if (statsView === "metricDetail") renderTrendChart();
       else syncChartResolutionButtons();
     });
   });
   window.addEventListener("resize", () => {
-    if (statsMode !== "chart") return;
+    if (statsView !== "metricDetail") return;
     if (chartResizeRafId) cancelAnimationFrame(chartResizeRafId);
     chartResizeRafId = requestAnimationFrame(() => {
       chartResizeRafId = 0;
-      if (statsMode === "chart") renderTrendChart();
+      if (statsView === "metricDetail") renderTrendChart();
     });
   });
   const chartCanvas = document.getElementById("stats-chart");
@@ -4635,10 +4724,7 @@ export async function init() {
   }
   const chartMenuBackdrop = document.getElementById("chart-metric-menu-backdrop");
   if (chartMenuBackdrop) chartMenuBackdrop.addEventListener("click", hideChartMetricMenu);
-  document.getElementById("chart-empty-to-cards")?.addEventListener("click", () => {
-    statsMode = "cards";
-    renderStats();
-  });
+  document.getElementById("chart-empty-to-cards")?.addEventListener("click", onStatsMetricDetailBackClick);
   document.getElementById("chart-empty-widen-range")?.addEventListener("click", () => {
     applyPresetRange("30d");
   });
