@@ -2399,10 +2399,40 @@ textarea:focus-visible {
 }
 
 .module-ai {
+  --ai-read-width: min(42rem, 100%);
   height: 100dvh;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Grok-like: very soft ambient focus on the conversation column */
+.module-ai::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background: radial-gradient(
+    ellipse 95% 72% at 72% 8%,
+    color-mix(in srgb, var(--accent) 10%, transparent),
+    transparent 58%
+  );
+}
+
+html[data-theme="dark"] .module-ai::before {
+  opacity: 0.28;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .module-ai::before {
+    opacity: 0.28;
+  }
 }
 
 .module-ai .ai-workspace {
+  position: relative;
+  z-index: 1;
   padding: 0;
   margin: 0;
   height: 100%;
@@ -2410,7 +2440,7 @@ textarea:focus-visible {
 
 .ai-layout {
   display: grid;
-  grid-template-columns: 20% minmax(0, 1fr);
+  grid-template-columns: clamp(200px, 22vw, 260px) minmax(0, 1fr);
   gap: 0;
   height: 100%;
   min-height: 0;
@@ -2419,21 +2449,22 @@ textarea:focus-visible {
 .ai-sessions-panel {
   border: 0;
   border-radius: 0;
-  background: transparent;
-  padding: var(--space-2) var(--space-3) 0 0;
-  border-right: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--text) 2.2%, transparent);
+  padding: var(--space-3) var(--space-3) 0 var(--space-2);
+  border-right: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
   display: flex;
   flex-direction: column;
   min-height: 100%;
   overflow: hidden;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .ai-settings {
   border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 4px 2px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--text) 3.2%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
+  padding: 10px 12px;
 }
 
 .ai-instruction-title {
@@ -2786,7 +2817,7 @@ textarea:focus-visible {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 0 0 0 var(--space-4);
+  padding: 0 clamp(var(--space-3), 4vw, var(--space-5)) 0 var(--space-4);
   min-width: 0;
   position: relative;
   overflow: hidden;
@@ -2797,14 +2828,17 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-2) 0;
+  padding: var(--space-3) 0 var(--space-2);
   flex-shrink: 0;
 }
 
 .ai-active-session-title {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-muted);
+  opacity: 0.88;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2882,10 +2916,10 @@ textarea:focus-visible {
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  padding: var(--space-4) 0 140px;
+  padding: var(--space-3) 0 140px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
   align-items: center;
   border: 0;
   border-radius: 0;
@@ -2907,22 +2941,25 @@ textarea:focus-visible {
 }
 
 .ai-empty-greeting {
-  font-size: clamp(1.4rem, 2.8vw, 2rem);
-  font-weight: 700;
+  font-size: clamp(1.35rem, 2.5vw, 1.85rem);
+  font-weight: 600;
   color: var(--text);
-  letter-spacing: -0.2px;
+  letter-spacing: -0.03em;
   margin-bottom: var(--space-2);
 }
 
 .ai-empty-hint {
   font-size: 14px;
+  line-height: 1.55;
   color: var(--text-muted);
+  max-width: 22rem;
+  margin: 0 auto;
 }
 
 .ai-msg {
   display: flex;
   width: 100%;
-  max-width: 720px;
+  max-width: var(--ai-read-width, min(42rem, 100%));
 }
 
 .ai-msg-user {
@@ -2940,8 +2977,9 @@ textarea:focus-visible {
   border: 0;
   background: transparent;
   box-shadow: none;
-  font-size: 14.5px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.65;
+  letter-spacing: -0.012em;
   white-space: pre-wrap;
   color: var(--text);
 }
@@ -2960,14 +2998,16 @@ textarea:focus-visible {
 }
 
 .ai-msg-user .ai-bubble {
-  border-radius: 20px 20px 6px 20px;
-  background: color-mix(in srgb, var(--accent) 14%, var(--bg-soft));
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  border-radius: 22px 22px 8px 22px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-soft));
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 .ai-msg-assistant .ai-bubble {
   border-radius: 0;
-  padding: 2px 0;
+  padding: 4px 0 2px;
+  color: color-mix(in srgb, var(--text) 94%, var(--text-muted) 6%);
 }
 
 .ai-compose {
@@ -2980,22 +3020,22 @@ textarea:focus-visible {
   transform: none;
   align-self: center;
   width: 100%;
-  max-width: 720px;
+  max-width: var(--ai-read-width, min(42rem, 100%));
   bottom: 0;
-  background: var(--bg);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-2) var(--space-3);
   z-index: 2;
 }
 
 .module-ai .ai-textarea#ai-user-input {
-  min-height: 40px;
-  max-height: 180px;
-  padding: 10px 44px 10px 16px;
+  min-height: 44px;
+  max-height: 200px;
+  padding: 12px 48px 12px 18px;
   background: var(--bg-elev);
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  border-radius: 26px;
-  font-size: 14.5px;
+  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  border-radius: 28px;
+  font-size: 15px;
   line-height: 1.5;
+  letter-spacing: -0.01em;
   resize: none;
   transition:
     border-color var(--dur-fast) var(--ease-standard),
@@ -3003,12 +3043,17 @@ textarea:focus-visible {
 }
 
 .module-ai .ai-textarea#ai-user-input:focus {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
 .module-ai .ai-compose {
-  background: linear-gradient(to top, var(--bg) 60%, color-mix(in srgb, var(--bg) 0%, transparent));
+  background: linear-gradient(
+    to top,
+    var(--bg) 55%,
+    color-mix(in srgb, var(--bg) 35%, transparent) 85%,
+    transparent
+  );
 }
 
 .ai-input-wrap {
@@ -3033,6 +3078,7 @@ textarea:focus-visible {
   cursor: pointer;
   transition:
     color var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard),
     opacity var(--dur-fast) var(--ease-standard);
 }
 
@@ -3046,12 +3092,14 @@ textarea:focus-visible {
   stroke-linejoin: round;
 }
 
-.ai-send-btn:hover {
+.ai-send-btn:hover:not(:disabled) {
   color: var(--text);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
 }
 
-.ai-send-btn:active {
+.ai-send-btn:active:not(:disabled) {
   color: var(--text-sec);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .ai-send-btn:disabled,
@@ -3873,7 +3921,7 @@ textarea:focus-visible {
 }
 
 .ai-context-policy-row {
-  margin-top: 12px;
+  margin-top: 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -3918,11 +3966,11 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   margin-bottom: 10px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--accent, #1d9bf0) 35%, var(--border));
-  background: color-mix(in srgb, var(--accent, #1d9bf0) 8%, var(--bg));
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent, #1d9bf0) 26%, var(--border));
+  background: color-mix(in srgb, var(--accent, #1d9bf0) 6%, var(--bg));
 }
 .ai-draft-banner.hidden {
   display: none;
