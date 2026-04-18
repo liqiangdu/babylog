@@ -3107,6 +3107,11 @@ textarea:focus-visible {
   white-space: normal;
 }
 
+/* Live stream: plain text only (full markdown applied after stream ends). */
+.ai-bubble .ai-stream-plain {
+  white-space: normal;
+}
+
 .ai-md h1,
 .ai-md h2,
 .ai-md h3 {
@@ -3880,11 +3885,27 @@ textarea:focus-visible {
 .ai-context-policy-select {
   width: 100%;
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: 12px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   background: var(--bg);
   color: var(--text);
+}
+
+/* Custom dropdown wraps #ai-context-policy */
+.module-ai .ai-context-policy-row .cd-trigger {
+  min-height: 32px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.module-ai .ai-context-policy-row .cd-option {
+  font-size: 12px;
+  line-height: 1.4;
+}
+.module-ai .ai-context-policy-row .cd-option-label {
+  font-size: inherit;
 }
 .ai-context-policy-hint {
   font-size: 12px;

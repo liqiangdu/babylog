@@ -1479,10 +1479,19 @@ function renderModuleSummaries() {
   if (aiSummary) {
     const active = getActiveAiSession();
     const userTurns = active ? active.messages.filter((m) => m.role === "user").length : 0;
+    const policy = aiProject.contextPolicy || "full_recent";
+    const policyShort =
+      policy === "recent_7d"
+        ? "最近 7 天"
+        : policy === "timeline_filter"
+          ? "与筛选一致"
+          : policy === "stats_only"
+            ? "仅统计"
+            : "最近记录";
     aiSummary.innerHTML = `
       <span class="module-summary-item">会话数 <strong>${aiProject.sessions.length}</strong></span>
       <span class="module-summary-item">用户消息 <strong>${userTurns}</strong></span>
-      <span class="module-summary-item">上下文记录 <strong>最多 300 条</strong></span>
+      <span class="module-summary-item">上下文 <strong>${policyShort}</strong></span>
     `;
   }
 }
@@ -3617,10 +3626,16 @@ function renderAiChat() {
     bubble.className = "ai-bubble";
     if (m.role === "assistant") {
       bubble.classList.add("ai-md");
-      const content = m.content || (aiBusy ? "…" : "");
-      bubble.innerHTML = content ? renderMarkdownToHtml(content) : "";
+      const raw = m.content || "";
       if (isLastAssistantStreaming) {
+        const plain = raw || (aiBusy ? "…" : "");
+        bubble.innerHTML = plain
+          ? `<span class="ai-stream-plain">${escapeHtml(plain).replace(/\n/g, "<br>")}</span>`
+          : "";
         bubble.classList.add("ai-streaming");
+      } else {
+        const content = raw || "";
+        bubble.innerHTML = content ? renderMarkdownToHtml(content) : "";
       }
     } else {
       bubble.textContent = m.content;
@@ -3687,7 +3702,11 @@ async function consumeSseChatStream(payload, onChunk, onDraft) {
           continue;
         }
         if (obj && typeof obj.error === "string" && obj.error) throw new Error(obj.error);
-        if (obj && typeof obj.c === "string" && obj.c) onChunk(obj.c);
+        if (obj && typeof obj.c === "string" && obj.c) {
+          onChunk(obj.c);
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          renderAiChat();
+        }
         if (obj && obj.draft && typeof obj.draft === "object" && onDraft) onDraft(obj.draft);
       }
     }
@@ -3803,7 +3822,6 @@ async function sendAiMessage() {
       (chunk) => {
         assistant.content += chunk;
         assistant.ts = nowIso();
-        scheduleAiChatRender();
       },
       (draft) => {
         const mapped = draftApiToLogEntry(draft);
@@ -3827,6 +3845,7 @@ async function sendAiMessage() {
     aiBusy = false;
     setAiStatus("");
     refreshAiUiState();
+    scheduleAiChatRender();
     renderAiSessionList();
     renderModuleSummaries();
   }

@@ -3,10 +3,10 @@ use std::time::Duration;
 
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::{
         sse::{Event, KeepAlive, Sse},
-        IntoResponse,
+        IntoResponse, Response,
     },
     Json,
 };
@@ -46,7 +46,7 @@ pub async fn chat_stream(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(req): Json<ChatStreamRequest>,
-) -> impl IntoResponse {
+) -> Response {
     let user_id = match auth::authenticate_unsafe(&state, &headers).await {
         Ok(v) => v,
         Err(e) => return auth::auth_err_response(e),
@@ -242,11 +242,20 @@ pub async fn chat_stream(
                 text = "（模型未返回文本内容。）".to_string();
             }
 
-            for chunk in text.as_bytes().chunks(32) {
-                let piece = String::from_utf8_lossy(chunk);
-                if !piece.is_empty() {
-                    let _ = tx.send(Ok(Event::default().data(json!({ "c": piece }).to_string())));
+            let mut chars = text.chars();
+            loop {
+                let mut piece = String::new();
+                for _ in 0..32 {
+                    match chars.next() {
+                        Some(c) => piece.push(c),
+                        None => break,
+                    }
                 }
+                if piece.is_empty() {
+                    break;
+                }
+                let _ = tx.send(Ok(Event::default().data(json!({ "c": piece }).to_string())));
+                tokio::task::yield_now().await;
             }
             break;
         }
@@ -265,9 +274,18 @@ pub async fn chat_stream(
         let _ = tx.send(Ok(Event::default().data("[DONE]")));
     });
 
-    Sse::new(UnboundedReceiverStream::new(rx))
+    let mut res = Sse::new(UnboundedReceiverStream::new(rx))
         .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
-        .into_response()
+        .into_response();
+    res.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-cache, no-transform"),
+    );
+    res.headers_mut().insert(
+        HeaderName::from_static("x-accel-buffering"),
+        HeaderValue::from_static("no"),
+    );
+    res
 }
 
 fn validate_request(req: &ChatStreamRequest) -> Result<(), String> {
