@@ -234,39 +234,43 @@
               </div>
             </section>
 
-            <section class="settings-section">
+            <section class="settings-section settings-section--ai-privacy">
               <h3 class="settings-section-title">AI 与隐私</h3>
-              <p class="settings-row-sub settings-ai-intro">
-                控制写入「宝宝数据摘要」的文本范围。服务端工具（按日期查记录、疫苗表、草稿）单独受「允许服务端工具」开关约束。
-              </p>
-              <label class="settings-check-row">
-                <input type="checkbox" id="settings-ai-consent-profile" checked />
-                <span>在摘要中包含档案与月龄</span>
-              </label>
-              <label class="settings-check-row">
-                <input type="checkbox" id="settings-ai-consent-vaccines" checked />
-                <span>在摘要中包含疫苗计划（最多 40 条）</span>
-              </label>
-              <label class="settings-check-row">
-                <input type="checkbox" id="settings-ai-consent-entries" checked />
-                <span>在摘要中包含照护记录</span>
-              </label>
-              <label class="settings-check-row">
-                <input type="checkbox" id="settings-ai-consent-notes" checked />
-                <span>记录中包含自由笔记</span>
-              </label>
-              <label class="settings-check-row">
-                <input type="checkbox" id="settings-ai-consent-photos" checked />
-                <span>记录中标注照片数量（不含 URL）</span>
-              </label>
-              <label class="settings-check-row">
-                <input type="checkbox" id="settings-ai-consent-tools" checked />
-                <span>允许服务端工具（模型可查询你账号下的真实数据）</span>
-              </label>
-              <label class="settings-check-row">
-                <input type="checkbox" id="settings-ai-sync-ack" />
-                <span>我已了解：AI 会话与指令目前保存在本机浏览器；若未来同步到云端，将与账号绑定并需单独产品说明。</span>
-              </label>
+              <div class="settings-ai-privacy-card">
+                <p class="settings-ai-intro">
+                  控制写入「宝宝数据摘要」的文本范围。服务端工具（按日期查记录、疫苗表、草稿）单独受「允许服务端工具」开关约束。
+                </p>
+                <div class="settings-ai-privacy-list" role="group" aria-label="AI 摘要与工具同意项">
+                  <label class="settings-check-row">
+                    <input type="checkbox" id="settings-ai-consent-profile" checked />
+                    <span class="settings-check-label">在摘要中包含档案与月龄</span>
+                  </label>
+                  <label class="settings-check-row">
+                    <input type="checkbox" id="settings-ai-consent-vaccines" checked />
+                    <span class="settings-check-label">在摘要中包含疫苗计划（最多 40 条）</span>
+                  </label>
+                  <label class="settings-check-row">
+                    <input type="checkbox" id="settings-ai-consent-entries" checked />
+                    <span class="settings-check-label">在摘要中包含照护记录</span>
+                  </label>
+                  <label class="settings-check-row">
+                    <input type="checkbox" id="settings-ai-consent-notes" checked />
+                    <span class="settings-check-label">记录中包含自由笔记</span>
+                  </label>
+                  <label class="settings-check-row">
+                    <input type="checkbox" id="settings-ai-consent-photos" checked />
+                    <span class="settings-check-label">记录中标注照片数量（不含 URL）</span>
+                  </label>
+                  <label class="settings-check-row">
+                    <input type="checkbox" id="settings-ai-consent-tools" checked />
+                    <span class="settings-check-label">允许服务端工具（模型可查询你账号下的真实数据）</span>
+                  </label>
+                  <label class="settings-check-row settings-check-row--disclosure">
+                    <input type="checkbox" id="settings-ai-sync-ack" />
+                    <span class="settings-check-label">我已了解：AI 会话与指令目前保存在本机浏览器；若未来同步到云端，将与账号绑定并需单独产品说明。</span>
+                  </label>
+                </div>
+              </div>
             </section>
           </div>
         </div>

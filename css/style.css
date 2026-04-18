@@ -745,6 +745,18 @@ textarea {
   font: inherit;
 }
 
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  min-width: 1.125rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  accent-color: var(--accent, #1d9bf0);
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
 select option {
   background: var(--bg-elev);
   color: var(--text);
@@ -3894,22 +3906,75 @@ html[data-theme="dark"] .module-ai::before {
   text-align: center;
 }
 
-.settings-check-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 10px 0;
+.settings-ai-privacy-card {
+  margin-top: 2px;
+  padding: 14px 16px 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--text) 3%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.settings-section--ai-privacy .settings-section-title {
+  margin-bottom: 8px;
+}
+
+.settings-ai-intro {
+  margin: 0 0 4px;
   font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+  color: var(--text-muted);
+}
+
+.settings-ai-privacy-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-check-row {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+  padding: 11px 0;
+  margin: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 38%, transparent);
+  font-size: 14px;
   line-height: 1.45;
-  color: var(--text-sec);
+  letter-spacing: -0.012em;
+  color: var(--text);
   cursor: pointer;
 }
-.settings-check-row input {
-  margin-top: 3px;
-  flex-shrink: 0;
+
+.settings-ai-privacy-list > .settings-check-row:first-child {
+  border-top: none;
+  padding-top: 8px;
 }
-.settings-ai-intro {
-  margin-bottom: 8px;
+
+.settings-check-row input[type="checkbox"] {
+  margin: 3px 0 0;
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.settings-check-label {
+  display: block;
+  min-width: 0;
+  color: color-mix(in srgb, var(--text) 92%, var(--text-muted) 8%);
+}
+
+.settings-check-row--disclosure .settings-check-label {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.settings-check-row:focus-within .settings-check-label {
+  color: var(--text);
+}
+
+.settings-check-row:hover .settings-check-label {
+  color: var(--text);
 }
 
 .sidebar-cmd-btn {
