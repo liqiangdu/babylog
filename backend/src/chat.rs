@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::time::Duration;
 
@@ -10,12 +11,142 @@ use axum::{
     },
     Json,
 };
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use crate::{auth, ai_tools, ratelimit, AppState};
+
+#[derive(Default, Clone)]
+struct ToolCallAcc {
+    id: String,
+    name: String,
+    arguments: String,
+}
+
+fn merge_tool_call_deltas(acc: &mut BTreeMap<u32, ToolCallAcc>, deltas: &[Value]) {
+    for d in deltas {
+        let idx = d.get("index").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+        let part = acc.entry(idx).or_default();
+        if let Some(id) = d.get("id").and_then(|x| x.as_str()) {
+            part.id.push_str(id);
+        }
+        if let Some(fnobj) = d.get("function") {
+            if let Some(name) = fnobj.get("name").and_then(|x| x.as_str()) {
+                part.name.push_str(name);
+            }
+            if let Some(args) = fnobj.get("arguments").and_then(|x| x.as_str()) {
+                part.arguments.push_str(args);
+            }
+        }
+    }
+}
+
+/// Consumes one DeepSeek/OpenAI-style **streaming** completion (`stream: true`).
+/// Forwards `delta.content` to the client as `{ "c": "..." }` SSE events.
+/// Returns `(finish_reason, assistant_message_with_tool_calls)` when the model ends with `tool_calls`.
+async fn forward_deepseek_stream(
+    upstream: reqwest::Response,
+    tx: &tokio::sync::mpsc::UnboundedSender<Result<Event, Infallible>>,
+) -> Result<(String, Option<Value>, bool), String> {
+    let mut buf: Vec<u8> = Vec::new();
+    let mut tool_parts: BTreeMap<u32, ToolCallAcc> = BTreeMap::new();
+    let mut last_finish = String::new();
+    let mut sent_any_content = false;
+    let mut stream = upstream.bytes_stream();
+
+    while let Some(next) = stream.next().await {
+        let chunk = next.map_err(|e| format!("DeepSeek stream read failed: {}", e))?;
+        buf.extend_from_slice(&chunk);
+        while let Some(pos) = buf.iter().position(|b| *b == b'\n') {
+            let line_bytes: Vec<u8> = buf.drain(..=pos).collect();
+            let mut line_bytes = line_bytes;
+            if line_bytes.last() == Some(&b'\n') {
+                line_bytes.pop();
+            }
+            if line_bytes.last() == Some(&b'\r') {
+                line_bytes.pop();
+            }
+            let line = String::from_utf8_lossy(&line_bytes);
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if !trimmed.starts_with("data:") {
+                continue;
+            }
+            let rest = trimmed[trimmed.find(':').map(|i| i + 1).unwrap_or(0)..].trim();
+            if rest == "[DONE]" {
+                if last_finish == "tool_calls" && tool_parts.is_empty() {
+                    return Err("tool_calls finish without tool deltas".to_string());
+                }
+                return Ok(stream_outcome(last_finish, tool_parts, sent_any_content));
+            }
+            let v: Value = match serde_json::from_str(rest) {
+                Ok(x) => x,
+                Err(_) => continue,
+            };
+            if let Some(err) = v.get("error") {
+                let msg = err
+                    .get("message")
+                    .and_then(|x| x.as_str())
+                    .or_else(|| err.as_str())
+                    .unwrap_or("upstream error");
+                return Err(msg.to_string());
+            }
+            let Some(choice) = v.get("choices").and_then(|c| c.as_array()).and_then(|a| a.first()) else {
+                continue;
+            };
+            if let Some(fr) = choice.get("finish_reason").and_then(|x| x.as_str()) {
+                if !fr.is_empty() {
+                    last_finish = fr.to_string();
+                }
+            }
+            let delta = choice.get("delta").cloned().unwrap_or(json!({}));
+            if let Some(content) = delta.get("content").and_then(|x| x.as_str()) {
+                if !content.is_empty() {
+                    sent_any_content = true;
+                    let _ = tx.send(Ok(Event::default().data(json!({ "c": content }).to_string())));
+                    tokio::task::yield_now().await;
+                }
+            }
+            if let Some(arr) = delta.get("tool_calls").and_then(|x| x.as_array()) {
+                merge_tool_call_deltas(&mut tool_parts, arr);
+            }
+        }
+    }
+
+    if last_finish == "tool_calls" && tool_parts.is_empty() {
+        return Err("tool_calls finish without tool deltas".to_string());
+    }
+    Ok(stream_outcome(last_finish, tool_parts, sent_any_content))
+}
+
+fn stream_outcome(
+    last_finish: String,
+    tool_parts: BTreeMap<u32, ToolCallAcc>,
+    sent_any_content: bool,
+) -> (String, Option<Value>, bool) {
+    if last_finish == "tool_calls" {
+        let mut calls: Vec<Value> = Vec::new();
+        for (_idx, acc) in tool_parts {
+            calls.push(json!({
+                "id": acc.id,
+                "type": "function",
+                "function": { "name": acc.name, "arguments": acc.arguments }
+            }));
+        }
+        let message = json!({
+            "role": "assistant",
+            "content": Value::Null,
+            "tool_calls": calls
+        });
+        return (last_finish, Some(message), sent_any_content);
+    }
+    (last_finish, None, sent_any_content)
+}
 
 #[derive(Debug, Deserialize)]
 pub struct ChatStreamRequest {
@@ -108,7 +239,7 @@ pub async fn chat_stream(
             let mut body = json!({
                 "model": state_clone.deepseek_model,
                 "messages": openai_messages,
-                "stream": false
+                "stream": true
             });
             if !tools_def.is_empty() {
                 body["tools"] = json!(tools_def);
@@ -145,119 +276,82 @@ pub async fn chat_stream(
                 break;
             }
 
-            let v: Value = match upstream.json().await {
-                Ok(x) => x,
-                Err(e) => {
-                    let _ = tx.send(Ok(Event::default().data(
-                        json!({ "error": format!("invalid JSON from DeepSeek: {}", e) }).to_string(),
-                    )));
-                    break;
-                }
-            };
+            match forward_deepseek_stream(upstream, &tx).await {
+                Ok((finish, tool_message, sent_any)) => {
+                    if let Some(message) = tool_message {
+                        tool_rounds_executed += 1;
+                        if tool_rounds_executed > MAX_TOOL_ROUNDS {
+                            let _ = tx.send(Ok(Event::default().data(
+                                json!({ "error": "工具调用次数超过上限，请简化问题后重试" }).to_string(),
+                            )));
+                            break;
+                        }
+                        let tool_calls = message
+                            .get("tool_calls")
+                            .and_then(|x| x.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+                        openai_messages.push(message);
 
-            if let Some(err) = v.get("error").and_then(|x| x.get("message")).and_then(|x| x.as_str()) {
-                let _ = tx.send(Ok(Event::default().data(json!({ "error": err }).to_string())));
-                break;
-            }
+                        for tc in &tool_calls {
+                            let id = tc.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                            let name = tc
+                                .get("function")
+                                .and_then(|f| f.get("name"))
+                                .and_then(|x| x.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let args = tc
+                                .get("function")
+                                .and_then(|f| f.get("arguments"))
+                                .and_then(|x| x.as_str())
+                                .unwrap_or("{}")
+                                .to_string();
 
-            let Some(choice) = v.get("choices").and_then(|c| c.as_array()).and_then(|a| a.first()) else {
-                let _ = tx.send(Ok(Event::default().data(
-                    json!({ "error": "unexpected DeepSeek response (no choices)" }).to_string(),
-                )));
-                break;
-            };
+                            let result = ai_tools::run_tool(&db_path, &user_id, &name, &args).unwrap_or_else(|e| {
+                                json!({ "error": e }).to_string()
+                            });
 
-            let message = choice.get("message").cloned().unwrap_or(json!({}));
-            let finish = choice
-                .get("finish_reason")
-                .and_then(|x| x.as_str())
-                .unwrap_or("");
-            let tool_calls = message
-                .get("tool_calls")
-                .and_then(|x| x.as_array())
-                .cloned()
-                .unwrap_or_default();
-
-            if !tool_calls.is_empty() {
-                    tool_rounds_executed += 1;
-                    if tool_rounds_executed > MAX_TOOL_ROUNDS {
-                        let _ = tx.send(Ok(Event::default().data(
-                            json!({ "error": "工具调用次数超过上限，请简化问题后重试" }).to_string(),
-                        )));
-                        break;
-                    }
-                    openai_messages.push(message);
-
-                    for tc in &tool_calls {
-                        let id = tc.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
-                        let name = tc
-                            .get("function")
-                            .and_then(|f| f.get("name"))
-                            .and_then(|x| x.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        let args = tc
-                            .get("function")
-                            .and_then(|f| f.get("arguments"))
-                            .and_then(|x| x.as_str())
-                            .unwrap_or("{}")
-                            .to_string();
-
-                        let result = ai_tools::run_tool(&db_path, &user_id, &name, &args).unwrap_or_else(|e| {
-                            json!({ "error": e }).to_string()
-                        });
-
-                        if name == "create_draft_entry" {
-                            if let Ok(val) = serde_json::from_str::<Value>(&result) {
-                                if val.get("ok").and_then(|x| x.as_bool()) == Some(true) {
-                                    if let Some(d) = val.get("draft") {
-                                        let payload = json!({
-                                            "draft": d,
-                                            "draft_token": val.get("draft_token")
-                                        });
-                                        let _ = tx.send(Ok(Event::default().data(payload.to_string())));
+                            if name == "create_draft_entry" {
+                                if let Ok(val) = serde_json::from_str::<Value>(&result) {
+                                    if val.get("ok").and_then(|x| x.as_bool()) == Some(true) {
+                                        if let Some(d) = val.get("draft") {
+                                            let payload = json!({
+                                                "draft": d,
+                                                "draft_token": val.get("draft_token")
+                                            });
+                                            let _ = tx.send(Ok(Event::default().data(payload.to_string())));
+                                        }
                                     }
                                 }
                             }
+
+                            openai_messages.push(json!({
+                                "role": "tool",
+                                "tool_call_id": id,
+                                "content": result
+                            }));
                         }
-
-                        openai_messages.push(json!({
-                            "role": "tool",
-                            "tool_call_id": id,
-                            "content": result
-                        }));
+                        continue;
                     }
-                    continue;
-            }
 
-            let mut text = message
-                .get("content")
-                .and_then(|c| c.as_str())
-                .unwrap_or("")
-                .to_string();
-            if text.trim().is_empty() && finish == "length" {
-                text = "（回答被长度限制截断，请缩短问题或重试。）".to_string();
-            }
-            if text.trim().is_empty() {
-                text = "（模型未返回文本内容。）".to_string();
-            }
-
-            let mut chars = text.chars();
-            loop {
-                let mut piece = String::new();
-                for _ in 0..32 {
-                    match chars.next() {
-                        Some(c) => piece.push(c),
-                        None => break,
+                    let fin = finish.as_str();
+                    if !sent_any && fin == "length" {
+                        let _ = tx.send(Ok(Event::default().data(
+                            json!({ "c": "（回答被长度限制截断，请缩短问题或重试。）" }).to_string(),
+                        )));
+                    } else if !sent_any && (fin == "stop" || fin.is_empty()) {
+                        let _ = tx.send(Ok(Event::default().data(
+                            json!({ "c": "（模型未返回文本内容。）" }).to_string(),
+                        )));
                     }
-                }
-                if piece.is_empty() {
                     break;
                 }
-                let _ = tx.send(Ok(Event::default().data(json!({ "c": piece }).to_string())));
-                tokio::task::yield_now().await;
+                Err(e) => {
+                    let _ = tx.send(Ok(Event::default().data(json!({ "error": e }).to_string())));
+                    break;
+                }
             }
-            break;
         }
 
         let mut hasher = Sha256::new();
