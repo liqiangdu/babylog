@@ -51,8 +51,11 @@
     <div id="mobile-topbar" class="mobile-topbar">
       <button type="button" id="btn-open-sidebar" class="icon-btn" aria-label="打开菜单">☰</button>
       <div id="mobile-topbar-title" class="mobile-topbar-title">Babylog</div>
-      <button type="button" id="btn-command-palette-mobile" class="icon-btn" aria-label="命令面板" title="命令面板 (⌘K)">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
+      <button type="button" id="btn-command-palette-mobile" class="icon-btn icon-btn-cmd-palette" aria-label="命令面板" title="命令面板 (⌘K)">
+        <svg class="cmd-palette-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+          <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.75"></circle>
+          <path d="M16.2 16.2L21 21" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"></path>
+        </svg>
       </button>
     </div>
 
@@ -91,11 +94,14 @@
           <button
             type="button"
             id="btn-command-palette-sidebar"
-            class="icon-btn sidebar-cmd-btn"
+            class="icon-btn sidebar-cmd-btn icon-btn-cmd-palette"
             aria-label="命令面板"
             title="命令面板 (⌘K / Ctrl+K)"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
+            <svg class="cmd-palette-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+              <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.75"></circle>
+              <path d="M16.2 16.2L21 21" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"></path>
+            </svg>
           </button>
         </div>
         <nav id="module-nav" class="module-nav" aria-label="模块导航">

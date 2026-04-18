@@ -3916,8 +3916,35 @@ html[data-theme="dark"] .module-ai::before {
   flex-shrink: 0;
 }
 
-#btn-command-palette-mobile {
+/* Command palette (iOS-style: template stroke icon, 44px hit target, subtle well on mobile topbar) */
+.cmd-palette-icon {
+  display: block;
+  width: 21px;
+  height: 21px;
+}
+
+.icon-btn-cmd-palette {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+.icon-btn-cmd-palette.sidebar-cmd-btn {
+  border-radius: 10px;
+}
+
+#btn-command-palette-mobile.icon-btn-cmd-palette {
   margin-left: auto;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+#btn-command-palette-mobile.icon-btn-cmd-palette:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+#btn-command-palette-mobile.icon-btn-cmd-palette:active {
+  background: color-mix(in srgb, var(--text) 13%, transparent);
 }
 
 .ai-context-policy-row {
