@@ -635,6 +635,11 @@ function initModuleNavigation() {
   nav.addEventListener("click", (ev) => {
     const target = /** @type {HTMLElement|null} */ (ev.target instanceof Element ? ev.target.closest(".module-nav-item") : null);
     if (!target) return;
+    if (target.getAttribute("data-action") === "command-palette") {
+      setSidebarOpen(false);
+      openCommandPalette();
+      return;
+    }
     const moduleId = target.getAttribute("data-module");
     if (!moduleId) return;
     setActiveModule(moduleId);
@@ -4179,7 +4184,7 @@ function renderCommandPaletteResults(query) {
 
   const modules = [
     { id: "profile", label: "档案", kw: "profile 档案 baby" },
-    { id: "ai", label: "AI 问答", kw: "ai 问答 助手" },
+    { id: "ai", label: "问答", kw: "ai 问答 助手" },
     { id: "quick-entry", label: "记录", kw: "记录 新建 添加" },
     { id: "timeline", label: "活动 / 时间轴", kw: "活动 时间轴 历史" },
     { id: "stats", label: "统计", kw: "统计 图表" },
@@ -4241,7 +4246,7 @@ function renderCommandPaletteResults(query) {
   });
 
   if (!items.length) {
-    root.innerHTML = `<div class="muted-line" style="padding:12px">无匹配结果</div>`;
+    root.innerHTML = `<div class="muted-line" style="padding:12px">未找到匹配结果</div>`;
     return;
   }
   for (const it of items.slice(0, 22)) {
@@ -4266,10 +4271,8 @@ function initCommandPalette() {
   if (input) {
     input.addEventListener("input", () => renderCommandPaletteResults(input.value));
   }
-  for (const id of ["btn-command-palette-sidebar", "btn-command-palette-mobile"]) {
-    const b = document.getElementById(id);
-    if (b) b.addEventListener("click", () => openCommandPalette());
-  }
+  const mobileCmd = document.getElementById("btn-command-palette-mobile");
+  if (mobileCmd) mobileCmd.addEventListener("click", () => openCommandPalette());
   document.addEventListener("keydown", (ev) => {
     const isK = String(ev.key).toLowerCase() === "k";
     if (!(isK && (ev.metaKey || ev.ctrlKey))) return;

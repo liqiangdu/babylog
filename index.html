@@ -50,7 +50,7 @@
     <div id="mobile-topbar" class="mobile-topbar">
       <button type="button" id="btn-open-sidebar" class="icon-btn" aria-label="打开菜单">☰</button>
       <div id="mobile-topbar-title" class="mobile-topbar-title">Babylog</div>
-      <button type="button" id="btn-command-palette-mobile" class="icon-btn icon-btn-cmd-palette" aria-label="命令面板" title="命令面板 (⌘K)">
+      <button type="button" id="btn-command-palette-mobile" class="icon-btn icon-btn-cmd-palette" aria-label="搜索" title="搜索 (⌘K)">
         <svg class="cmd-palette-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
           <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.75"></circle>
           <path d="M16.2 16.2L21 21" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"></path>
@@ -90,18 +90,6 @@
               <path d="M15 6l-6 6 6 6"></path>
             </svg>
           </button>
-          <button
-            type="button"
-            id="btn-command-palette-sidebar"
-            class="icon-btn sidebar-cmd-btn icon-btn-cmd-palette"
-            aria-label="命令面板"
-            title="命令面板 (⌘K / Ctrl+K)"
-          >
-            <svg class="cmd-palette-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
-              <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.75"></circle>
-              <path d="M16.2 16.2L21 21" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"></path>
-            </svg>
-          </button>
         </div>
         <nav id="module-nav" class="module-nav" aria-label="模块导航">
           <button type="button" class="module-nav-item active" data-module="profile" title="档案">
@@ -138,6 +126,21 @@
             <span class="module-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"></rect><circle cx="9" cy="11" r="1.6"></circle><path d="M20 15l-4-3-4 4-3-2-5 4"></path></svg>
             </span><span class="module-nav-text">相册</span>
+          </button>
+          <button
+            type="button"
+            class="module-nav-item"
+            id="btn-command-palette-nav"
+            data-action="command-palette"
+            title="搜索 (⌘K / Ctrl+K)"
+            aria-label="搜索"
+          >
+            <span class="module-nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.75"></circle>
+                <path d="M16.2 16.2L21 21" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"></path>
+              </svg>
+            </span><span class="module-nav-text">搜索</span>
           </button>
         </nav>
         <div class="sidebar-tools">
@@ -669,17 +672,17 @@
 
     <div id="command-palette" class="command-palette hidden" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
       <div class="command-palette-panel">
-        <h2 id="command-palette-title" class="command-palette-title">命令面板</h2>
+        <h2 id="command-palette-title" class="command-palette-title">搜索</h2>
         <input
           type="search"
           id="command-palette-input"
           class="command-palette-input"
-          placeholder="搜索记录、跳转模块、发起自然语言记账…"
+          placeholder="搜索模块、记录或自然语言记账…"
           autocomplete="off"
-          aria-label="命令面板搜索"
+          aria-label="搜索"
         />
-        <div id="command-palette-results" class="command-palette-results" role="listbox" aria-label="结果"></div>
-        <p class="command-palette-footer muted-line">⌘K / Ctrl+K 打开 · Esc 关闭</p>
+        <div id="command-palette-results" class="command-palette-results" role="listbox" aria-label="搜索结果"></div>
+        <p class="command-palette-footer muted-line">⌘K / Ctrl+K 打开搜索 · Esc 关闭</p>
       </div>
     </div>
 

@@ -4122,10 +4122,6 @@ html[data-theme="dark"] .module-ai::before {
   color: var(--text);
 }
 
-.sidebar-cmd-btn {
-  flex-shrink: 0;
-}
-
 /* Command palette (iOS-style: template stroke icon, 44px hit target, subtle well on mobile topbar) */
 .cmd-palette-icon {
   display: block;
@@ -4137,10 +4133,6 @@ html[data-theme="dark"] .module-ai::before {
   min-width: 44px;
   min-height: 44px;
   border-radius: 12px;
-}
-
-.icon-btn-cmd-palette.sidebar-cmd-btn {
-  border-radius: 10px;
 }
 
 #btn-command-palette-mobile.icon-btn-cmd-palette {
