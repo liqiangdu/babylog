@@ -4049,11 +4049,46 @@ function syncSettingsDialog() {
   syncThemeToggleUi();
 }
 
+
+const SETTINGS_TAB_IDS = ["settings-tab-account", "settings-tab-theme", "settings-tab-notify", "settings-tab-data"];
+const SETTINGS_PANEL_IDS = ["settings-panel-account", "settings-panel-theme", "settings-panel-notify", "settings-panel-data"];
+
+/**
+ * @param {number} index
+ */
+function setSettingsDialogTab(index) {
+  const tabs = SETTINGS_TAB_IDS.map((id) => document.getElementById(id)).filter(Boolean);
+  const panels = SETTINGS_PANEL_IDS.map((id) => document.getElementById(id)).filter(Boolean);
+  if (!tabs.length || tabs.length !== panels.length) return;
+  const i = Math.max(0, Math.min(index, tabs.length - 1));
+  tabs.forEach((tab, j) => {
+    const selected = j === i;
+    tab.setAttribute("aria-selected", selected ? "true" : "false");
+    tab.tabIndex = selected ? 0 : -1;
+    tab.classList.toggle("is-active", selected);
+  });
+  panels.forEach((panel, j) => {
+    const hide = j !== i;
+    if (hide) {
+      panel.setAttribute("hidden", "");
+      panel.classList.add("hidden");
+    } else {
+      panel.removeAttribute("hidden");
+      panel.classList.remove("hidden");
+    }
+  });
+}
+
+function resetSettingsDialogTab() {
+  setSettingsDialogTab(0);
+}
+
 function openSettingsDialog() {
   const overlay = document.getElementById("settings-overlay");
   if (!overlay) return;
   overlay.classList.remove("hidden");
   syncSettingsDialog();
+  resetSettingsDialogTab();
   document.addEventListener("keydown", onSettingsKey, true);
 }
 
@@ -4069,7 +4104,7 @@ function syncAiContextPolicyHint() {
   if (!el) return;
   const p = aiProject.contextPolicy || "full_recent";
   const hints = {
-    full_recent: "发送最近最多 300 条记录摘要（仍受设置 → AI 与隐私中的勾选项影响）。",
+    full_recent: "发送最近最多 300 条记录摘要（仍受设置 → 数据控制中的勾选项影响）。",
     recent_7d: "仅包含最近 7 天内最多 150 条记录。",
     timeline_filter: "与「活动」模块的类型、日期筛选一致，最多 200 条。",
     stats_only: "仅发送各分类条数统计，不包含逐条记录正文。",
@@ -4242,6 +4277,27 @@ function initSettingsDialog() {
   overlay.addEventListener("click", (ev) => {
     if (ev.target === overlay) closeSettingsDialog();
   });
+
+  const settingsTablist = document.querySelector("#settings-overlay .settings-nav");
+  if (settingsTablist) {
+    settingsTablist.addEventListener("click", (ev) => {
+      const btn = /** @type {HTMLElement|null} */ (ev.target.closest(".settings-nav-item"));
+      if (!btn || !settingsTablist.contains(btn)) return;
+      const idx = SETTINGS_TAB_IDS.indexOf(btn.id);
+      if (idx >= 0) setSettingsDialogTab(idx);
+    });
+    settingsTablist.addEventListener("keydown", (ev) => {
+      if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
+      const tabs = SETTINGS_TAB_IDS.map((id) => document.getElementById(id)).filter(Boolean);
+      let idx = tabs.findIndex((t) => t === document.activeElement);
+      if (idx < 0) return;
+      ev.preventDefault();
+      if (ev.key === "ArrowDown") idx = Math.min(tabs.length - 1, idx + 1);
+      else idx = Math.max(0, idx - 1);
+      setSettingsDialogTab(idx);
+      tabs[idx]?.focus();
+    });
+  }
 
   const notifToggle = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-notif-toggle"));
   if (notifToggle) {

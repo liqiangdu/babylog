@@ -173,104 +173,157 @@
             </button>
           </header>
           <div class="settings-body">
-            <section class="settings-section">
-              <h3 class="settings-section-title">账号</h3>
-              <div class="settings-row settings-row--avatar">
-                <div class="settings-avatar-wrap">
-                  <span id="settings-user-avatar" class="settings-user-avatar">U</span>
-                  <label for="settings-avatar-input" class="settings-avatar-edit" title="更换头像">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                  </label>
-                  <input type="file" id="settings-avatar-input" accept="image/*" class="hidden" />
+            <nav class="settings-nav" role="tablist" aria-label="设置类别">
+              <button type="button" class="settings-nav-item is-active" role="tab" id="settings-tab-account" aria-controls="settings-panel-account" aria-selected="true" tabindex="0">账号</button>
+              <button type="button" class="settings-nav-item" role="tab" id="settings-tab-theme" aria-controls="settings-panel-theme" aria-selected="false" tabindex="-1">主题</button>
+              <button type="button" class="settings-nav-item" role="tab" id="settings-tab-notify" aria-controls="settings-panel-notify" aria-selected="false" tabindex="-1">通知</button>
+              <button type="button" class="settings-nav-item" role="tab" id="settings-tab-data" aria-controls="settings-panel-data" aria-selected="false" tabindex="-1">数据控制</button>
+            </nav>
+            <div class="settings-panels">
+              <section id="settings-panel-account" class="settings-tabpanel" role="tabpanel" aria-labelledby="settings-tab-account">
+                <div class="settings-section">
+                  <h3 class="settings-section-title">账号</h3>
+                  <div class="settings-row settings-row--avatar">
+                    <div class="settings-avatar-wrap">
+                      <span id="settings-user-avatar" class="settings-user-avatar">U</span>
+                      <label for="settings-avatar-input" class="settings-avatar-edit" title="更换头像">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                      </label>
+                      <input type="file" id="settings-avatar-input" accept="image/*" class="hidden" />
+                    </div>
+                    <div class="settings-row-text">
+                      <div id="settings-username" class="settings-username">—</div>
+                      <div class="settings-row-sub">点击相机图标更换头像；最大 256 KB</div>
+                      <button type="button" id="btn-clear-user-avatar" class="settings-link-btn">移除头像</button>
+                    </div>
+                  </div>
                 </div>
-                <div class="settings-row-text">
-                  <div id="settings-username" class="settings-username">—</div>
-                  <div class="settings-row-sub">点击相机图标更换头像；最大 256 KB</div>
-                  <button type="button" id="btn-clear-user-avatar" class="settings-link-btn">移除头像</button>
-                </div>
-              </div>
-            </section>
+              </section>
 
-            <section class="settings-section">
-              <h3 class="settings-section-title">主题</h3>
-              <div class="settings-row">
-                <div class="settings-row-text">
-                  <div class="settings-row-label">外观</div>
-                  <div class="settings-row-sub">跟随系统或强制浅色 / 深色</div>
+              <section id="settings-panel-theme" class="settings-tabpanel hidden" role="tabpanel" aria-labelledby="settings-tab-theme" hidden>
+                <div class="settings-section">
+                  <h3 class="settings-section-title">主题</h3>
+                  <div class="settings-row settings-row--theme">
+                    <div class="settings-row-text">
+                      <div class="settings-row-label">外观</div>
+                      <div class="settings-row-sub">跟随系统或强制浅色 / 深色</div>
+                    </div>
+                    <div class="settings-theme-capsule">
+                      <div class="theme-toggle settings-theme-toggle" role="group" aria-label="主题">
+                        <button type="button" class="theme-icon-btn" data-theme="system" aria-pressed="false" aria-label="跟随系统" title="跟随系统">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8"></path><path d="M12 16v4"></path></svg>
+                        </button>
+                        <button type="button" class="theme-icon-btn" data-theme="light" aria-pressed="false" aria-label="浅色" title="浅色">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
+                        </button>
+                        <button type="button" class="theme-icon-btn" data-theme="dark" aria-pressed="false" aria-label="深色" title="深色">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="theme-toggle settings-theme-toggle" role="group" aria-label="主题">
-                  <button type="button" class="theme-icon-btn" data-theme="system" aria-pressed="false" aria-label="跟随系统" title="跟随系统">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8"></path><path d="M12 16v4"></path></svg>
-                  </button>
-                  <button type="button" class="theme-icon-btn" data-theme="light" aria-pressed="false" aria-label="浅色" title="浅色">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
-                  </button>
-                  <button type="button" class="theme-icon-btn" data-theme="dark" aria-pressed="false" aria-label="深色" title="深色">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path></svg>
-                  </button>
-                </div>
-              </div>
-            </section>
+              </section>
 
-            <section class="settings-section">
-              <h3 class="settings-section-title">通知</h3>
-              <div class="settings-row">
-                <div class="settings-row-text">
-                  <div class="settings-row-label">疫苗到期提醒</div>
-                  <div class="settings-row-sub" id="settings-notif-status">在到期前提前弹出浏览器通知</div>
+              <section id="settings-panel-notify" class="settings-tabpanel hidden" role="tabpanel" aria-labelledby="settings-tab-notify" hidden>
+                <div class="settings-section">
+                  <h3 class="settings-section-title">通知</h3>
+                  <div class="settings-row">
+                    <div class="settings-row-text">
+                      <div class="settings-row-label">疫苗到期提醒</div>
+                      <div class="settings-row-sub" id="settings-notif-status">在到期前提前弹出浏览器通知</div>
+                    </div>
+                    <label class="settings-switch settings-switch--capsule">
+                      <input type="checkbox" id="settings-notif-toggle" />
+                      <span class="settings-switch-slider" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                  <div class="settings-row">
+                    <div class="settings-row-text">
+                      <div class="settings-row-label">提前天数</div>
+                      <div class="settings-row-sub">距离应种日期多少天开始提醒</div>
+                    </div>
+                    <input type="number" id="settings-notif-days" class="settings-number" min="0" max="30" step="1" />
+                  </div>
                 </div>
-                <label class="settings-switch">
-                  <input type="checkbox" id="settings-notif-toggle" />
-                  <span class="settings-switch-slider" aria-hidden="true"></span>
-                </label>
-              </div>
-              <div class="settings-row">
-                <div class="settings-row-text">
-                  <div class="settings-row-label">提前天数</div>
-                  <div class="settings-row-sub">距离应种日期多少天开始提醒</div>
-                </div>
-                <input type="number" id="settings-notif-days" class="settings-number" min="0" max="30" step="1" />
-              </div>
-            </section>
+              </section>
 
-            <section class="settings-section settings-section--ai-privacy">
-              <h3 class="settings-section-title">AI 与隐私</h3>
-              <div class="settings-ai-privacy-card">
-                <p class="settings-ai-intro">
-                  控制写入「宝宝数据摘要」的文本范围。服务端工具（按日期查记录、疫苗表、草稿）单独受「允许服务端工具」开关约束。
-                </p>
-                <div class="settings-ai-privacy-list" role="group" aria-label="AI 摘要与工具同意项">
-                  <label class="settings-check-row">
-                    <input type="checkbox" id="settings-ai-consent-profile" checked />
-                    <span class="settings-check-label">在摘要中包含档案与月龄</span>
-                  </label>
-                  <label class="settings-check-row">
-                    <input type="checkbox" id="settings-ai-consent-vaccines" checked />
-                    <span class="settings-check-label">在摘要中包含疫苗计划（最多 40 条）</span>
-                  </label>
-                  <label class="settings-check-row">
-                    <input type="checkbox" id="settings-ai-consent-entries" checked />
-                    <span class="settings-check-label">在摘要中包含照护记录</span>
-                  </label>
-                  <label class="settings-check-row">
-                    <input type="checkbox" id="settings-ai-consent-notes" checked />
-                    <span class="settings-check-label">记录中包含自由笔记</span>
-                  </label>
-                  <label class="settings-check-row">
-                    <input type="checkbox" id="settings-ai-consent-photos" checked />
-                    <span class="settings-check-label">记录中标注照片数量（不含 URL）</span>
-                  </label>
-                  <label class="settings-check-row">
-                    <input type="checkbox" id="settings-ai-consent-tools" checked />
-                    <span class="settings-check-label">允许服务端工具（模型可查询你账号下的真实数据）</span>
-                  </label>
-                  <label class="settings-check-row settings-check-row--disclosure">
-                    <input type="checkbox" id="settings-ai-sync-ack" />
-                    <span class="settings-check-label">我已了解：AI 会话与指令目前保存在本机浏览器；若未来同步到云端，将与账号绑定并需单独产品说明。</span>
-                  </label>
+              <section id="settings-panel-data" class="settings-tabpanel hidden settings-section--ai-privacy" role="tabpanel" aria-labelledby="settings-tab-data" hidden>
+                <div class="settings-section">
+                  <h3 class="settings-section-title">数据控制</h3>
+                  <div class="settings-ai-privacy-card">
+                    <p class="settings-ai-intro">
+                      控制写入「宝宝数据摘要」的文本范围。服务端工具（按日期查记录、疫苗表、草稿）单独受「允许服务端工具」开关约束。
+                    </p>
+                    <div class="settings-ai-privacy-list" role="group" aria-label="数据摘要与工具同意项">
+                      <label class="settings-row settings-row--toggle">
+                        <div class="settings-row-text">
+                          <div class="settings-row-label">在摘要中包含档案与月龄</div>
+                        </div>
+                        <span class="settings-switch settings-switch--capsule">
+                          <input type="checkbox" id="settings-ai-consent-profile" checked />
+                          <span class="settings-switch-slider" aria-hidden="true"></span>
+                        </span>
+                      </label>
+                      <label class="settings-row settings-row--toggle">
+                        <div class="settings-row-text">
+                          <div class="settings-row-label">在摘要中包含疫苗计划（最多 40 条）</div>
+                        </div>
+                        <span class="settings-switch settings-switch--capsule">
+                          <input type="checkbox" id="settings-ai-consent-vaccines" checked />
+                          <span class="settings-switch-slider" aria-hidden="true"></span>
+                        </span>
+                      </label>
+                      <label class="settings-row settings-row--toggle">
+                        <div class="settings-row-text">
+                          <div class="settings-row-label">在摘要中包含照护记录</div>
+                        </div>
+                        <span class="settings-switch settings-switch--capsule">
+                          <input type="checkbox" id="settings-ai-consent-entries" checked />
+                          <span class="settings-switch-slider" aria-hidden="true"></span>
+                        </span>
+                      </label>
+                      <label class="settings-row settings-row--toggle">
+                        <div class="settings-row-text">
+                          <div class="settings-row-label">记录中包含自由笔记</div>
+                        </div>
+                        <span class="settings-switch settings-switch--capsule">
+                          <input type="checkbox" id="settings-ai-consent-notes" checked />
+                          <span class="settings-switch-slider" aria-hidden="true"></span>
+                        </span>
+                      </label>
+                      <label class="settings-row settings-row--toggle">
+                        <div class="settings-row-text">
+                          <div class="settings-row-label">记录中标注照片数量（不含 URL）</div>
+                        </div>
+                        <span class="settings-switch settings-switch--capsule">
+                          <input type="checkbox" id="settings-ai-consent-photos" checked />
+                          <span class="settings-switch-slider" aria-hidden="true"></span>
+                        </span>
+                      </label>
+                      <label class="settings-row settings-row--toggle">
+                        <div class="settings-row-text">
+                          <div class="settings-row-label">允许服务端工具（模型可查询你账号下的真实数据）</div>
+                        </div>
+                        <span class="settings-switch settings-switch--capsule">
+                          <input type="checkbox" id="settings-ai-consent-tools" checked />
+                          <span class="settings-switch-slider" aria-hidden="true"></span>
+                        </span>
+                      </label>
+                      <label class="settings-row settings-row--toggle settings-row--disclosure">
+                        <div class="settings-row-text">
+                          <div class="settings-row-label settings-row-label--muted">我已了解：AI 会话与指令目前保存在本机浏览器；若未来同步到云端，将与账号绑定并需单独产品说明。</div>
+                        </div>
+                        <span class="settings-switch settings-switch--capsule">
+                          <input type="checkbox" id="settings-ai-sync-ack" />
+                          <span class="settings-switch-slider" aria-hidden="true"></span>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            </div>
           </div>
         </div>
       </div>
