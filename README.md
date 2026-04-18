@@ -48,7 +48,11 @@ cd backend
 cargo run
 ```
 
-默认监听 `http://127.0.0.1:8787`，提供：
+默认监听地址由环境变量 **`BABYLOG_LISTEN`** 决定，格式为 `host:port`，未设置时为 **`127.0.0.1:8787`**（仅本机可连）。同一局域网内用手机或其它设备访问时，请改为例如 **`0.0.0.0:8787`**，并同步配置前端的 `VITE_API_BASE` 与 **`BABYLOG_ALLOWED_ORIGINS`**（见下文 CORS 说明）。`./start.sh` 默认会导出 `BABYLOG_LISTEN=127.0.0.1:$BACKEND_PORT`，可在命令前覆盖：`BABYLOG_LISTEN=0.0.0.0:8787 ./start.sh`。
+
+开发机用 Vite 暴露到局域网时，可执行：`npm run dev -- --host 0.0.0.0 --port 3000`，再把 `BABYLOG_ALLOWED_ORIGINS` 中加入 `http://<本机局域网IP>:3000`。
+
+默认提供：
 
 - `GET /health`
 - `POST /api/auth/register`、`POST /api/auth/login`、`GET /api/auth/me`、`POST /api/auth/logout`
@@ -71,6 +75,7 @@ cargo run
 
 安全加固相关环境变量（可选）：
 
+- **`BABYLOG_LISTEN`**：HTTP 监听地址，默认 `127.0.0.1:8787`。局域网或真机调试请设为 **`0.0.0.0:8787`**（或指定网卡 IP），并配置 `BABYLOG_ALLOWED_ORIGINS` 与前端 `VITE_API_BASE`。
 - `BABYLOG_PEPPER`：密码 pepper。会通过 HMAC-SHA256 对密码做一层预杂凑再交给 Argon2；**强烈建议**在生产环境设置为一段高熵随机串。空值时会退化到纯 Argon2，启动时会打印告警。旧 hash 会在下次登录时自动兼容（不需要重置密码）。
 - `BABYLOG_COOKIE_MODE`：会话模式，默认 `1`（Cookie 模式）。`/api/auth/login` 和 `/api/auth/register` 成功后同时返回 JSON 中的 `token` / `csrf_token`（老客户端兼容），并 `Set-Cookie: babylog_session=...; HttpOnly; SameSite=Lax` + 非 HttpOnly 的 `babylog_csrf`；前端从 Cookie 读取 CSRF 并自动附加 `X-CSRF-Token`。设为 `0` 退回 Bearer 模式。
 - `BABYLOG_COOKIE_SECURE=1`：给 Cookie 加 `Secure` 属性（配合 HTTPS 使用）。

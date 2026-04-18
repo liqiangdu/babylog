@@ -19,7 +19,13 @@ To swap in S3-compatible storage (R2, MinIO, AWS S3), replace the body of `uploa
 cargo run
 ```
 
-Server starts at `http://127.0.0.1:8787`.
+By default the server listens on **`127.0.0.1:8787`** (local-only). For LAN access from phones or other machines:
+
+```bash
+BABYLOG_LISTEN=0.0.0.0:8787 cargo run
+```
+
+Also set **`BABYLOG_ALLOWED_ORIGINS`** to include your dev frontend origin (e.g. `http://192.168.1.5:3000`) and point the frontend **`VITE_API_BASE`** at `http://<host>:8787/api`.
 
 ## Persistence
 

@@ -11,21 +11,25 @@ if (-not (Test-Path $backend)) {
     throw "Backend directory not found: $backend"
 }
 
+if (-not $env:BACKEND_PORT) { $env:BACKEND_PORT = "8787" }
+if (-not $env:BABYLOG_LISTEN) { $env:BABYLOG_LISTEN = "127.0.0.1:$($env:BACKEND_PORT)" }
+
 $frontendCmd = "cd `"$root`"; if (-not (Test-Path node_modules)) { npm install }; npm run dev"
 $backendCmd = "cd `"$backend`"; cargo run"
 
-# Force restart backend: stop current listener on 8787 first.
+# Force restart backend: stop any listener on BACKEND_PORT first.
 try {
-    $existing = Get-NetTCPConnection -LocalAddress "127.0.0.1" -LocalPort 8787 -State Listen -ErrorAction SilentlyContinue
+    $port = [int]$env:BACKEND_PORT
+    $existing = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
     if ($existing) {
         $pids = $existing | Select-Object -ExpandProperty OwningProcess -Unique
         foreach ($pid in $pids) {
             Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-            Write-Host "[backend]  stopped existing process PID=$pid on 127.0.0.1:8787"
+            Write-Host "[backend]  stopped existing process PID=$pid on port $port"
         }
     }
 } catch {
-    Write-Host "[backend]  warning: failed to pre-stop existing process on 8787"
+    Write-Host "[backend]  warning: failed to pre-stop existing process on $($env:BACKEND_PORT)"
 }
 
 if ($NoNewWindow) {

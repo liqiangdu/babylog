@@ -16,6 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 BACKEND_PORT="${BACKEND_PORT:-8787}"
+export BABYLOG_LISTEN="${BABYLOG_LISTEN:-127.0.0.1:${BACKEND_PORT}}"
 
 if [[ ! -d "$BACKEND_DIR" ]]; then
   echo "Backend directory not found: $BACKEND_DIR" >&2
@@ -97,7 +98,7 @@ echo "$!" > "$FRONTEND_PIDFILE"
 echo "$!" > "$BACKEND_PIDFILE"
 
 echo "[boot] frontend -> http://localhost:$FRONTEND_PORT"
-echo "[boot] backend  -> http://localhost:$BACKEND_PORT"
+echo "[boot] backend  -> http://${BABYLOG_LISTEN}  (set BABYLOG_LISTEN=0.0.0.0:$BACKEND_PORT for LAN)"
 echo "[boot] press Ctrl-C to stop both."
 
 wait

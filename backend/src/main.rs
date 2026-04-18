@@ -207,7 +207,15 @@ async fn main() {
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8787));
+    // `127.0.0.1` only accepts local connections; use `0.0.0.0:8787` for LAN / device testing.
+    let listen_raw = env::var("BABYLOG_LISTEN").unwrap_or_else(|_| "127.0.0.1:8787".to_string());
+    let addr: SocketAddr = match listen_raw.parse() {
+        Ok(a) => a,
+        Err(err) => {
+            tracing::error!("invalid BABYLOG_LISTEN {listen_raw:?}: {err}");
+            return;
+        }
+    };
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(listener) => listener,
         Err(err) => {
