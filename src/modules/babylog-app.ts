@@ -3628,10 +3628,8 @@ function renderAiChat() {
       bubble.classList.add("ai-md");
       const raw = m.content || "";
       if (isLastAssistantStreaming) {
-        const plain = raw || (aiBusy ? "…" : "");
-        bubble.innerHTML = plain
-          ? `<span class="ai-stream-plain">${escapeHtml(plain).replace(/\n/g, "<br>")}</span>`
-          : "";
+        const streamMd = raw || (aiBusy ? "…" : "");
+        bubble.innerHTML = streamMd ? renderMarkdownToHtml(streamMd) : "";
         bubble.classList.add("ai-streaming");
       } else {
         const content = raw || "";

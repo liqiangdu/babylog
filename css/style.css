@@ -3167,11 +3167,6 @@ html[data-theme="dark"] .module-ai::before {
   white-space: normal;
 }
 
-/* Live stream: plain text only (full markdown applied after stream ends). */
-.ai-bubble .ai-stream-plain {
-  white-space: normal;
-}
-
 .ai-md h1,
 .ai-md h2,
 .ai-md h3 {
