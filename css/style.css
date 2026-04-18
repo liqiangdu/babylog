@@ -3157,6 +3157,11 @@ html[data-theme="dark"] .module-ai::before {
   margin-top: 2px;
 }
 
+/* No reserved gap when status text is unused (streaming uses bubble caret only). */
+.ai-status-line:empty {
+  display: none;
+}
+
 .ai-status-line.ai-status-busy::before {
   content: "";
   width: 8px;

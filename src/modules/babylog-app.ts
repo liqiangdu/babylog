@@ -3778,7 +3778,6 @@ async function sendAiMessage() {
   renderModuleSummaries();
   aiBusy = true;
   refreshAiUiState();
-  setAiStatus("助手正在生成回复…");
   const assistant = assistantMsg;
   const messageWindow = active.messages.slice(0, -1).slice(-40).map((m) => ({ role: m.role, content: m.content }));
   const consent = getAiContextConsent();
