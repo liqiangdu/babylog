@@ -325,13 +325,27 @@ function syncSidebarAccount() {
   const loggedIn = Boolean(authState.user && !authState.localOnly);
   if (loggedIn) {
     box.classList.remove("hidden");
-    if (name) name.textContent = authState.user.username;
+    const uname = authState.user.username;
+    if (name) {
+      name.textContent = uname;
+      name.title = uname;
+    }
     renderAvatarInto(avatar, authState.user);
-    if (btn) btn.title = authState.user.username;
+    if (btn) {
+      btn.title = uname;
+      btn.setAttribute("aria-label", `${uname}，打开账号菜单`);
+    }
   } else {
     box.classList.add("hidden");
-    if (name) name.textContent = "";
+    if (name) {
+      name.textContent = "";
+      name.removeAttribute("title");
+    }
     if (avatar) avatar.textContent = "U";
+    if (btn) {
+      btn.title = "账号";
+      btn.setAttribute("aria-label", "打开账号菜单");
+    }
   }
   // Keep settings dialog in sync if it's open.
   const settingsOverlay = document.getElementById("settings-overlay");
