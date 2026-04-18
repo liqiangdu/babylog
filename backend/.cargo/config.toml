@@ -1,2 +1,3 @@
-[build]
-target = "x86_64-pc-windows-msvc"
+# Use the default host target for local development.
+# To cross-compile for Windows, run: rustup target add x86_64-pc-windows-msvc
+# and set e.g. `cargo build --target x86_64-pc-windows-msvc`.

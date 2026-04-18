@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, env, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
+mod ai_tools;
 mod auth;
 mod chat;
 mod ratelimit;

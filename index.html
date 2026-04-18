@@ -51,6 +51,9 @@
     <div id="mobile-topbar" class="mobile-topbar">
       <button type="button" id="btn-open-sidebar" class="icon-btn" aria-label="打开菜单">☰</button>
       <div id="mobile-topbar-title" class="mobile-topbar-title">Babylog</div>
+      <button type="button" id="btn-command-palette-mobile" class="icon-btn" aria-label="命令面板" title="命令面板 (⌘K)">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
+      </button>
     </div>
 
     <div id="app-backdrop" class="app-backdrop hidden"></div>
@@ -84,6 +87,15 @@
             <svg class="sidebar-collapse-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M15 6l-6 6 6 6"></path>
             </svg>
+          </button>
+          <button
+            type="button"
+            id="btn-command-palette-sidebar"
+            class="icon-btn sidebar-cmd-btn"
+            aria-label="命令面板"
+            title="命令面板 (⌘K / Ctrl+K)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
           </button>
         </div>
         <nav id="module-nav" class="module-nav" aria-label="模块导航">
@@ -215,6 +227,41 @@
                 <input type="number" id="settings-notif-days" class="settings-number" min="0" max="30" step="1" />
               </div>
             </section>
+
+            <section class="settings-section">
+              <h3 class="settings-section-title">AI 与隐私</h3>
+              <p class="settings-row-sub settings-ai-intro">
+                控制写入「宝宝数据摘要」的文本范围。服务端工具（按日期查记录、疫苗表、草稿）单独受「允许服务端工具」开关约束。
+              </p>
+              <label class="settings-check-row">
+                <input type="checkbox" id="settings-ai-consent-profile" checked />
+                <span>在摘要中包含档案与月龄</span>
+              </label>
+              <label class="settings-check-row">
+                <input type="checkbox" id="settings-ai-consent-vaccines" checked />
+                <span>在摘要中包含疫苗计划（最多 40 条）</span>
+              </label>
+              <label class="settings-check-row">
+                <input type="checkbox" id="settings-ai-consent-entries" checked />
+                <span>在摘要中包含照护记录</span>
+              </label>
+              <label class="settings-check-row">
+                <input type="checkbox" id="settings-ai-consent-notes" checked />
+                <span>记录中包含自由笔记</span>
+              </label>
+              <label class="settings-check-row">
+                <input type="checkbox" id="settings-ai-consent-photos" checked />
+                <span>记录中标注照片数量（不含 URL）</span>
+              </label>
+              <label class="settings-check-row">
+                <input type="checkbox" id="settings-ai-consent-tools" checked />
+                <span>允许服务端工具（模型可查询你账号下的真实数据）</span>
+              </label>
+              <label class="settings-check-row">
+                <input type="checkbox" id="settings-ai-sync-ack" />
+                <span>我已了解：AI 会话与指令目前保存在本机浏览器；若未来同步到云端，将与账号绑定并需单独产品说明。</span>
+              </label>
+            </section>
           </div>
         </div>
       </div>
@@ -290,6 +337,16 @@
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25z"></path><path d="M14.06 4.19l3.75 3.75"></path></svg>
                       </button>
                     </div>
+                    <div class="ai-context-policy-row">
+                      <label class="ai-context-policy-label" for="ai-context-policy">上下文策略</label>
+                      <select id="ai-context-policy" class="ai-context-policy-select" aria-label="AI 上下文策略">
+                        <option value="full_recent">最近记录（最多 300 条）</option>
+                        <option value="recent_7d">最近 7 天详情</option>
+                        <option value="timeline_filter">与活动筛选一致</option>
+                        <option value="stats_only">仅统计摘要（不含逐条记录）</option>
+                      </select>
+                    </div>
+                    <p id="ai-context-policy-hint" class="muted-line ai-context-policy-hint"></p>
                   </div>
                   <div class="ai-sessions-head">
                     <span class="section-title ai-sessions-title">会话</span>
@@ -307,6 +364,16 @@
                   </div>
                   <div id="ai-chat-log" class="ai-chat-log" aria-live="polite"></div>
                   <div class="ai-compose">
+                    <div id="ai-draft-banner" class="ai-draft-banner hidden" role="region" aria-label="待确认的记录草稿">
+                      <div class="ai-draft-banner-text">
+                        <strong>草稿记录</strong>
+                        <span id="ai-draft-summary" class="ai-draft-summary"></span>
+                      </div>
+                      <div class="ai-draft-banner-actions">
+                        <button type="button" class="btn btn-secondary" id="btn-ai-draft-dismiss">丢弃</button>
+                        <button type="button" class="btn btn-primary" id="btn-ai-draft-confirm">写入时间轴</button>
+                      </div>
+                    </div>
                     <div class="ai-input-wrap">
                       <textarea id="ai-user-input" class="ai-textarea" rows="1" placeholder="输入问题并回车发送（Shift+Enter 换行）"></textarea>
                       <button type="button" id="btn-ai-send" class="ai-send-btn" aria-label="发送消息">
@@ -544,6 +611,22 @@
     </div>
 
     <div id="app-toast" class="app-toast" role="status" aria-live="polite"></div>
+
+    <div id="command-palette" class="command-palette hidden" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
+      <div class="command-palette-panel">
+        <h2 id="command-palette-title" class="command-palette-title">命令面板</h2>
+        <input
+          type="search"
+          id="command-palette-input"
+          class="command-palette-input"
+          placeholder="搜索记录、跳转模块、发起自然语言记账…"
+          autocomplete="off"
+          aria-label="命令面板搜索"
+        />
+        <div id="command-palette-results" class="command-palette-results" role="listbox" aria-label="结果"></div>
+        <p class="command-palette-footer muted-line">⌘K / Ctrl+K 打开 · Esc 关闭</p>
+      </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>

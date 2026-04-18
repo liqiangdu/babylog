@@ -64,10 +64,25 @@ export interface AiSession {
   messages: AiMessage[];
 }
 
+/** What the app may include in the client-built `baby_context` string sent to `/api/chat/stream`. */
+export interface AiContextConsent {
+  profile: boolean;
+  vaccinesSummary: boolean;
+  entriesSummary: boolean;
+  includeNotesInEntries: boolean;
+  includePhotosInEntries: boolean;
+  /** When false, the backend will not register OpenAI-style tools (no DB reads via model). */
+  allowServerTools: boolean;
+}
+
 export interface AiProject {
   instruction: string;
   activeSessionId: string;
+  /** full_recent | stats_only | recent_7d | timeline_filter */
   contextPolicy: string;
+  aiContextConsent?: Partial<AiContextConsent>;
+  /** User acknowledged that AI sessions stay in localStorage unless exported. */
+  syncSessionsDisclaimerAck?: boolean;
   sessions: AiSession[];
 }
 

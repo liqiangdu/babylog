@@ -85,12 +85,22 @@ function setImportProgress(done, total, show) {
   track.setAttribute("aria-valuenow", String(pct));
 }
 /** @type {AiProject} */
-let aiProject = { instruction: DEFAULT_AI_INSTRUCTION, activeSessionId: "", contextPolicy: "full_recent", sessions: [] };
+let aiProject = {
+  instruction: DEFAULT_AI_INSTRUCTION,
+  activeSessionId: "",
+  contextPolicy: "full_recent",
+  aiContextConsent: {},
+  syncSessionsDisclaimerAck: false,
+  sessions: [],
+};
 let aiStreamRenderScheduled = false;
 let aiBusy = false;
 let aiSessionSearchKeyword = "";
 /** @type {string|null} 列表内删除确认：当前待确认的会话 id */
 let aiSessionDeletePendingId = null;
+/** @type {import("../types/models").LogEntry|null} 服务端草稿，确认后写入时间轴 */
+let pendingAiEntryDraft = null;
+let commandPaletteOpen = false;
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -3043,7 +3053,9 @@ function getActiveAiSession() {
 
 function ensureAiProjectConsistency() {
   if (!Array.isArray(aiProject.sessions)) aiProject.sessions = [];
-  if (!["full_recent"].includes(aiProject.contextPolicy)) aiProject.contextPolicy = "full_recent";
+  const policies = ["full_recent", "stats_only", "recent_7d", "timeline_filter"];
+  if (!policies.includes(aiProject.contextPolicy)) aiProject.contextPolicy = "full_recent";
+  if (!aiProject.aiContextConsent || typeof aiProject.aiContextConsent !== "object") aiProject.aiContextConsent = {};
   if (!aiProject.instruction || !String(aiProject.instruction).trim()) aiProject.instruction = DEFAULT_AI_INSTRUCTION;
   if (!aiProject.sessions.length) {
     const first = makeAiSession("默认会话");
@@ -3071,10 +3083,15 @@ function loadAiInstruction() {
     const rawProject = localStorage.getItem(STORAGE_AI_PROJECT_KEY);
     if (rawProject) {
       const data = JSON.parse(rawProject);
+      const policies = ["full_recent", "stats_only", "recent_7d", "timeline_filter"];
+      const rawPolicy = String(data?.contextPolicy || "full_recent");
       aiProject = {
         instruction: String(data?.instruction || DEFAULT_AI_INSTRUCTION),
         activeSessionId: String(data?.activeSessionId || ""),
-        contextPolicy: String(data?.contextPolicy || "full_recent"),
+        contextPolicy: policies.includes(rawPolicy) ? rawPolicy : "full_recent",
+        aiContextConsent:
+          data?.aiContextConsent && typeof data.aiContextConsent === "object" ? data.aiContextConsent : {},
+        syncSessionsDisclaimerAck: Boolean(data?.syncSessionsDisclaimerAck),
         sessions: Array.isArray(data?.sessions)
           ? data.sessions.map((s) => ({
             id: String(s?.id || crypto.randomUUID()),
@@ -3094,10 +3111,24 @@ function loadAiInstruction() {
           : [],
       };
     } else {
-      aiProject = { instruction: DEFAULT_AI_INSTRUCTION, activeSessionId: "", contextPolicy: "full_recent", sessions: [] };
+      aiProject = {
+        instruction: DEFAULT_AI_INSTRUCTION,
+        activeSessionId: "",
+        contextPolicy: "full_recent",
+        aiContextConsent: {},
+        syncSessionsDisclaimerAck: false,
+        sessions: [],
+      };
     }
   } catch {
-    aiProject = { instruction: DEFAULT_AI_INSTRUCTION, activeSessionId: "", contextPolicy: "full_recent", sessions: [] };
+    aiProject = {
+      instruction: DEFAULT_AI_INSTRUCTION,
+      activeSessionId: "",
+      contextPolicy: "full_recent",
+      aiContextConsent: {},
+      syncSessionsDisclaimerAck: false,
+      sessions: [],
+    };
   }
   ensureAiProjectConsistency();
   aiInstruction = aiProject.instruction;
@@ -3401,40 +3432,129 @@ function renderMarkdownToHtml(src) {
   }
 }
 
+function getAiContextConsent() {
+  const c = aiProject.aiContextConsent || {};
+  return {
+    profile: c.profile !== false,
+    vaccinesSummary: c.vaccinesSummary !== false,
+    entriesSummary: c.entriesSummary !== false,
+    includeNotesInEntries: c.includeNotesInEntries !== false,
+    includePhotosInEntries: c.includePhotosInEntries !== false,
+    allowServerTools: c.allowServerTools !== false,
+  };
+}
+
+function getTimelineFilterForAi() {
+  const catEl = /** @type {HTMLSelectElement|null} */ (document.getElementById("filter-category"));
+  const dayEl = /** @type {HTMLInputElement|null} */ (document.getElementById("filter-day"));
+  return {
+    category: catEl?.value?.trim() || "",
+    day: dayEl?.value?.trim() || "",
+  };
+}
+
+function buildStatsOnlyContextLines() {
+  const lines = [];
+  lines.push("## 记录统计（全量汇总，不含逐条明细）");
+  if (!entries.length) {
+    lines.push("暂无记录。");
+    return lines;
+  }
+  const byCat = {};
+  for (const e of entries) {
+    byCat[e.categoryId] = (byCat[e.categoryId] || 0) + 1;
+  }
+  lines.push(`总条数: ${entries.length}`);
+  const top = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  for (const [cid, n] of top) {
+    const c = getCategory(cid);
+    lines.push(`${c.emoji} ${c.label}: ${n}`);
+  }
+  return lines;
+}
+
+function buildEntryContextLines(slice, consent) {
+  const lines = [];
+  for (const e of slice) {
+    const cat = getCategory(e.categoryId);
+    const detail = summarizeFields(cat, e.fields || {});
+    const parts = [formatDateHeader(e.at), formatTime(e.at), `${cat.emoji} ${cat.label}`, detail];
+    if (consent.includeNotesInEntries && e.note) parts.push(e.note);
+    if (consent.includePhotosInEntries && e.photos?.length) parts.push(`照片 ${e.photos.length} 张`);
+    lines.push(parts.filter((x) => x !== undefined && x !== null && String(x).trim() !== "").join(" | "));
+  }
+  return lines;
+}
+
 function buildBabyContextForAi() {
+  const consent = getAiContextConsent();
+  const policy = aiProject.contextPolicy || "full_recent";
   const lines = [];
   const genderMap = { boy: "男", girl: "女", other: "未设置/其他" };
-  lines.push("## 宝宝档案");
-  lines.push(`昵称: ${profile.name || "未填写"}`);
-  lines.push(`出生日期: ${profile.birthDate || "未填写"}`);
-  lines.push(`性别: ${profile.gender ? genderMap[profile.gender] || profile.gender : "未填写"}`);
-  lines.push(`血型: ${profile.blood || "未填写"}`);
-  lines.push(`月龄参考: ${getAgeText()}`);
-  lines.push("");
-  lines.push("## 疫苗计划（摘要）");
-  if (!vaccines.length) {
-    lines.push("暂无疫苗计划数据。");
-  } else {
-    for (const v of vaccines.slice(0, 40)) {
-      lines.push(`${v.name} · ${v.dose} · 计划 ${v.dueDate} · 状态 ${v.status}${v.doneAt ? ` · 完成 ${v.doneAt}` : ""}`);
-    }
-    if (vaccines.length > 40) lines.push(`… 其余 ${vaccines.length - 40} 条略`);
+
+  if (consent.profile !== false) {
+    lines.push("## 宝宝档案");
+    lines.push(`昵称: ${profile.name || "未填写"}`);
+    lines.push(`出生日期: ${profile.birthDate || "未填写"}`);
+    lines.push(`性别: ${profile.gender ? genderMap[profile.gender] || profile.gender : "未填写"}`);
+    lines.push(`血型: ${profile.blood || "未填写"}`);
+    lines.push(`月龄参考: ${getAgeText()}`);
+    lines.push("");
   }
-  lines.push("");
-  lines.push("## 最近记录（时间倒序，最多 300 条；文本由应用汇总）");
-  const slice = entries.slice(0, 300);
-  if (!slice.length) {
-    lines.push("暂无记录。");
-  } else {
-    for (const e of slice) {
-      const cat = getCategory(e.categoryId);
-      const detail = summarizeFields(cat, e.fields || {});
-      const metaLine = [formatDateHeader(e.at), formatTime(e.at), `${cat.emoji} ${cat.label}`, detail, e.note]
-        .filter((x) => x !== undefined && x !== null && String(x).trim() !== "")
-        .join(" | ");
-      lines.push(metaLine);
+
+  if (consent.vaccinesSummary !== false) {
+    lines.push("## 疫苗计划（摘要）");
+    if (!vaccines.length) {
+      lines.push("暂无疫苗计划数据。");
+    } else {
+      for (const v of vaccines.slice(0, 40)) {
+        lines.push(`${v.name} · ${v.dose} · 计划 ${v.dueDate} · 状态 ${v.status}${v.doneAt ? ` · 完成 ${v.doneAt}` : ""}`);
+      }
+      if (vaccines.length > 40) lines.push(`… 其余 ${vaccines.length - 40} 条略`);
     }
-    if (entries.length > 300) lines.push(`… 共 ${entries.length} 条记录，仅附最近 300 条`);
+    lines.push("");
+  }
+
+  if (consent.entriesSummary === false) {
+    lines.push("## 照护记录");
+    lines.push("（用户未授权在上下文中包含记录明细；可依赖服务端工具查询。）");
+    return lines.join("\n");
+  }
+
+  if (policy === "stats_only") {
+    lines.push(...buildStatsOnlyContextLines());
+    return lines.join("\n");
+  }
+
+  let slice = [...entries].sort((a, b) => new Date(b.at) - new Date(a.at));
+  let capNote = "";
+  if (policy === "recent_7d") {
+    const cutoff = Date.now() - 7 * 86400000;
+    slice = slice.filter((e) => new Date(e.at).getTime() >= cutoff).slice(0, 150);
+    capNote = "（策略：最近 7 天，最多 150 条）";
+  } else if (policy === "timeline_filter") {
+    const { category, day } = getTimelineFilterForAi();
+    if (category) slice = slice.filter((e) => e.categoryId === category);
+    if (day) slice = slice.filter((e) => String(e.at || "").slice(0, 10) === day);
+    slice = slice.slice(0, 200);
+    capNote = `（策略：与活动筛选一致${category ? ` · 类型已筛选` : ""}${day ? ` · 日期 ${day}` : ""}，最多 200 条）`;
+  } else {
+    slice = slice.slice(0, 300);
+    capNote = "（策略：最近记录，最多 300 条）";
+  }
+
+  lines.push("## 照护记录（时间倒序；文本由应用汇总）");
+  if (!slice.length) {
+    lines.push("当前策略下没有匹配的记录。");
+  } else {
+    lines.push(...buildEntryContextLines(slice, consent));
+    if (entries.length > slice.length || policy === "full_recent") {
+      if (policy === "full_recent" && entries.length > 300) {
+        lines.push(`… 共 ${entries.length} 条记录，仅附最近 300 条`);
+      } else if (capNote) {
+        lines.push(`… ${capNote}，当前附 ${slice.length} 条`);
+      }
+    }
   }
   return lines.join("\n");
 }
@@ -3509,14 +3629,16 @@ function renderAiChat() {
     root.appendChild(row);
   }
   root.scrollTop = root.scrollHeight;
+  renderAiDraftBanner();
   refreshAiUiState();
 }
 
 /**
  * @param {object} payload
  * @param {(chunk: string) => void} onChunk
+ * @param {(draft: object) => void} [onDraft] snake_case draft from server tool
  */
-async function consumeSseChatStream(payload, onChunk) {
+async function consumeSseChatStream(payload, onChunk, onDraft) {
   const chatHeaders = authHeaders({ "Content-Type": "application/json" });
   const res = await fetch(`${API_BASE}/chat/stream`, {
     method: "POST",
@@ -3566,9 +3688,71 @@ async function consumeSseChatStream(payload, onChunk) {
         }
         if (obj && typeof obj.error === "string" && obj.error) throw new Error(obj.error);
         if (obj && typeof obj.c === "string" && obj.c) onChunk(obj.c);
+        if (obj && obj.draft && typeof obj.draft === "object" && onDraft) onDraft(obj.draft);
       }
     }
   }
+}
+
+function draftApiToLogEntry(d) {
+  if (!d || typeof d !== "object") return null;
+  const categoryId = String(d.category_id || "").trim();
+  const at = String(d.at || "").trim();
+  if (!categoryId || !at) return null;
+  return {
+    id: crypto.randomUUID(),
+    categoryId,
+    at,
+    fields: d.fields && typeof d.fields === "object" ? d.fields : {},
+    note: String(d.note || ""),
+    photos: Array.isArray(d.photos) ? d.photos : [],
+  };
+}
+
+function renderAiDraftBanner() {
+  const wrap = document.getElementById("ai-draft-banner");
+  const summary = document.getElementById("ai-draft-summary");
+  if (!wrap || !summary) return;
+  if (!pendingAiEntryDraft) {
+    wrap.classList.add("hidden");
+    summary.textContent = "";
+    return;
+  }
+  wrap.classList.remove("hidden");
+  const cat = getCategory(pendingAiEntryDraft.categoryId);
+  const detail = summarizeFields(cat, pendingAiEntryDraft.fields || {});
+  summary.textContent = `${cat.emoji} ${cat.label} · ${String(pendingAiEntryDraft.at).slice(0, 19)}${detail ? ` · ${detail}` : ""}`;
+}
+
+function dismissPendingAiEntryDraft() {
+  pendingAiEntryDraft = null;
+  renderAiDraftBanner();
+}
+
+async function confirmPendingAiEntryDraft() {
+  if (!pendingAiEntryDraft || aiBusy) return;
+  const changedEntry = { ...pendingAiEntryDraft };
+  dismissPendingAiEntryDraft();
+  entries.push(changedEntry);
+  entries.sort((a, b) => new Date(b.at) - new Date(a.at));
+  if (apiReady) {
+    try {
+      const created = await apiRequest("/entries", {
+        method: "POST",
+        body: JSON.stringify(mapEntryToApi(changedEntry)),
+      });
+      if (created?.id) changedEntry.id = created.id;
+    } catch {
+      apiReady = false;
+      save();
+      alert("后端暂不可用，已回退到本地存储。");
+    }
+  } else {
+    save();
+  }
+  showToast("已从 AI 草稿写入一条记录");
+  render();
+  setActiveModule("timeline");
 }
 
 async function sendAiMessage() {
@@ -3588,6 +3772,7 @@ async function sendAiMessage() {
     if (!active) return;
   }
   input.value = "";
+  dismissPendingAiEntryDraft();
   const userMsg = { role: "user", content: text, ts: nowIso() };
   const assistantMsg = { role: "assistant", content: "", ts: nowIso() };
   active.messages.push(userMsg);
@@ -3605,17 +3790,29 @@ async function sendAiMessage() {
   setAiStatus("助手正在生成回复…");
   const assistant = assistantMsg;
   const messageWindow = active.messages.slice(0, -1).slice(-40).map((m) => ({ role: m.role, content: m.content }));
+  const consent = getAiContextConsent();
   const payload = {
     instruction: aiProject.instruction || aiInstruction,
     baby_context: buildBabyContextForAi(),
     messages: messageWindow,
+    allow_server_tools: consent.allowServerTools,
   };
   try {
-    await consumeSseChatStream(payload, (chunk) => {
-      assistant.content += chunk;
-      assistant.ts = nowIso();
-      scheduleAiChatRender();
-    });
+    await consumeSseChatStream(
+      payload,
+      (chunk) => {
+        assistant.content += chunk;
+        assistant.ts = nowIso();
+        scheduleAiChatRender();
+      },
+      (draft) => {
+        const mapped = draftApiToLogEntry(draft);
+        if (mapped) {
+          pendingAiEntryDraft = mapped;
+          renderAiDraftBanner();
+        }
+      },
+    );
     active.updatedAt = nowIso();
     saveAiProject();
     scheduleAiChatRender();
@@ -3841,6 +4038,23 @@ function syncSettingsDialog() {
     else notifStatus.textContent = "已开启。到期前会弹出浏览器通知";
   }
 
+  const ac = getAiContextConsent();
+  const g = (id) => /** @type {HTMLInputElement|null} */ (document.getElementById(id));
+  const p = g("settings-ai-consent-profile");
+  if (p) p.checked = ac.profile;
+  const v = g("settings-ai-consent-vaccines");
+  if (v) v.checked = ac.vaccinesSummary;
+  const e = g("settings-ai-consent-entries");
+  if (e) e.checked = ac.entriesSummary;
+  const n = g("settings-ai-consent-notes");
+  if (n) n.checked = ac.includeNotesInEntries;
+  const ph = g("settings-ai-consent-photos");
+  if (ph) ph.checked = ac.includePhotosInEntries;
+  const t = g("settings-ai-consent-tools");
+  if (t) t.checked = ac.allowServerTools;
+  const ack = g("settings-ai-sync-ack");
+  if (ack) ack.checked = Boolean(aiProject.syncSessionsDisclaimerAck);
+
   syncThemeToggleUi();
 }
 
@@ -3857,6 +4071,172 @@ function closeSettingsDialog() {
   if (!overlay) return;
   overlay.classList.add("hidden");
   document.removeEventListener("keydown", onSettingsKey, true);
+}
+
+function syncAiContextPolicyHint() {
+  const el = document.getElementById("ai-context-policy-hint");
+  if (!el) return;
+  const p = aiProject.contextPolicy || "full_recent";
+  const hints = {
+    full_recent: "发送最近最多 300 条记录摘要（仍受设置 → AI 与隐私中的勾选项影响）。",
+    recent_7d: "仅包含最近 7 天内最多 150 条记录。",
+    timeline_filter: "与「活动」模块的类型、日期筛选一致，最多 200 条。",
+    stats_only: "仅发送各分类条数统计，不包含逐条记录正文。",
+  };
+  el.textContent = hints[p] || "";
+}
+
+function initAiContextPolicySelect() {
+  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById("ai-context-policy"));
+  if (!sel) return;
+  sel.value = ["full_recent", "stats_only", "recent_7d", "timeline_filter"].includes(aiProject.contextPolicy)
+    ? aiProject.contextPolicy
+    : "full_recent";
+  syncAiContextPolicyHint();
+  sel.addEventListener("change", () => {
+    aiProject.contextPolicy = sel.value;
+    saveAiProject();
+    syncAiContextPolicyHint();
+  });
+}
+
+function openCommandPalette() {
+  const el = document.getElementById("command-palette");
+  const input = /** @type {HTMLInputElement|null} */ (document.getElementById("command-palette-input"));
+  if (!el) return;
+  commandPaletteOpen = true;
+  el.classList.remove("hidden");
+  if (input) {
+    input.value = "";
+    setTimeout(() => input.focus(), 10);
+  }
+  renderCommandPaletteResults("");
+  document.addEventListener("keydown", onCommandPaletteKey, true);
+}
+
+function closeCommandPalette() {
+  const el = document.getElementById("command-palette");
+  if (!el) return;
+  commandPaletteOpen = false;
+  el.classList.add("hidden");
+  document.removeEventListener("keydown", onCommandPaletteKey, true);
+}
+
+function onCommandPaletteKey(ev) {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeCommandPalette();
+  }
+}
+
+function renderCommandPaletteResults(query) {
+  const root = document.getElementById("command-palette-results");
+  if (!root) return;
+  root.innerHTML = "";
+  const q = String(query || "").trim().toLowerCase();
+  /** @type {{type: string, title: string, sub?: string, run: () => void}[]} */
+  const items = [];
+
+  const modules = [
+    { id: "profile", label: "档案", kw: "profile 档案 baby" },
+    { id: "ai", label: "AI 问答", kw: "ai 问答 助手" },
+    { id: "quick-entry", label: "记录", kw: "记录 新建 添加" },
+    { id: "timeline", label: "活动 / 时间轴", kw: "活动 时间轴 历史" },
+    { id: "stats", label: "统计", kw: "统计 图表" },
+    { id: "vaccine", label: "疫苗", kw: "疫苗 接种" },
+    { id: "gallery", label: "相册", kw: "相册 照片" },
+  ];
+  for (const m of modules) {
+    if (!q || m.kw.includes(q) || m.label.toLowerCase().includes(q)) {
+      items.push({
+        type: "模块",
+        title: m.label,
+        run: () => {
+          setActiveModule(m.id);
+          setSidebarOpen(false);
+          closeCommandPalette();
+        },
+      });
+    }
+  }
+
+  let entryCount = 0;
+  for (const e of entries) {
+    if (entryCount >= 14) break;
+    const cat = getCategory(e.categoryId);
+    const hay = `${cat.label} ${e.note || ""} ${e.at}`.toLowerCase();
+    if (q && !hay.includes(q)) continue;
+    const sid = e.id;
+    items.push({
+      type: "记录",
+      title: `${cat.emoji} ${formatTime(e.at)} ${summarizeFields(cat, e.fields || {})}`,
+      sub: e.note || String(e.at).slice(0, 10),
+      run: () => {
+        setActiveModule("timeline");
+        setSidebarOpen(false);
+        closeCommandPalette();
+        const filter = /** @type {HTMLSelectElement} */ (document.getElementById("filter-category")).value;
+        const day = /** @type {HTMLInputElement} */ (document.getElementById("filter-day")).value;
+        let data = filter ? entries.filter((x) => x.categoryId === filter) : [...entries];
+        if (day) data = data.filter((x) => toLocalDateKey(x.at) === day);
+        const idx = data.findIndex((x) => x.id === sid);
+        if (idx >= 0) timelineVisibleCount = Math.max(timelineVisibleCount, idx + 5, 20);
+        renderTimeline();
+      },
+    });
+    entryCount += 1;
+  }
+
+  items.push({
+    type: "AI",
+    title: "用自然语言记一条…",
+    sub: "打开问答并聚焦输入框",
+    run: () => {
+      setActiveModule("ai");
+      setSidebarOpen(false);
+      closeCommandPalette();
+      const inp = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-user-input"));
+      if (inp) setTimeout(() => inp.focus(), 50);
+    },
+  });
+
+  if (!items.length) {
+    root.innerHTML = `<div class="muted-line" style="padding:12px">无匹配结果</div>`;
+    return;
+  }
+  for (const it of items.slice(0, 22)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "command-palette-item";
+    const sub = it.sub ? `<div class="muted-line" style="font-size:12px;margin-top:2px">${escapeHtml(it.sub)}</div>` : "";
+    btn.innerHTML = `<span class="command-palette-item-type">${escapeHtml(it.type)}</span>${escapeHtml(it.title)}${sub}`;
+    btn.addEventListener("click", () => it.run());
+    root.appendChild(btn);
+  }
+}
+
+function initCommandPalette() {
+  const overlay = document.getElementById("command-palette");
+  const input = /** @type {HTMLInputElement|null} */ (document.getElementById("command-palette-input"));
+  if (overlay) {
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) closeCommandPalette();
+    });
+  }
+  if (input) {
+    input.addEventListener("input", () => renderCommandPaletteResults(input.value));
+  }
+  for (const id of ["btn-command-palette-sidebar", "btn-command-palette-mobile"]) {
+    const b = document.getElementById(id);
+    if (b) b.addEventListener("click", () => openCommandPalette());
+  }
+  document.addEventListener("keydown", (ev) => {
+    const isK = String(ev.key).toLowerCase() === "k";
+    if (!(isK && (ev.metaKey || ev.ctrlKey))) return;
+    ev.preventDefault();
+    if (commandPaletteOpen) closeCommandPalette();
+    else openCommandPalette();
+  });
 }
 
 function onSettingsKey(ev) {
@@ -3924,6 +4304,32 @@ function initSettingsDialog() {
     clearBtn.addEventListener("click", async () => {
       await saveUserAvatar("");
     });
+  }
+
+  const persistAiPrivacy = () => {
+    const g = (id) => /** @type {HTMLInputElement|null} */ (document.getElementById(id));
+    aiProject.aiContextConsent = {
+      profile: g("settings-ai-consent-profile")?.checked !== false,
+      vaccinesSummary: g("settings-ai-consent-vaccines")?.checked !== false,
+      entriesSummary: g("settings-ai-consent-entries")?.checked !== false,
+      includeNotesInEntries: g("settings-ai-consent-notes")?.checked !== false,
+      includePhotosInEntries: g("settings-ai-consent-photos")?.checked !== false,
+      allowServerTools: g("settings-ai-consent-tools")?.checked !== false,
+    };
+    aiProject.syncSessionsDisclaimerAck = g("settings-ai-sync-ack")?.checked || false;
+    saveAiProject();
+  };
+  for (const id of [
+    "settings-ai-consent-profile",
+    "settings-ai-consent-vaccines",
+    "settings-ai-consent-entries",
+    "settings-ai-consent-notes",
+    "settings-ai-consent-photos",
+    "settings-ai-consent-tools",
+    "settings-ai-sync-ack",
+  ]) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", persistAiPrivacy);
   }
 }
 
@@ -4238,7 +4644,13 @@ export async function init() {
   }
   const btnAiSend = document.getElementById("btn-ai-send");
   if (btnAiSend) btnAiSend.addEventListener("click", sendAiMessage);
+  document.getElementById("btn-ai-draft-dismiss")?.addEventListener("click", dismissPendingAiEntryDraft);
+  document.getElementById("btn-ai-draft-confirm")?.addEventListener("click", () => {
+    confirmPendingAiEntryDraft();
+  });
   document.addEventListener("keydown", handleAiGlobalShortcuts);
+  initAiContextPolicySelect();
+  initCommandPalette();
   renderAiSessionList();
   refreshAiUiState();
   initCustomDropdowns();
