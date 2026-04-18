@@ -472,16 +472,21 @@ body {
 .app-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 85;
   background: rgba(0, 0, 0, 0.42);
 }
 
 .mobile-topbar {
   display: none;
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 90;
+  left: 0;
+  right: 0;
+  z-index: 110;
   padding: 10px 12px;
+  padding-top: max(10px, env(safe-area-inset-top, 0px));
+  padding-left: max(12px, env(safe-area-inset-left, 0px));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg-elev) 90%, transparent);
   backdrop-filter: blur(14px) saturate(120%);
@@ -637,11 +642,14 @@ body {
 .profile-edit-btn {
   background: none;
   border: none;
-  padding: 6px 0;
+  padding: 10px 14px;
+  min-height: 44px;
   font: inherit;
   font-size: 13px;
   color: var(--accent);
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: color var(--dur-fast) var(--ease-standard);
 }
 .profile-edit-btn:hover { color: var(--accent-strong); }
@@ -1433,12 +1441,14 @@ textarea:focus-visible {
   overscroll-behavior: contain;
   transform: translateX(100%);
   transition: transform 0.28s var(--ease-standard);
+  pointer-events: none;
 }
 .stats-metric-detail:not(.hidden) {
   display: flex;
 }
 .stats-metric-detail.stats-metric-detail--open {
   transform: translateX(0);
+  pointer-events: auto;
 }
 @media (prefers-reduced-motion: reduce) {
   .stats-metric-detail {
@@ -3359,9 +3369,18 @@ html[data-theme="dark"] .module-ai::before {
   }
   .app-shell {
     grid-template-columns: 1fr;
+    padding-top: calc(48px + env(safe-area-inset-top, 0px));
   }
   .mobile-topbar {
     display: flex;
+  }
+  #mobile-topbar .icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: auto;
+    height: auto;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
   .sidebar-collapse-btn {
     display: none;
@@ -3373,17 +3392,26 @@ html[data-theme="dark"] .module-ai::before {
     position: fixed;
     top: 0;
     left: 0;
-    z-index: 100;
+    z-index: 105;
     width: min(80vw, 280px);
     height: 100vh;
+    height: 100dvh;
     border-right: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
     transform: translateX(-100%);
     transition: transform var(--dur-mid) var(--ease-standard);
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.12);
     background: var(--bg);
+    pointer-events: none;
+    -webkit-overflow-scrolling: touch;
   }
   .app-sidebar.open {
     transform: translateX(0);
+    pointer-events: auto;
+  }
+  #module-nav .module-nav-item {
+    min-height: 44px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
   .inline-form { grid-template-columns: 1fr; }
   .stats-toolbar { flex-direction: column; align-items: stretch; }
