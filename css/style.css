@@ -4064,10 +4064,6 @@ html[data-theme="dark"] .module-ai::before {
   border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
 }
 
-.settings-section--ai-privacy .settings-section-title {
-  margin-bottom: 8px;
-}
-
 .settings-ai-intro {
   margin: 0 0 4px;
   font-size: 13px;
