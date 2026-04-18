@@ -37,6 +37,12 @@ const TREND_LINE_COLOR = "#6b7280";
 let chartResolution = "auto";
 let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
+/** @type {object|null} */
+let chartLastTrend = null;
+let chartScrubIndex = null;
+/** @type {{ xs: number[], left: number, plotW: number, len: number }|null} */
+let chartPlotLayout = null;
+const CHART_METRIC_SHEET_MAX_W = 640;
 let statsRangeApplyTimer = null;
 let apiReady = false;
 /** @type {{token: string, user: {id: string, username: string} | null, localOnly: boolean, csrf: string}} */
@@ -938,6 +944,148 @@ function getNumericMetricOptions() {
     }
   }
   return opts;
+}
+
+function getNumericMetricOptionsGrouped() {
+  /** @type {Array<{categoryId: string, categoryLabel: string, emoji: string, items: Array<{ id: string, label: string, categoryId: string, fieldKey: string, unit: string }>}>} */
+  const groups = [];
+  for (const c of CATEGORIES) {
+    /** @type {Array<{ id: string, label: string, categoryId: string, fieldKey: string, unit: string }>} */
+    const items = [];
+    for (const f of c.fields) {
+      if (f.type !== "number") continue;
+      const metricName = stripFieldUnit(String(f.label || f.key || "数值"));
+      items.push({
+        id: `${c.id}.${f.key}`,
+        label: `${c.emoji} ${metricName}`,
+        categoryId: c.id,
+        fieldKey: f.key,
+        unit: inferMetricUnit(f),
+      });
+    }
+    if (items.length) groups.push({ categoryId: c.id, categoryLabel: c.label, emoji: c.emoji, items });
+  }
+  return groups;
+}
+
+function formatChartValueForUnit(unit, n) {
+  if (n == null || Number.isNaN(Number(n))) return "—";
+  const x = Number(n);
+  if (unit === "°C") return x.toFixed(1);
+  if (unit === "kg") return x.toFixed(2);
+  if (unit === "cm") return x.toFixed(1);
+  if (unit === "ml") return String(Math.round(x));
+  if (unit === "分钟") return String(Math.round(x));
+  return Number.isInteger(x) ? String(x) : x.toFixed(1);
+}
+
+function withChartUnit(unit, n) {
+  const v = formatChartValueForUnit(unit, n);
+  if (v === "—") return "—";
+  return unit ? `${v} ${unit}` : v;
+}
+
+function isChartBodyMetric(metric) {
+  if (!metric) return false;
+  if (metric.categoryId === "temperature") return true;
+  if (metric.categoryId === "growth") return true;
+  return false;
+}
+
+/**
+ * @param {{ unit?: string, categoryId?: string, fieldKey?: string }} metric
+ * @param {Array<{ label: string, value: number }>} points
+ */
+function computeTrendSummary(metric, points) {
+  const vals = points.map((p) => Number(p.value) || 0);
+  const count = vals.length;
+  if (count === 0) {
+    return { primary: "—", secondary: "本范围内没有可用的数值点", sum: 0, mean: 0, min: 0, max: 0, count: 0 };
+  }
+  const sum = vals.reduce((a, b) => a + b, 0);
+  const mean = sum / count;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const u = metric.unit || "";
+  const body = isChartBodyMetric(metric);
+  const primary = body ? `平均 ${withChartUnit(u, mean)}` : `合计 ${withChartUnit(u, sum)}`;
+  const secondary = [
+    body ? `合计 ${withChartUnit(u, sum)}` : `日均 ${withChartUnit(u, mean)}`,
+    `高 ${withChartUnit(u, max)}`,
+    `低 ${withChartUnit(u, min)}`,
+    `${count} 个数据点`,
+  ].join(" · ");
+  return { primary, secondary, sum, mean, min, max, count };
+}
+
+/**
+ * @param {{ categoryId?: string, fieldKey?: string }} metric
+ * @param {number[]} vals
+ */
+function getSmartYRange(metric, vals) {
+  if (!vals.length) return { minY: 0, maxY: 10 };
+  const minV = Math.min(...vals);
+  const maxV = Math.max(...vals);
+  const key = String(metric.fieldKey || "");
+  const cat = metric.categoryId || "";
+  const natural =
+    key === "celsius" ||
+    (cat === "growth" && ["weightKg", "heightCm", "headCm"].includes(key));
+  if (natural) {
+    const span = Math.max(maxV - minV, 1e-9);
+    let pad = span * 0.12;
+    if (key === "celsius") pad = Math.max(pad, 0.15);
+    if (cat === "growth") pad = Math.max(pad, span * 0.08);
+    let yMin = minV - pad;
+    let yMax = maxV + pad;
+    if (maxV === minV) {
+      const bump = key === "celsius" ? 0.5 : Math.max(Math.abs(maxV) * 0.04, 0.4);
+      yMin = minV - bump;
+      yMax = maxV + bump;
+    }
+    return { minY: yMin, maxY: yMax };
+  }
+  const maxY = Math.max(10, maxV);
+  return { minY: 0, maxY };
+}
+
+function readCssColorVar(name, fallback) {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    if (v) return v;
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+/**
+ * @param {{ id?: string, categoryId?: string, fieldKey?: string }|null} metric
+ */
+function getChartLineCssColor(metric) {
+  if (!metric) return TREND_LINE_COLOR;
+  const id = String(metric.id || "");
+  if (id.startsWith("cry.")) return readCssColorVar("--chart-line-care", TREND_LINE_COLOR);
+  if (id.includes("celsius")) return readCssColorVar("--chart-line-accent", TREND_LINE_COLOR);
+  if (id.startsWith("sleep.") || id.startsWith("outdoor.") || id.startsWith("tummy_time.")) {
+    return readCssColorVar("--chart-line-good", TREND_LINE_COLOR);
+  }
+  if (id.startsWith("medicine")) return readCssColorVar("--chart-line-care", TREND_LINE_COLOR);
+  return readCssColorVar("--chart-line", TREND_LINE_COLOR);
+}
+
+function hexToRgba(hex, alpha) {
+  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(String(hex || "").trim());
+  if (!m) return `rgba(107, 114, 128, ${alpha})`;
+  return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${alpha})`;
+}
+
+function cssColorToRgba(color, alpha) {
+  const c = String(color || "").trim();
+  if (c.startsWith("#")) return hexToRgba(c, alpha);
+  const m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(c);
+  if (m) return `rgba(${m[1]},${m[2]},${m[3]},${alpha})`;
+  return `rgba(107, 114, 128, ${alpha})`;
 }
 
 function stripFieldUnit(label) {
@@ -1895,112 +2043,298 @@ function syncChartResolutionButtons() {
   });
 }
 
-function renderTrendChart() {
-  syncChartResolutionButtons();
-  const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById("stats-chart"));
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const dpr = window.devicePixelRatio || 1;
-  const cssWidth = canvas.clientWidth || 900;
-  const cssHeight = 320;
-  canvas.width = Math.floor(cssWidth * dpr);
-  canvas.height = Math.floor(cssHeight * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, cssWidth, cssHeight);
+/** @param {Record<string, unknown>} trend */
+function updateChartPanelFromTrend(trend) {
+  const titleEl = document.getElementById("chart-panel-metric-title");
+  const rangeEl = document.getElementById("chart-panel-range-line");
+  const aggEl = document.getElementById("chart-aggregation-subtitle");
+  const pri = document.getElementById("chart-summary-primary");
+  const sec = document.getElementById("chart-summary-secondary");
+  const empty = document.getElementById("chart-empty-state");
+  const legendText = document.getElementById("chart-legend-text");
+  const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById("stats-chart"));
+  const ml = trend.metric ? trend.metric.label : String(trend.metricLabel || "趋势");
+  if (titleEl) titleEl.textContent = ml;
+  if (legendText) legendText.textContent = ml;
+  if (rangeEl) {
+    rangeEl.textContent =
+      statsRange.start && statsRange.end
+        ? `日期 ${statsRange.start} — ${statsRange.end}`
+        : "尚未选择具体日期范围";
+  }
+  if (aggEl) {
+    aggEl.textContent = trend.resolutionLabel
+      ? `当前为「${trend.resolutionLabel}」汇总，可与时间范围配合理解。`
+      : "";
+  }
+  const sum = /** @type {{ primary?: string, secondary?: string }} */ (trend.summary || {});
+  if (pri) pri.textContent = sum.primary || "—";
+  if (sec) sec.textContent = sum.secondary || "";
+  const pts = /** @type {unknown[]} */ (trend.points || []);
+  const hasPoints = pts.length > 0;
+  if (empty) empty.classList.toggle("hidden", hasPoints);
+  if (canvas) canvas.classList.toggle("hidden", !hasPoints);
+  const et = document.getElementById("chart-empty-title");
+  const ed = document.getElementById("chart-empty-desc");
+  if (!hasPoints && et && ed) {
+    et.textContent = "暂无趋势数据";
+    ed.textContent =
+      !statsRange.start || !statsRange.end
+        ? "请选择统计的开始与结束日期，或使用下方按钮切换到常用范围。"
+        : "本范围内没有该指标的数值。可拉长时间段或选择其他指标。";
+  }
+  const dot = document.querySelector("#chart-legend-trigger .chart-legend-dot");
+  if (dot && trend.metric) dot.style.background = getChartLineCssColor(trend.metric);
+  if (canvas) {
+    canvas.setAttribute("aria-label", `${ml}，共 ${pts.length} 个数据点`);
+  }
+}
 
-  const trend = buildTrendData();
-  const points = trend.points;
-  const vals = points.map((p) => p.value);
-  if (points.length === 0) {
-    ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
-    ctx.font = '13px "SF Pro Text", "Helvetica Neue", Arial';
-    const metricName = trend.metricLabel || "当前指标";
-    ctx.fillText(`${metricName} 在当前范围暂无数据`, 16, 28);
-    ctx.fillText("建议切换时间范围，或改为其他指标查看趋势", 16, 50);
+function syncChartCrosshairForIndex(index) {
+  const cross = document.getElementById("chart-crosshair");
+  const canvas = document.getElementById("stats-chart");
+  if (!cross || !canvas || !chartPlotLayout || index == null || index < 0 || index >= chartPlotLayout.len) {
+    if (cross) cross.classList.add("hidden");
     return;
   }
-  const maxY = Math.max(10, ...vals);
-  const left = 56;
-  const right = 12;
-  const top = 22;
-  const bottom = 30;
-  const pw = cssWidth - left - right;
-  const ph = cssHeight - top - bottom;
-  const unit = trend.unit || "数值";
+  cross.style.left = `${canvas.offsetLeft + chartPlotLayout.xs[index]}px`;
+  cross.style.top = `${canvas.offsetTop}px`;
+  cross.style.height = `${canvas.clientHeight}px`;
+  cross.classList.remove("hidden");
+}
 
-  ctx.strokeStyle = "rgba(128, 128, 128, 0.15)";
-  ctx.lineWidth = 1;
-  ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
-  ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
-  for (let i = 0; i <= 4; i += 1) {
-    const y = top + (ph / 4) * i;
-    ctx.beginPath();
-    ctx.moveTo(left, y);
-    ctx.lineTo(left + pw, y);
-    ctx.stroke();
-    const v = Math.round(maxY - (maxY / 4) * i);
-    ctx.fillText(String(v), 8, y + 4);
+function hideChartCrosshairAndTip() {
+  chartScrubIndex = null;
+  document.getElementById("chart-crosshair")?.classList.add("hidden");
+  hideChartTooltip();
+}
+
+/** @param {Record<string, unknown>} trend */
+function showChartTooltipForIndex(index, trend) {
+  const tip = document.getElementById("chart-tooltip");
+  const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById("stats-chart"));
+  const points = /** @type {Array<{ label: string, value: number }>} */ (trend.points || []);
+  if (!tip || !canvas || !chartPlotLayout || !points[index]) return;
+  const p = points[index];
+  const u = String(trend.unit || "");
+  const valStr = withChartUnit(u, p.value);
+  tip.innerHTML = `<div class="chart-tip-label">${escapeHtml(p.label)}</div><div class="chart-tip-value">${escapeHtml(valStr)}</div>`;
+  const x = chartPlotLayout.xs[index];
+  const y = chartPlotLayout.ys[index];
+  const offsetX = Math.min(canvas.clientWidth - 130, Math.max(6, x + 8));
+  const offsetY = Math.max(6, y - 40);
+  tip.style.left = `${offsetX}px`;
+  tip.style.top = `${offsetY}px`;
+  tip.classList.remove("hidden");
+}
+
+/** @type {number|null} */
+let chartPointerCaptureId = null;
+
+function onChartPointerMove(ev) {
+  if (statsMode !== "chart") return;
+  const trend = chartLastTrend;
+  const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById("stats-chart"));
+  if (!canvas || !trend || !chartPlotLayout || !trend.points?.length) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = ev.clientX - rect.left;
+  const { left, plotW, len, xs } = chartPlotLayout;
+  if (mx < left - 8 || mx > left + plotW + 8) {
+    if (chartPointerCaptureId == null) hideChartCrosshairAndTip();
+    return;
   }
-  ctx.fillText(unit, 8, 14);
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < len; i += 1) {
+    const d = Math.abs(xs[i] - mx);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  chartScrubIndex = best;
+  syncChartCrosshairForIndex(best);
+  showChartTooltipForIndex(best, trend);
+}
 
-  const mapX = (i) => left + (pw * i) / Math.max(1, points.length - 1);
-  const mapY = (v) => top + ph - (v / maxY) * ph;
-  chartHitPoints = points.map((p, i) => ({
-    x: mapX(i),
-    y: mapY(p.value),
-    label: p.label,
-    value: p.value,
-    unit,
-  }));
-  const drawSeries = (seriesVals, color) => {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.8;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
+function onChartPointerDown(ev) {
+  if (statsMode !== "chart") return;
+  if (ev.pointerType === "mouse" && ev.button !== 0) return;
+  const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById("stats-chart"));
+  if (!canvas) return;
+  chartPointerCaptureId = ev.pointerId;
+  try {
+    canvas.setPointerCapture(ev.pointerId);
+  } catch {
+    /* ignore */
+  }
+  onChartPointerMove(ev);
+}
+
+function onChartPointerUp(ev) {
+  if (chartPointerCaptureId == null || ev.pointerId !== chartPointerCaptureId) return;
+  const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById("stats-chart"));
+  try {
+    canvas?.releasePointerCapture(ev.pointerId);
+  } catch {
+    /* ignore */
+  }
+  chartPointerCaptureId = null;
+  hideChartCrosshairAndTip();
+}
+
+function onChartPointerLeave() {
+  if (chartPointerCaptureId != null) return;
+  hideChartCrosshairAndTip();
+}
+
+function renderTrendChart() {
+  syncChartResolutionButtons();
+  const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById("stats-chart"));
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  chartScrubIndex = null;
+  chartPlotLayout = null;
+  chartHitPoints = [];
+  chartLastTrend = null;
+  hideChartCrosshairAndTip();
+
+  const loading = document.getElementById("chart-loading");
+
+  const runDraw = () => {
+    const dpr = window.devicePixelRatio || 1;
+    const cssWidth = canvas.clientWidth || 900;
+    const cssHeight = 320;
+    canvas.width = Math.floor(cssWidth * dpr);
+    canvas.height = Math.floor(cssHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+    const trend = buildTrendData();
+    chartLastTrend = trend;
+    updateChartPanelFromTrend(trend);
+
+    const points = trend.points || [];
+    const vals = points.map((p) => Number(p.value) || 0);
+    if (!points.length) return;
+
+    const yRange = trend.yRange || { minY: 0, maxY: 10 };
+    const yMin = yRange.minY;
+    const yMax = yRange.maxY;
+    const spanY = Math.max(yMax - yMin, 1e-9);
+    const lineColor = getChartLineCssColor(trend.metric);
+
+    const left = 56;
+    const right = 12;
+    const top = 22;
+    const bottom = 30;
+    const pw = cssWidth - left - right;
+    const ph = cssHeight - top - bottom;
+    const unit = trend.unit || "数值";
+
+    ctx.strokeStyle = "rgba(128, 128, 128, 0.15)";
+    ctx.lineWidth = 1;
+    ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
+    ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
+    for (let i = 0; i <= 4; i += 1) {
+      const y = top + (ph / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(left, y);
+      ctx.lineTo(left + pw, y);
+      ctx.stroke();
+      const raw = yMax - (spanY / 4) * i;
+      const lbl = spanY < 6 ? Math.round(raw * 100) / 100 : Math.round(raw);
+      ctx.fillText(String(lbl), 8, y + 4);
+    }
+    ctx.fillText(unit, 8, 14);
+
+    const mapX = (i) => left + (pw * i) / Math.max(1, points.length - 1);
+    const mapY = (v) => top + ph - ((Number(v) - yMin) / spanY) * ph;
+    const xs = points.map((_, i) => mapX(i));
+    const ys = points.map((p) => mapY(p.value));
+    chartPlotLayout = { xs, ys, left, plotW: pw, len: points.length };
+
+    chartHitPoints = points.map((p, i) => ({
+      x: xs[i],
+      y: ys[i],
+      label: p.label,
+      value: p.value,
+      unit,
+    }));
+
+    const drawSeries = (seriesVals, color) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.8;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      seriesVals.forEach((v, i) => {
+        const x = mapX(i);
+        const y = mapY(v);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    };
+
+    const gradient = ctx.createLinearGradient(0, top, 0, top + ph);
+    gradient.addColorStop(0, cssColorToRgba(lineColor, 0.2));
+    gradient.addColorStop(1, cssColorToRgba(lineColor, 0.02));
+    ctx.fillStyle = gradient;
     ctx.beginPath();
-    seriesVals.forEach((v, i) => {
+    points.forEach((p, i) => {
       const x = mapX(i);
-      const y = mapY(v);
+      const y = mapY(p.value);
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
-    ctx.stroke();
-  };
-  // 点线图: 先画线，再画点
-  const gradient = ctx.createLinearGradient(0, top, 0, top + ph);
-  gradient.addColorStop(0, "rgba(107, 114, 128, 0.16)");
-  gradient.addColorStop(1, "rgba(107, 114, 128, 0.01)");
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  points.forEach((p, i) => {
-    const x = mapX(i);
-    const y = mapY(p.value);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.lineTo(mapX(points.length - 1), top + ph);
-  ctx.lineTo(mapX(0), top + ph);
-  ctx.closePath();
-  ctx.fill();
-
-  drawSeries(vals, TREND_LINE_COLOR);
-  ctx.fillStyle = TREND_LINE_COLOR;
-  points.forEach((p, i) => {
-    const x = mapX(i);
-    const y = mapY(p.value);
-    ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
-    ctx.fillStyle = TREND_LINE_COLOR;
+    ctx.lineTo(mapX(points.length - 1), top + ph);
+    ctx.lineTo(mapX(0), top + ph);
+    ctx.closePath();
     ctx.fill();
-  });
 
-  ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
-  ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
-  points.forEach((p, i) => {
-    if (i % Math.ceil(points.length / 6) !== 0 && i !== points.length - 1) return;
-    const x = mapX(i) - 12;
-    const y = cssHeight - 8;
-    ctx.fillText(p.label, x, y);
+    drawSeries(vals, lineColor);
+    ctx.fillStyle = lineColor;
+    points.forEach((p, i) => {
+      const x = mapX(i);
+      const y = mapY(p.value);
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = lineColor;
+      ctx.fill();
+    });
+
+    ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
+    ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
+    points.forEach((p, i) => {
+      if (i % Math.ceil(points.length / 6) !== 0 && i !== points.length - 1) return;
+      const x = mapX(i) - 12;
+      const y = cssHeight - 8;
+      ctx.fillText(p.label, x, y);
+    });
+  };
+
+  if (loading) loading.classList.add("is-visible");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const doneLoading = () => {
+    if (loading) loading.classList.remove("is-visible");
+  };
+  if (reduceMotion) {
+    try {
+      runDraw();
+    } finally {
+      doneLoading();
+    }
+    return;
+  }
+  requestAnimationFrame(() => {
+    try {
+      runDraw();
+    } finally {
+      requestAnimationFrame(doneLoading);
+    }
   });
 }
 
@@ -2013,37 +2347,77 @@ function hideChartTooltip() {
 function renderChartMetricMenuItems() {
   const menu = document.getElementById("chart-metric-menu");
   if (!menu) return;
-  const opts = getNumericMetricOptions();
-  menu.innerHTML = opts
-    .map((o) => `<button type="button" class="chart-metric-menu-item${o.id === chartMetricId ? " is-active" : ""}" data-metric-id="${o.id}" role="menuitem">${o.label}</button>`)
+  const groups = getNumericMetricOptionsGrouped();
+  menu.innerHTML = groups
+    .map((g) => {
+      const items = g.items
+        .map(
+          (o) =>
+            `<button type="button" class="chart-metric-menu-item${o.id === chartMetricId ? " is-active" : ""}" data-metric-id="${o.id}" role="menuitem">${escapeHtml(o.label)}</button>`,
+        )
+        .join("");
+      const head = `${escapeHtml(g.emoji)} ${escapeHtml(g.categoryLabel)}`;
+      return `<div class="chart-metric-group" role="group" aria-label="${escapeHtml(g.categoryLabel)}"><div class="chart-metric-group-title">${head}</div>${items}</div>`;
+    })
     .join("");
 }
 
 function hideChartMetricMenu() {
   const menu = document.getElementById("chart-metric-menu");
-  if (!menu) return;
-  menu.classList.add("hidden");
+  const backdrop = document.getElementById("chart-metric-menu-backdrop");
+  const legend = document.getElementById("chart-legend-trigger");
+  if (menu) {
+    menu.classList.add("hidden");
+    menu.classList.remove("chart-metric-menu--sheet", "chart-metric-menu--popover");
+    menu.style.left = "";
+    menu.style.top = "";
+    menu.style.right = "";
+    menu.style.bottom = "";
+  }
+  if (backdrop) backdrop.classList.add("hidden");
+  if (legend) legend.setAttribute("aria-expanded", "false");
 }
 
+/**
+ * @param {number} clientX viewport X
+ * @param {number} clientY viewport Y
+ */
 function openChartMetricMenu(clientX, clientY) {
   const wrap = document.getElementById("stats-chart-wrap");
   const menu = document.getElementById("chart-metric-menu");
+  const backdrop = document.getElementById("chart-metric-menu-backdrop");
   if (!wrap || !menu) return;
   renderChartMetricMenuItems();
-  const wrapRect = wrap.getBoundingClientRect();
+  const sheet = window.innerWidth <= CHART_METRIC_SHEET_MAX_W;
   menu.classList.remove("hidden");
-  const menuW = menu.offsetWidth || 220;
-  const menuH = menu.offsetHeight || 180;
-  const left = Math.min(
-    wrapRect.width - menuW - 8,
-    Math.max(8, clientX - wrapRect.left - menuW / 2),
-  );
-  const top = Math.min(
-    wrapRect.height - menuH - 8,
-    Math.max(8, clientY - wrapRect.top - menuH - 12),
-  );
-  menu.style.left = `${Math.round(left)}px`;
-  menu.style.top = `${Math.round(top)}px`;
+  if (sheet) {
+    menu.classList.add("chart-metric-menu--sheet");
+    menu.classList.remove("chart-metric-menu--popover");
+    if (backdrop) backdrop.classList.remove("hidden");
+    menu.style.left = "";
+    menu.style.top = "";
+  } else {
+    menu.classList.add("chart-metric-menu--popover");
+    menu.classList.remove("chart-metric-menu--sheet");
+    if (backdrop) backdrop.classList.add("hidden");
+    const wrapRect = wrap.getBoundingClientRect();
+    const localX = clientX - wrapRect.left;
+    const localY = clientY - wrapRect.top;
+    const menuW = menu.offsetWidth || 240;
+    const menuH = menu.offsetHeight || 200;
+    const left = Math.min(
+      wrapRect.width - menuW - 8,
+      Math.max(8, localX - menuW / 2),
+    );
+    const top = Math.min(
+      wrapRect.height - menuH - 8,
+      Math.max(8, localY - menuH - 8),
+    );
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+  }
+  const legend = document.getElementById("chart-legend-trigger");
+  if (legend) legend.setAttribute("aria-expanded", "true");
 }
 
 function openChartMetricMenuByLegend() {
@@ -2054,56 +2428,64 @@ function openChartMetricMenuByLegend() {
   openChartMetricMenu(rect.left + rect.width / 2, rect.top);
 }
 
-function onChartHover(ev) {
-  if (statsMode !== "chart") return;
-  const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById("stats-chart"));
-  const tip = document.getElementById("chart-tooltip");
-  if (!canvas || !tip || chartHitPoints.length === 0) return;
-  const rect = canvas.getBoundingClientRect();
-  const mx = ev.clientX - rect.left;
-  const my = ev.clientY - rect.top;
-
-  let nearest = null;
-  let minDist = Infinity;
-  for (const p of chartHitPoints) {
-    const dx = p.x - mx;
-    const dy = p.y - my;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < minDist) {
-      minDist = dist;
-      nearest = p;
-    }
-  }
-  if (!nearest || minDist > 18) {
-    hideChartTooltip();
-    return;
-  }
-
-  tip.innerHTML = `<div class="chart-tip-label">${nearest.label}</div><div class="chart-tip-value">${nearest.value} ${nearest.unit}</div>`;
-  const offsetX = Math.min(rect.width - 130, Math.max(6, nearest.x + 10));
-  const offsetY = Math.max(6, nearest.y - 42);
-  tip.style.left = `${offsetX}px`;
-  tip.style.top = `${offsetY}px`;
-  tip.classList.remove("hidden");
-}
-
 function buildTrendData() {
   const metrics = getNumericMetricOptions();
   const metric = metrics.find((m) => m.id === chartMetricId) || metrics[0];
-  if (!metric) return { mode: "range-line", points: [], unit: "数值", metricLabel: "当前指标" };
-  const legend = document.getElementById("chart-legend-text");
-  if (legend) legend.textContent = metric.label;
+  const emptySummary = () => ({
+    primary: "—",
+    secondary: !statsRange.start || !statsRange.end ? "请选择开始与结束日期以查看趋势" : "当前范围内没有数据",
+    sum: 0,
+    mean: 0,
+    min: 0,
+    max: 0,
+    count: 0,
+  });
+  const empty = (extra = {}) => ({
+    mode: /** @type {"range-line"|"day-points"} */ ("range-line"),
+    points: /** @type {Array<{ label: string, value: number, t?: number }>} */ ([]),
+    unit: metric?.unit || "数值",
+    metricLabel: metric?.label || "当前指标",
+    metric,
+    resolution: "day",
+    resolutionLabel: "",
+    summary: emptySummary(),
+    yRange: { minY: 0, maxY: 10 },
+    ...extra,
+  });
+  if (!metric) return empty({ metric: null, unit: "数值", metricLabel: "当前指标" });
 
   const range = { start: statsRange.start, end: statsRange.end };
   const source = getEntriesByRange(range.start, range.end);
-  const data = [];
-  if (!range.start || !range.end) return { mode: "range-line", points: data, unit: metric.unit, metricLabel: metric.label };
+  const hint = document.getElementById("stats-range-hint");
+  const rangeLabel = range.start && range.end ? `${range.start} 至 ${range.end}` : "全部时间";
+
+  const pack = (mode, points, resolution, resLabelOverride) => {
+    const summary = computeTrendSummary(metric, points);
+    const vals = points.map((p) => Number(p.value) || 0);
+    const yRange = getSmartYRange(metric, vals);
+    const resLabel = resLabelOverride || getAggregationLabel(resolution);
+    if (hint) hint.textContent = `当前范围：${rangeLabel} · 图表聚合：${resLabel}`;
+    return {
+      mode,
+      points,
+      unit: metric.unit,
+      metricLabel: metric.label,
+      metric,
+      resolution,
+      resolutionLabel: resLabel,
+      summary,
+      yRange,
+    };
+  };
+
+  if (!range.start || !range.end) {
+    if (hint) hint.textContent = "当前范围：全部时间 · 图表需选择具体日期范围";
+    return empty();
+  }
+
   const start = new Date(`${range.start}T00:00:00`);
   const end = new Date(`${range.end}T00:00:00`);
   const resolution = getChartResolutionByRange(start, end);
-  const hint = document.getElementById("stats-range-hint");
-  const rangeLabel = `${range.start} 至 ${range.end}`;
-  if (hint) hint.textContent = `当前范围：${rangeLabel} · 图表聚合：${getAggregationLabel(resolution)}`;
   const isSingleDay = range.start === range.end;
   if (isSingleDay && resolution === "day") {
     const dayPoints = source
@@ -2119,9 +2501,11 @@ function buildTrendData() {
         };
       })
       .sort((a, b) => a.t - b.t);
-    return { mode: "day-points", points: dayPoints, unit: metric.unit, metricLabel: metric.label };
+    return pack("day-points", dayPoints, "day", "按记录时间");
   }
+
   const metricEntries = source.filter((e) => e.categoryId === metric.categoryId);
+  const data = [];
   if (resolution === "day") {
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const key = toLocalDateKey(d);
@@ -2164,7 +2548,7 @@ function buildTrendData() {
       cursor.setMonth(cursor.getMonth() + 1);
     }
   }
-  return { mode: "range-line", points: data, unit: metric.unit, metricLabel: metric.label };
+  return pack("range-line", data, resolution, "");
 }
 
 function getEntriesByRange(start, end) {
@@ -3888,8 +4272,22 @@ async function init() {
     if (statsMode === "chart") renderTrendChart();
   });
   const chartCanvas = document.getElementById("stats-chart");
-  chartCanvas.addEventListener("mousemove", onChartHover);
-  chartCanvas.addEventListener("mouseleave", hideChartTooltip);
+  if (chartCanvas) {
+    chartCanvas.addEventListener("pointermove", onChartPointerMove);
+    chartCanvas.addEventListener("pointerdown", onChartPointerDown);
+    chartCanvas.addEventListener("pointerup", onChartPointerUp);
+    chartCanvas.addEventListener("pointercancel", onChartPointerUp);
+    chartCanvas.addEventListener("pointerleave", onChartPointerLeave);
+  }
+  const chartMenuBackdrop = document.getElementById("chart-metric-menu-backdrop");
+  if (chartMenuBackdrop) chartMenuBackdrop.addEventListener("click", hideChartMetricMenu);
+  document.getElementById("chart-empty-to-cards")?.addEventListener("click", () => {
+    statsMode = "cards";
+    renderStats();
+  });
+  document.getElementById("chart-empty-widen-range")?.addEventListener("click", () => {
+    applyPresetRange("30d");
+  });
   const chartLegendTrigger = document.getElementById("chart-legend-trigger");
   if (chartLegendTrigger) {
     chartLegendTrigger.addEventListener("click", (ev) => {
