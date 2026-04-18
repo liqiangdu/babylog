@@ -1053,6 +1053,10 @@ textarea:focus-visible {
   margin: 0;
   padding: 0;
 }
+.timeline li:not(.tl-day) {
+  content-visibility: auto;
+  contain-intrinsic-size: 72px;
+}
 .timeline li {
   display: flex;
   flex-wrap: wrap;

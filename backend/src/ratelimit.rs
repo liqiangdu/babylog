@@ -7,6 +7,54 @@ use std::{
 
 use axum::http::HeaderMap;
 
+/// Sliding-window counter (successful events). Used for chat / API abuse control.
+#[derive(Debug)]
+pub struct SlidingWindowLimiter {
+    window: Duration,
+    max_hits: u32,
+    inner: Mutex<HashMap<String, Vec<Instant>>>,
+}
+
+impl SlidingWindowLimiter {
+    pub fn new(window: Duration, max_hits: u32) -> Self {
+        Self {
+            window,
+            max_hits,
+            inner: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// `None` = allowed. `Some(secs)` = HTTP 429, retry after this many seconds.
+    pub fn try_consume(&self, key: &str) -> Option<u64> {
+        let Ok(mut map) = self.inner.lock() else {
+            return Some(60);
+        };
+        let now = Instant::now();
+        let hits = map.entry(key.to_string()).or_default();
+        hits.retain(|t| now.duration_since(*t) < self.window);
+        if hits.len() as u32 >= self.max_hits {
+            if let Some(oldest) = hits.first() {
+                let wait = self.window.saturating_sub(now.duration_since(*oldest));
+                return Some(wait.as_secs().max(1));
+            }
+            return Some(self.window.as_secs().max(1));
+        }
+        hits.push(now);
+        None
+    }
+
+    pub fn gc(&self) {
+        let Ok(mut map) = self.inner.lock() else {
+            return;
+        };
+        let now = Instant::now();
+        map.retain(|_, hits| {
+            hits.retain(|t| now.duration_since(*t) < self.window);
+            !hits.is_empty()
+        });
+    }
+}
+
 /// Simple in-memory sliding-window rate limiter. Suitable for a single-process
 /// deployment; swap in Redis if you later scale horizontally.
 pub struct RateLimiter {

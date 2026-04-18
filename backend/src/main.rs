@@ -98,6 +98,8 @@ pub(crate) struct AppState {
     deepseek_model: String,
     /// Rate limiter for login/register attempts (shared across handlers).
     pub(crate) auth_limiter: Arc<ratelimit::RateLimiter>,
+    /// Sliding-window limit for authenticated AI chat starts (per user + IP).
+    pub(crate) chat_limiter: Arc<ratelimit::SlidingWindowLimiter>,
     /// Whether to trust X-Forwarded-For / X-Real-IP when computing client IP.
     pub(crate) trust_proxy: bool,
     /// Secret pepper prepended (via HMAC) to passwords before argon2 hashing.
@@ -292,12 +294,14 @@ async fn security_headers(req: Request<axum::body::Body>, next: Next) -> Respons
 
 fn spawn_background_tasks(state: AppState) {
     // GC rate-limit buckets every minute.
-    let limiter = state.auth_limiter.clone();
+    let auth_limiter = state.auth_limiter.clone();
+    let chat_limiter = state.chat_limiter.clone();
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(60));
         loop {
             tick.tick().await;
-            limiter.gc();
+            auth_limiter.gc();
+            chat_limiter.gc();
         }
     });
     // Sweep expired sessions every hour.
@@ -374,6 +378,20 @@ async fn bootstrap_state() -> AppState {
         10,
         Duration::from_secs(900),
     ));
+    let chat_rl_window = Duration::from_secs(
+        env::var("BABYLOG_CHAT_RL_WINDOW_SEC")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(60),
+    );
+    let chat_rl_max: u32 = env::var("BABYLOG_CHAT_RL_MAX")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30);
+    let chat_limiter = Arc::new(ratelimit::SlidingWindowLimiter::new(
+        chat_rl_window,
+        chat_rl_max.max(1),
+    ));
     AppState {
         db_path,
         objects_dir,
@@ -383,6 +401,7 @@ async fn bootstrap_state() -> AppState {
         deepseek_base_url,
         deepseek_model,
         auth_limiter,
+        chat_limiter,
         trust_proxy,
         password_pepper,
         cookie_mode,
@@ -709,7 +728,11 @@ async fn list_entries(
     let result = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
         let conn = open_conn(&state.db_path).map_err(|e| e.to_string())?;
         let offset = query.offset.unwrap_or(0);
-        let limit = query.limit.unwrap_or(20);
+        const MAX_ENTRY_PAGE: usize = 1000;
+        let limit = query
+            .limit
+            .unwrap_or(20)
+            .clamp(1, MAX_ENTRY_PAGE);
         let category = query.category.unwrap_or_default();
         let day = query.day.unwrap_or_default();
 

@@ -19,13 +19,18 @@ import {
   CATEGORIES,
 } from "../config/constants";
 import { API_BASE, API_ORIGIN } from "../config/api-base";
-import { mapEntryFromApi, mapEntryToApi } from "../api/mappers";
+import { mapEntryToApi } from "../api/mappers";
 import {
   TREND_LINE_COLOR,
   CHART_METRIC_BUCKETS,
   CHART_METRIC_SHEET_MAX_W,
 } from "../chart/chart-config";
 import { initCustomDropdowns } from "../ui/custom-dropdown";
+import { fetchAllEntriesPaged } from "../api/entries-pagination";
+import { renderMarkdownToHtml, throttledStreamingMarkdownUpdate, flushStreamingMarkdownThrottle } from "../markdown/render";
+import { accumulateRangeStats } from "../stats/accumulate-range-stats";
+import { toLocalDateKey } from "../lib/dates";
+import { collectGalleryPhotosFromEntries } from "../gallery/collect-photos";
 
 /** @type {Array<{id: string, categoryId: string, at: string, fields: Record<string, string|number>, note: string, photos?: string[]}>} */
 let entries = [];
@@ -641,18 +646,12 @@ function initModuleNavigation() {
 
 async function initDataSource() {
   try {
-    const [
-      apiProfile,
-      apiEntriesResp,
-      apiVaccines,
-      apiVaccineSettings,
-      apiVaccineTemplates,
-    ] = await Promise.all([
+    const [apiProfile, apiVaccines, apiVaccineSettings, apiVaccineTemplates, entryList] = await Promise.all([
       apiRequest("/profile"),
-      apiRequest("/entries?limit=5000&offset=0"),
       apiRequest("/vaccines"),
       apiRequest("/vaccine-settings"),
       apiRequest("/vaccine-templates"),
+      fetchAllEntriesPaged(apiRequest, { pageSize: 500, maxEntries: 25000 }),
     ]);
     profile = {
       name: apiProfile?.name || "",
@@ -661,8 +660,7 @@ async function initDataSource() {
       blood: apiProfile?.blood || "",
       avatar: apiProfile?.avatar || apiProfile?.avatar_url || profile.avatar || "",
     };
-    const items = Array.isArray(apiEntriesResp?.items) ? apiEntriesResp.items : [];
-    entries = items.map(mapEntryFromApi).sort((a, b) => new Date(b.at) - new Date(a.at));
+    entries = entryList;
     vaccines = Array.isArray(apiVaccines)
       ? apiVaccines.map((v) => ({
         id: String(v.id || ""),
@@ -734,14 +732,6 @@ function daysBetween(from, to) {
   a.setHours(0, 0, 0, 0);
   b.setHours(0, 0, 0, 0);
   return Math.floor((b - a) / (24 * 60 * 60 * 1000));
-}
-
-function toLocalDateKey(input) {
-  const d = new Date(input);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function getAgeText() {
@@ -1467,7 +1457,7 @@ function renderModuleSummaries() {
   }
 
   if (gallerySummary) {
-    const photos = collectGalleryPhotos();
+    const photos = collectGalleryPhotosFromEntries(entries, getCategory);
     const daySet = new Set(photos.map((p) => toLocalDateKey(p.at)));
     const latestPhoto = photos[0];
     gallerySummary.innerHTML = `
@@ -1559,74 +1549,48 @@ function renderStats() {
   if (!grid || !chartWrap) return;
 
   const inRangeEntries = getEntriesByRange(statsRange.start, statsRange.end);
+  const prevRange = getPreviousRange(statsRange.start, statsRange.end);
+  const prevEntries = prevRange ? getEntriesByRange(prevRange.start, prevRange.end) : [];
+  const cur = accumulateRangeStats(inRangeEntries);
+  const prev = accumulateRangeStats(prevEntries);
   const rangeStartDate = statsRange.start ? new Date(`${statsRange.start}T00:00:00`) : null;
   const rangeEndDate = statsRange.end ? new Date(`${statsRange.end}T00:00:00`) : null;
   const dayCount = rangeStartDate && rangeEndDate
     ? Math.max(1, Math.floor((rangeEndDate - rangeStartDate) / 86400000) + 1)
-    : new Set(inRangeEntries.map((e) => toLocalDateKey(e.at))).size || 1;
-  const prevRange = getPreviousRange(statsRange.start, statsRange.end);
-  const prevEntries = prevRange ? getEntriesByRange(prevRange.start, prevRange.end) : [];
-  const feedMl = inRangeEntries
-    .filter((e) => e.categoryId === "feeding")
-    .reduce((sum, e) => sum + (Number(e.fields?.amountMl) || 0), 0);
-  const prevFeedMl = prevEntries
-    .filter((e) => e.categoryId === "feeding")
-    .reduce((sum, e) => sum + (Number(e.fields?.amountMl) || 0), 0);
-  const sleepMin = inRangeEntries
-    .filter((e) => e.categoryId === "sleep")
-    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
-  const prevSleepMin = prevEntries
-    .filter((e) => e.categoryId === "sleep")
-    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
-  const wetCount = inRangeEntries.filter((e) => e.categoryId === "diaper" && ["wet", "both"].includes(String(e.fields?.subtype || ""))).length;
-  const dirtyCount = inRangeEntries.filter((e) => e.categoryId === "diaper" && ["dirty", "both"].includes(String(e.fields?.subtype || ""))).length;
-  const diaperCount = inRangeEntries.filter((e) => e.categoryId === "diaper").length;
-  const prevDiaperCount = prevEntries.filter((e) => e.categoryId === "diaper").length;
-  const bathCount = inRangeEntries.filter((e) => e.categoryId === "bath").length;
-  const medicineCount = inRangeEntries.filter((e) => e.categoryId === "medicine").length;
-  const prevMedicineCount = prevEntries.filter((e) => e.categoryId === "medicine").length;
-  const solidCount = inRangeEntries.filter((e) => e.categoryId === "solid").length;
-  const prevSolidCount = prevEntries.filter((e) => e.categoryId === "solid").length;
-  const spitupCount = inRangeEntries.filter((e) => e.categoryId === "spitup").length;
-  const supplementCount = inRangeEntries.filter((e) => e.categoryId === "supplement").length;
-  const prevSupplementCount = prevEntries.filter((e) => e.categoryId === "supplement").length;
-  const pumpCount = inRangeEntries.filter((e) => e.categoryId === "pump").length;
-  const prevPumpCount = prevEntries.filter((e) => e.categoryId === "pump").length;
-  const pumpMl = inRangeEntries
-    .filter((e) => e.categoryId === "pump")
-    .reduce((sum, e) => sum + (Number(e.fields?.amountMl) || 0), 0);
-  const prevPumpMl = prevEntries
-    .filter((e) => e.categoryId === "pump")
-    .reduce((sum, e) => sum + (Number(e.fields?.amountMl) || 0), 0);
-  const customCount = inRangeEntries.filter((e) => e.categoryId === "custom").length;
-  const tummyMin = inRangeEntries
-    .filter((e) => e.categoryId === "tummy_time")
-    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
-  const prevTummyMin = prevEntries
-    .filter((e) => e.categoryId === "tummy_time")
-    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
-  const outdoorMin = inRangeEntries
-    .filter((e) => e.categoryId === "outdoor")
-    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
-  const prevOutdoorMin = prevEntries
-    .filter((e) => e.categoryId === "outdoor")
-    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
-  const cryMin = inRangeEntries
-    .filter((e) => e.categoryId === "cry")
-    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
-  const prevCryMin = prevEntries
-    .filter((e) => e.categoryId === "cry")
-    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
-  const tempEntries = inRangeEntries
-    .filter((e) => e.categoryId === "temperature")
-    .sort((a, b) => new Date(b.at) - new Date(a.at));
-  const prevTempCount = prevEntries.filter((e) => e.categoryId === "temperature").length;
+    : cur.dayKeys.size || 1;
+  const feedMl = cur.feedMl;
+  const prevFeedMl = prev.feedMl;
+  const sleepMin = cur.sleepMin;
+  const prevSleepMin = prev.sleepMin;
+  const wetCount = cur.wetCount;
+  const dirtyCount = cur.dirtyCount;
+  const diaperCount = cur.diaperCount;
+  const prevDiaperCount = prev.diaperCount;
+  const bathCount = cur.bathCount;
+  const medicineCount = cur.medicineCount;
+  const prevMedicineCount = prev.medicineCount;
+  const solidCount = cur.solidCount;
+  const prevSolidCount = prev.solidCount;
+  const spitupCount = cur.spitupCount;
+  const supplementCount = cur.supplementCount;
+  const prevSupplementCount = prev.supplementCount;
+  const pumpCount = cur.pumpCount;
+  const prevPumpCount = prev.pumpCount;
+  const pumpMl = cur.pumpMl;
+  const prevPumpMl = prev.pumpMl;
+  const customCount = cur.customCount;
+  const tummyMin = cur.tummyMin;
+  const prevTummyMin = prev.tummyMin;
+  const outdoorMin = cur.outdoorMin;
+  const prevOutdoorMin = prev.outdoorMin;
+  const cryMin = cur.cryMin;
+  const prevCryMin = prev.cryMin;
+  const tempEntries = cur.latestTempEntry ? [cur.latestTempEntry] : [];
+  const prevTempCount = prev.tempCount;
   const latestTemp = tempEntries.length ? Number(tempEntries[0].fields?.celsius) || null : null;
-  const growthEntries = inRangeEntries
-    .filter((e) => e.categoryId === "growth")
-    .sort((a, b) => new Date(b.at) - new Date(a.at));
-  const prevGrowthCount = prevEntries.filter((e) => e.categoryId === "growth").length;
-  const lg = growthEntries[0];
+  const growthCount = cur.growthCount;
+  const prevGrowthCount = prev.growthCount;
+  const lg = cur.latestGrowthEntry;
   let growthMain = "暂无";
   let growthSub = "本范围内无生长测量";
   /** @type {string} */
@@ -1653,7 +1617,7 @@ function renderStats() {
       if (!growthMetricId) growthMetricId = "growth.headCm";
     }
     growthMain = w != null ? `${w} kg` : h != null ? `${h} cm` : head != null ? `${head} cm` : "已记录";
-    growthSub = parts.length ? parts.join(" · ") : `共 ${growthEntries.length} 次`;
+    growthSub = parts.length ? parts.join(" · ") : `共 ${growthCount} 次`;
   }
   const doneVaccines = vaccines.filter((v) => v.status === "done").length;
   const rangeLabel = statsRange.start && statsRange.end ? `${statsRange.start} 至 ${statsRange.end}` : "全部时间";
@@ -1735,7 +1699,7 @@ function renderStats() {
       sub: tempEntries.length ? `记录 ${tempEntries.length} 次` : "本范围内无体温记录",
       delta: formatDelta(tempEntries.length, prevTempCount),
       tone: "priority",
-      metricId: tempEntries.length ? "temperature.celsius" : "",
+      metricId: cur.tempCount ? "temperature.celsius" : "",
       icon: "temperature",
       hero: true,
     },
@@ -1743,7 +1707,7 @@ function renderStats() {
       k: "生长测量",
       v: growthMain,
       sub: growthSub,
-      delta: formatDelta(growthEntries.length, prevGrowthCount),
+      delta: formatDelta(growthCount, prevGrowthCount),
       tone: "priority",
       metricId: growthMetricId,
       icon: "growth",
@@ -2824,32 +2788,13 @@ function renderVaccines() {
   checkVaccineReminders(false);
 }
 
-function collectGalleryPhotos() {
-  /** @type {Array<{entryId: string, at: string, categoryLabel: string, url: string}>} */
-  const photos = [];
-  for (const entry of entries) {
-    const urls = Array.isArray(entry.photos) ? entry.photos : [];
-    if (!urls.length) continue;
-    const cat = getCategory(entry.categoryId);
-    for (const url of urls) {
-      photos.push({
-        entryId: entry.id,
-        at: entry.at,
-        categoryLabel: cat.label,
-        url,
-      });
-    }
-  }
-  return photos.sort((a, b) => new Date(b.at) - new Date(a.at));
-}
-
 let galleryPhotos = [];
 
 function renderPhotoGallery() {
   const summaryEl = document.getElementById("photo-gallery-summary");
   const galleryEl = document.getElementById("photo-gallery");
   if (!summaryEl || !galleryEl) return;
-  galleryPhotos = collectGalleryPhotos();
+  galleryPhotos = collectGalleryPhotosFromEntries(entries, getCategory);
   if (!galleryPhotos.length) {
     summaryEl.textContent = "";
     galleryEl.innerHTML = `<div class="empty-state">暂无照片</div>`;
@@ -3442,22 +3387,6 @@ function escapeHtml(text) {
     .replace(/'/g, "&#39;");
 }
 
-function renderMarkdownToHtml(src) {
-  const md = String(src || "");
-  if (!md.trim()) return "";
-  const markedFn = typeof marked !== "undefined" ? /** @type {any} */ (marked) : null;
-  const purify = typeof DOMPurify !== "undefined" ? DOMPurify : null;
-  if (!markedFn || !purify) {
-    return `<p>${escapeHtml(md)}</p>`;
-  }
-  try {
-    const rawHtml = markedFn.parse(md, { breaks: true, gfm: true });
-    return purify.sanitize(rawHtml, { USE_PROFILES: { html: true } });
-  } catch {
-    return `<p>${escapeHtml(md)}</p>`;
-  }
-}
-
 function getAiContextConsent() {
   const c = aiProject.aiContextConsent || {};
   return {
@@ -3746,7 +3675,9 @@ async function consumeSseChatStream(payload, onChunk, onDraft) {
         if (obj && typeof obj.c === "string" && obj.c) {
           onChunk(obj.c);
           await new Promise((resolve) => requestAnimationFrame(resolve));
-          if (!updateStreamingAssistantBubbleOnly()) scheduleAiChatRender();
+          throttledStreamingMarkdownUpdate(() => {
+            if (!updateStreamingAssistantBubbleOnly()) scheduleAiChatRender();
+          });
         }
         if (obj && obj.draft && typeof obj.draft === "object" && onDraft) onDraft(obj.draft);
       }
@@ -3883,6 +3814,7 @@ async function sendAiMessage() {
     saveAiProject();
     scheduleAiChatRender();
   } finally {
+    flushStreamingMarkdownThrottle();
     aiBusy = false;
     setAiStatus("");
     refreshAiUiState();

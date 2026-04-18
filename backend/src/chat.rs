@@ -196,8 +196,20 @@ pub async fn chat_stream(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": msg }))).into_response();
     }
 
-    let allow_tools = req.allow_server_tools.unwrap_or(true);
     let ip = ratelimit::client_ip(&headers, state.trust_proxy, None);
+    let chat_key = format!("{}|{}", user_id, ip);
+    if let Some(retry_after_sec) = state.chat_limiter.try_consume(&chat_key) {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({
+                "error": "AI 问答请求过于频繁，请稍后重试",
+                "retry_after_sec": retry_after_sec
+            })),
+        )
+            .into_response();
+    }
+
+    let allow_tools = req.allow_server_tools.unwrap_or(true);
     let ua = auth::user_agent(&headers);
     let system_prompt = build_system_prompt(&req.instruction, &req.baby_context);
     let mut openai_messages: Vec<Value> = vec![json!({
