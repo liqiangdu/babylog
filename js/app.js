@@ -34,7 +34,7 @@ let statsRange = { start: "", end: "", preset: "7d" };
 let statsMode = "cards";
 let timelineVisibleCount = 20;
 const TREND_LINE_COLOR = "#6b7280";
-let chartResolution = "auto";
+let chartResolution = "day";
 let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
 /** @type {object|null} */
@@ -915,7 +915,7 @@ function summarizeFields(cat, fields) {
       const opt = f.options.find((o) => o.v === String(v));
       parts.push(opt ? opt.t : v);
     } else if (f.key === "amountMl") parts.push(`${v} ml`);
-    else if (f.key === "durationMin") parts.push(`${v} 分钟`);
+    else if (f.key === "durationMin") parts.push(formatDurationMinutes(Number(v)));
     else if (f.key === "celsius") parts.push(`${v}°C`);
     else if (f.key === "weightKg") parts.push(`体重 ${v} kg`);
     else if (f.key === "heightCm") parts.push(`身长 ${v} cm`);
@@ -946,26 +946,79 @@ function getNumericMetricOptions() {
   return opts;
 }
 
+/** 图表指标选择器：粗分组，减少零碎感（与统计页核心/非核心心智一致） */
+const CHART_METRIC_BUCKETS = [
+  { key: "rhythm", title: "节律与摄入", emoji: "🍼", categoryIds: ["feeding", "sleep", "pump"] },
+  { key: "body", title: "身体测量", emoji: "📏", categoryIds: ["temperature", "growth"] },
+  { key: "activity", title: "活动与状态", emoji: "☀️", categoryIds: ["bath", "tummy_time", "outdoor", "cry"] },
+];
+
 function getNumericMetricOptionsGrouped() {
-  /** @type {Array<{categoryId: string, categoryLabel: string, emoji: string, items: Array<{ id: string, label: string, categoryId: string, fieldKey: string, unit: string }>}>} */
+  /** @type {Array<{ key: string, title: string, emoji: string, items: Array<{ id: string, label: string, categoryId: string, fieldKey: string, unit: string }> }>} */
   const groups = [];
-  for (const c of CATEGORIES) {
+  for (const bucket of CHART_METRIC_BUCKETS) {
     /** @type {Array<{ id: string, label: string, categoryId: string, fieldKey: string, unit: string }>} */
     const items = [];
-    for (const f of c.fields) {
-      if (f.type !== "number") continue;
-      const metricName = stripFieldUnit(String(f.label || f.key || "数值"));
-      items.push({
-        id: `${c.id}.${f.key}`,
-        label: `${c.emoji} ${metricName}`,
-        categoryId: c.id,
-        fieldKey: f.key,
-        unit: inferMetricUnit(f),
-      });
+    for (const catId of bucket.categoryIds) {
+      const c = CATEGORIES.find((x) => x.id === catId);
+      if (!c) continue;
+      for (const f of c.fields) {
+        if (f.type !== "number") continue;
+        const metricName = stripFieldUnit(String(f.label || f.key || "数值"));
+        items.push({
+          id: `${c.id}.${f.key}`,
+          label: `${c.emoji} ${c.label} · ${metricName}`,
+          categoryId: c.id,
+          fieldKey: f.key,
+          unit: inferMetricUnit(f),
+        });
+      }
     }
-    if (items.length) groups.push({ categoryId: c.id, categoryLabel: c.label, emoji: c.emoji, items });
+    if (items.length) groups.push({ key: bucket.key, title: bucket.title, emoji: bucket.emoji, items });
   }
   return groups;
+}
+
+/**
+ * 将总分钟数格式化为「天 / 小时 / 分钟」可读文案（用于统计、图表、摘要等）。
+ * @param {number|string} totalMin
+ */
+function formatDurationMinutes(totalMin) {
+  let n = Math.round(Number(totalMin) || 0);
+  if (n < 0) n = 0;
+  if (n === 0) return "0 分钟";
+  const days = Math.floor(n / 1440);
+  const remD = n % 1440;
+  const hours = Math.floor(remD / 60);
+  const mins = remD % 60;
+  /** @type {string[]} */
+  const parts = [];
+  if (days) parts.push(`${days} 天`);
+  if (hours) parts.push(`${hours} 小时`);
+  if (mins > 0 || parts.length === 0) parts.push(`${mins} 分钟`);
+  return parts.join(" ");
+}
+
+/**
+ * 图表 Y 轴刻度用较短文案，避免挤占画布。
+ * @param {number} minutes
+ */
+function formatDurationAxisTick(minutes) {
+  const m = Math.round(Number(minutes) || 0);
+  if (m < 60) return `${m} 分`;
+  if (m < 1440) {
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return mm ? `${h} 时${mm} 分` : `${h} 时`;
+  }
+  const d = Math.floor(m / 1440);
+  const r = m % 1440;
+  const h = Math.floor(r / 60);
+  const mm = r % 60;
+  if (h && mm) return `${d} 天${h} 时`;
+  if (h) return `${d} 天${h} 时`;
+  if (mm) return `${d} 天${mm} 分`;
+  return `${d} 天`;
 }
 
 function formatChartValueForUnit(unit, n) {
@@ -975,11 +1028,13 @@ function formatChartValueForUnit(unit, n) {
   if (unit === "kg") return x.toFixed(2);
   if (unit === "cm") return x.toFixed(1);
   if (unit === "ml") return String(Math.round(x));
-  if (unit === "分钟") return String(Math.round(x));
+  if (unit === "分钟") return formatDurationMinutes(x);
   return Number.isInteger(x) ? String(x) : x.toFixed(1);
 }
 
 function withChartUnit(unit, n) {
+  if (n == null || Number.isNaN(Number(n))) return "—";
+  if (unit === "分钟") return formatDurationMinutes(Number(n));
   const v = formatChartValueForUnit(unit, n);
   if (v === "—") return "—";
   return unit ? `${v} ${unit}` : v;
@@ -1811,8 +1866,8 @@ function renderStats() {
     },
     {
       k: "睡眠时长",
-      v: `${sleepMin} 分钟`,
-      sub: `日均 ${Math.round(sleepMin / dayCount)} 分钟`,
+      v: formatDurationMinutes(sleepMin),
+      sub: `日均 ${formatDurationMinutes(Math.round(sleepMin / dayCount))}`,
       delta: formatDelta(sleepMin, prevSleepMin),
       tone: "priority",
       metricId: "sleep.durationMin",
@@ -1878,24 +1933,24 @@ function renderStats() {
     { k: "洗澡次数", v: `${bathCount} 次`, icon: "bath" },
     {
       k: "趴玩时长",
-      v: `${tummyMin} 分钟`,
-      sub: `日均 ${Math.round(tummyMin / dayCount)} 分钟`,
+      v: formatDurationMinutes(tummyMin),
+      sub: `日均 ${formatDurationMinutes(Math.round(tummyMin / dayCount))}`,
       delta: formatDelta(tummyMin, prevTummyMin),
       metricId: "tummy_time.durationMin",
       icon: "tummy",
     },
     {
       k: "外出时长",
-      v: `${outdoorMin} 分钟`,
-      sub: `日均 ${Math.round(outdoorMin / dayCount)} 分钟`,
+      v: formatDurationMinutes(outdoorMin),
+      sub: `日均 ${formatDurationMinutes(Math.round(outdoorMin / dayCount))}`,
       delta: formatDelta(outdoorMin, prevOutdoorMin),
       metricId: "outdoor.durationMin",
       icon: "outdoor",
     },
     {
       k: "哭闹时长",
-      v: `${cryMin} 分钟`,
-      sub: `日均 ${Math.round(cryMin / dayCount)} 分钟`,
+      v: formatDurationMinutes(cryMin),
+      sub: `日均 ${formatDurationMinutes(Math.round(cryMin / dayCount))}`,
       delta: formatDelta(cryMin, prevCryMin),
       metricId: "cry.durationMin",
       icon: "cry",
@@ -2007,12 +2062,8 @@ function renderStats() {
   }
 }
 
-function getChartResolutionByRange(startDate, endDate) {
-  if (chartResolution !== "auto") return chartResolution;
-  const spanDays = Math.max(1, Math.floor((endDate - startDate) / 86400000) + 1);
-  if (spanDays <= 31) return "day";
-  if (spanDays <= 120) return "week";
-  return "month";
+function getChartResolutionByRange() {
+  return chartResolution;
 }
 
 function getWeekStartDate(date) {
@@ -2032,7 +2083,7 @@ function getAggregationLabel(mode) {
   if (mode === "day") return "按天";
   if (mode === "week") return "按周";
   if (mode === "month") return "按月";
-  return "自动";
+  return "按天";
 }
 
 function syncChartResolutionButtons() {
@@ -2226,13 +2277,13 @@ function renderTrendChart() {
     const spanY = Math.max(yMax - yMin, 1e-9);
     const lineColor = getChartLineCssColor(trend.metric);
 
-    const left = 56;
+    const unit = trend.unit || "数值";
+    const left = unit === "分钟" ? 78 : 56;
     const right = 12;
     const top = 22;
     const bottom = 30;
     const pw = cssWidth - left - right;
     const ph = cssHeight - top - bottom;
-    const unit = trend.unit || "数值";
 
     ctx.strokeStyle = "rgba(128, 128, 128, 0.15)";
     ctx.lineWidth = 1;
@@ -2245,10 +2296,13 @@ function renderTrendChart() {
       ctx.lineTo(left + pw, y);
       ctx.stroke();
       const raw = yMax - (spanY / 4) * i;
-      const lbl = spanY < 6 ? Math.round(raw * 100) / 100 : Math.round(raw);
-      ctx.fillText(String(lbl), 8, y + 4);
+      const tickLabel =
+        unit === "分钟"
+          ? formatDurationAxisTick(raw)
+          : String(spanY < 6 ? Math.round(raw * 100) / 100 : Math.round(raw));
+      ctx.fillText(tickLabel, 8, y + 4);
     }
-    ctx.fillText(unit, 8, 14);
+    ctx.fillText(unit === "分钟" ? "分钟 (累计)" : unit, 8, 14);
 
     const mapX = (i) => left + (pw * i) / Math.max(1, points.length - 1);
     const mapY = (v) => top + ph - ((Number(v) - yMin) / spanY) * ph;
@@ -2356,8 +2410,8 @@ function renderChartMetricMenuItems() {
             `<button type="button" class="chart-metric-menu-item${o.id === chartMetricId ? " is-active" : ""}" data-metric-id="${o.id}" role="menuitem">${escapeHtml(o.label)}</button>`,
         )
         .join("");
-      const head = `${escapeHtml(g.emoji)} ${escapeHtml(g.categoryLabel)}`;
-      return `<div class="chart-metric-group" role="group" aria-label="${escapeHtml(g.categoryLabel)}"><div class="chart-metric-group-title">${head}</div>${items}</div>`;
+      const head = `${escapeHtml(g.emoji)} ${escapeHtml(g.title)}`;
+      return `<div class="chart-metric-group" role="group" aria-label="${escapeHtml(g.title)}"><div class="chart-metric-group-title">${head}</div>${items}</div>`;
     })
     .join("");
 }
@@ -2485,7 +2539,7 @@ function buildTrendData() {
 
   const start = new Date(`${range.start}T00:00:00`);
   const end = new Date(`${range.end}T00:00:00`);
-  const resolution = getChartResolutionByRange(start, end);
+  const resolution = getChartResolutionByRange();
   const isSingleDay = range.start === range.end;
   if (isSingleDay && resolution === "day") {
     const dayPoints = source
@@ -4262,7 +4316,7 @@ async function init() {
   }
   document.querySelectorAll(".chart-res-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const next = btn.getAttribute("data-resolution") || "auto";
+      const next = btn.getAttribute("data-resolution") || "day";
       chartResolution = next;
       if (statsMode === "chart") renderTrendChart();
       else syncChartResolutionButtons();
