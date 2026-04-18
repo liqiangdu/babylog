@@ -33,7 +33,7 @@ let customVaccineTemplates = {};
 let statsRange = { start: "", end: "", preset: "7d" };
 let statsMode = "cards";
 let timelineVisibleCount = 20;
-const TREND_LINE_COLOR = "#1d9bf0";
+const TREND_LINE_COLOR = "#6b7280";
 let chartResolution = "auto";
 let chartMetricId = "feeding.amountMl";
 let chartHitPoints = [];
@@ -1767,8 +1767,8 @@ function renderTrendChart() {
   };
   // 点线图: 先画线，再画点
   const gradient = ctx.createLinearGradient(0, top, 0, top + ph);
-  gradient.addColorStop(0, "rgba(92, 156, 245, 0.18)");
-  gradient.addColorStop(1, "rgba(92, 156, 245, 0.01)");
+  gradient.addColorStop(0, "rgba(107, 114, 128, 0.16)");
+  gradient.addColorStop(1, "rgba(107, 114, 128, 0.01)");
   ctx.fillStyle = gradient;
   ctx.beginPath();
   points.forEach((p, i) => {
