@@ -250,7 +250,7 @@
               <section id="settings-panel-data" class="settings-tabpanel hidden" role="tabpanel" aria-labelledby="settings-tab-data" hidden>
                 <div class="settings-section">
                   <p class="settings-ai-intro">
-                    控制写入「宝宝数据摘要」的文本范围。服务端工具（按日期查记录、疫苗表、草稿）单独受「允许服务端工具」开关约束。
+                    控制写入「宝宝数据摘要」的文本范围。
                   </p>
                   <div class="settings-ai-privacy-list" role="group" aria-label="数据摘要与工具同意项">
                       <label class="settings-row settings-row--toggle">
@@ -264,7 +264,7 @@
                       </label>
                       <label class="settings-row settings-row--toggle">
                         <div class="settings-row-text">
-                          <div class="settings-row-label">在摘要中包含疫苗计划（最多 40 条）</div>
+                          <div class="settings-row-label">在摘要中包含疫苗计划</div>
                         </div>
                         <span class="settings-switch settings-switch--capsule">
                           <input type="checkbox" id="settings-ai-consent-vaccines" checked />
@@ -291,7 +291,7 @@
                       </label>
                       <label class="settings-row settings-row--toggle">
                         <div class="settings-row-text">
-                          <div class="settings-row-label">记录中标注照片数量（不含 URL）</div>
+                          <div class="settings-row-label">记录中标注照片数量</div>
                         </div>
                         <span class="settings-switch settings-switch--capsule">
                           <input type="checkbox" id="settings-ai-consent-photos" checked />
@@ -401,7 +401,7 @@
                         <option value="full_recent">最近记录</option>
                         <option value="recent_7d">最近 7 天详情</option>
                         <option value="timeline_filter">与活动筛选一致</option>
-                        <option value="stats_only">仅统计摘要（不含逐条记录）</option>
+                        <option value="stats_only">仅统计摘要</option>
                       </select>
                     </div>
                     <p id="ai-context-policy-hint" class="muted-line ai-context-policy-hint"></p>
@@ -433,7 +433,7 @@
                       </div>
                     </div>
                     <div class="ai-input-wrap">
-                      <textarea id="ai-user-input" class="ai-textarea" rows="1" placeholder="随便问点什么…（Enter 发送，Shift+Enter 换行）"></textarea>
+                      <textarea id="ai-user-input" class="ai-textarea" rows="1" placeholder="随便问点什么"></textarea>
                       <button type="button" id="btn-ai-send" class="ai-send-btn" aria-label="发送消息">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5"></path><path d="M5 12l7-7 7 7"></path></svg>
                       </button>

@@ -3700,7 +3700,7 @@ function renderAiChat() {
   }
   if (!active || active.messages.length === 0) {
     root.classList.add("ai-chat-log-empty");
-    root.innerHTML = `<div class="empty-state"><div class="ai-empty-greeting">想问什么？</div><div class="ai-empty-hint">基于你家的记录与设置作答；不确定的会直说。</div></div>`;
+    root.innerHTML = `<div class="empty-state"><div class="ai-empty-greeting">想问什么？</div><div class="ai-empty-hint">基于宝宝的记录与设置作答；不确定的会直说。</div></div>`;
     refreshAiUiState();
     return;
   }
