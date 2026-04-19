@@ -3564,11 +3564,6 @@ html[data-theme="dark"] .module-ai::before {
   font-size: 13px;
   color: var(--text-muted);
 }
-.auth-local {
-  display: flex;
-  justify-content: center;
-  margin-top: 2px;
-}
 .auth-link {
   background: transparent;
   border: none;

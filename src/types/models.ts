@@ -44,7 +44,6 @@ export interface AuthUser {
 export interface AuthState {
   token: string;
   user: AuthUser | null;
-  localOnly: boolean;
   csrf: string;
 }
 

@@ -6,6 +6,7 @@ export const STORAGE_THEME_KEY = "babylog_theme_mode_v1";
 export const STORAGE_SIDEBAR_COLLAPSED_KEY = "babylog_sidebar_collapsed_v1";
 export const STORAGE_AI_INSTRUCTION_KEY = "babylog_ai_instruction_v1";
 export const STORAGE_AI_PROJECT_KEY = "babylog_ai_project_v1";
+/** Legacy key: removed from UI; app deletes this on load/login/clear for migration. */
 export const STORAGE_AUTH_LOCAL_ONLY_KEY = "babylog_auth_local_only_v1";
 export const AUTH_CSRF_COOKIE = "babylog_csrf";
 export const DEFAULT_AI_INSTRUCTION =

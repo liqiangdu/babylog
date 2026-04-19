@@ -84,8 +84,8 @@ let statsDetailPushed = false;
 let ignoreNextStatsDetailPopstate = false;
 
 let apiReady = false;
-/** @type {{token: string, user: {id: string, username: string} | null, localOnly: boolean, csrf: string}} */
-let authState = { token: "", user: null, localOnly: false, csrf: "" };
+/** @type {{token: string, user: {id: string, username: string} | null, csrf: string}} */
+let authState = { token: "", user: null, csrf: "" };
 let authMode = "login";
 let authBusy = false;
 let themeMode = "system";
@@ -236,33 +236,26 @@ function readCookie(name) {
 }
 
 
-function loadAuth() {
-  let localOnly = false;
+function scrubLegacyAuthLocalOnlyFlag() {
   try {
-    localOnly = localStorage.getItem(STORAGE_AUTH_LOCAL_ONLY_KEY) === "1";
-  } catch {
-    localOnly = false;
-  }
-  authState = {
-    token: "",
-    user: null,
-    localOnly,
-    csrf: readCookie(AUTH_CSRF_COOKIE),
-  };
-}
-
-function persistAuth() {
-  try {
-    if (authState.localOnly) localStorage.setItem(STORAGE_AUTH_LOCAL_ONLY_KEY, "1");
-    else localStorage.removeItem(STORAGE_AUTH_LOCAL_ONLY_KEY);
+    localStorage.removeItem(STORAGE_AUTH_LOCAL_ONLY_KEY);
   } catch {
     /* ignore quota/private-mode errors */
   }
 }
 
+function loadAuth() {
+  scrubLegacyAuthLocalOnlyFlag();
+  authState = {
+    token: "",
+    user: null,
+    csrf: readCookie(AUTH_CSRF_COOKIE),
+  };
+}
+
 function clearAuth() {
-  authState = { token: "", user: null, localOnly: false, csrf: "" };
-  persistAuth();
+  authState = { token: "", user: null, csrf: "" };
+  scrubLegacyAuthLocalOnlyFlag();
   syncSidebarAccount();
 }
 
@@ -350,7 +343,7 @@ function syncSidebarAccount() {
   const avatar = document.getElementById("user-avatar");
   const btn = document.getElementById("btn-user-menu");
   if (!box) return;
-  const loggedIn = Boolean(authState.user && !authState.localOnly);
+  const loggedIn = Boolean(authState.user);
   if (loggedIn) {
     box.classList.remove("hidden");
     const uname = authState.user.username;
@@ -456,10 +449,9 @@ async function submitAuthForm() {
             avatar: typeof data.user.avatar === "string" ? data.user.avatar : "",
           }
         : null,
-      localOnly: false,
       csrf: readCookie(AUTH_CSRF_COOKIE) || String(data?.csrf_token || ""),
     };
-    persistAuth();
+    scrubLegacyAuthLocalOnlyFlag();
     hideAuthOverlay();
     if (p) p.value = "";
     showToast(authMode === "register" ? "注册成功" : "登录成功");
@@ -538,7 +530,7 @@ async function apiRequest(path, options = {}) {
     headers,
     credentials: "include",
   });
-  if (res.status === 401 && authState.user && !authState.localOnly) {
+  if (res.status === 401 && authState.user) {
     clearAuth();
     showAuthOverlay("login", "登录状态已过期，请重新登录");
   }
@@ -748,11 +740,13 @@ async function initDataSource() {
     apiReady = true;
   } catch {
     apiReady = false;
-    load();
-    loadProfile();
-    loadVaccines();
-    loadVaccineSettings();
-    loadCustomVaccineTemplates();
+    if (authState.user) {
+      load();
+      loadProfile();
+      loadVaccines();
+      loadVaccineSettings();
+      loadCustomVaccineTemplates();
+    }
   }
 }
 
@@ -1073,7 +1067,7 @@ async function uploadPhotosToServer(files) {
     credentials: "include",
     body: form,
   });
-  if (res.status === 401 && authState.user && !authState.localOnly) {
+  if (res.status === 401 && authState.user) {
     clearAuth();
     showAuthOverlay("login", "登录状态已过期，请重新登录");
   }
@@ -3769,7 +3763,7 @@ async function consumeSseChatStream(payload, onChunk, onDraft) {
     credentials: "include",
     body: JSON.stringify(payload),
   });
-  if (res.status === 401 && authState.user && !authState.localOnly) {
+  if (res.status === 401 && authState.user) {
     clearAuth();
     showAuthOverlay("login", "登录状态已过期，请重新登录");
     throw new Error("登录状态已过期");
@@ -4062,19 +4056,6 @@ function initAuthUi() {
       showAuthOverlay(authMode === "login" ? "register" : "login");
     });
   }
-  const local = document.getElementById("btn-auth-local");
-  if (local) {
-    local.addEventListener("click", () => {
-      authState.localOnly = true;
-      authState.token = "";
-      authState.user = null;
-      authState.csrf = "";
-      persistAuth();
-      hideAuthOverlay();
-      syncSidebarAccount();
-      showToast("已进入本机模式");
-    });
-  }
   const logoutBtn = document.getElementById("btn-logout");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
@@ -4242,7 +4223,7 @@ function syncAiContextPolicyHint() {
   if (!el) return;
   const p = aiProject.contextPolicy || "full_recent";
   const hints = {
-    full_recent: "发送最近最多 300 条记录摘要（仍受设置 → 数据控制中的勾选项影响）。",
+    full_recent: "发送最近最多 300 条记录摘要。",
     recent_7d: "仅包含最近 7 天内最多 150 条记录。",
     timeline_filter: "与「活动」模块的类型、日期筛选一致，最多 200 条。",
     stats_only: "仅发送各分类条数统计，不包含逐条记录正文。",
@@ -4585,8 +4566,8 @@ async function saveUserAvatar(dataUrl) {
     syncSidebarAccount();
     syncSettingsDialog();
   }
-  if (authState.localOnly || !authState.user) {
-    // Local-only or not logged in: nothing to push to the backend.
+  if (!authState.user) {
+    // Not logged in: nothing to push to the backend.
     showToast(dataUrl ? "头像已更新" : "头像已移除");
     return;
   }
@@ -4629,22 +4610,19 @@ export async function init() {
   initAuthUi();
 
   const reachable = await backendReachable();
-  if (reachable && !authState.localOnly) {
+  if (!reachable) {
+    showAuthOverlay("login", "无法连接到服务器，请检查后端服务或网络后刷新页面");
+  } else {
     const valid = await restoreSessionFromCookie();
     if (!valid) {
       authState.token = "";
       authState.user = null;
       authState.csrf = "";
       showAuthOverlay("login");
-      // Skip backend data pulls until the user authenticates. initDataSource
-      // would just 401 everywhere and briefly show empty state.
     } else {
       hideAuthOverlay();
       await initDataSource();
     }
-  } else {
-    hideAuthOverlay();
-    await initDataSource();
   }
   syncSidebarAccount();
   const completionCount = [profile.name, profile.birthDate, profile.gender, profile.blood, profile.avatar].filter(Boolean).length;
