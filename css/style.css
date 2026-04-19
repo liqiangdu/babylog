@@ -3415,6 +3415,11 @@ html[data-theme="dark"] .module-ai::before {
   }
   .inline-form { grid-template-columns: 1fr; }
   .stats-toolbar { flex-direction: column; align-items: stretch; }
+  /* flex-basis 520px is for width in row layout; in column it wrongly becomes min-height. */
+  .stats-controls-group--range {
+    flex: 0 1 auto;
+    min-height: 0;
+  }
   .stats-controls-group {
     width: 100%;
     flex-direction: column;
