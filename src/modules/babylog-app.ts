@@ -24,6 +24,7 @@ import {
   TREND_LINE_COLOR,
   CHART_METRIC_BUCKETS,
   CHART_METRIC_SHEET_MAX_W,
+  EVENT_COUNT_METRICS,
 } from "../chart/chart-config";
 import { initCustomDropdowns } from "../ui/custom-dropdown";
 import { fetchAllEntriesPaged } from "../api/entries-pagination";
@@ -821,8 +822,17 @@ function summarizeFields(cat, fields) {
   return parts.join(" · ");
 }
 
+function defaultVizForFieldMetric(categoryId) {
+  if (categoryId === "temperature" || categoryId === "growth") return "line";
+  return "area_line";
+}
+
+function isEventCountMetric(metric) {
+  return Boolean(metric && metric.kind === "event_count");
+}
+
 function getNumericMetricOptions() {
-  /** @type {Array<{id: string, label: string, categoryId: string, fieldKey: string}>} */
+  /** @type {Array<{id: string, label: string, categoryId: string, fieldKey: string, unit: string, kind?: string, viz?: string}>} */
   const opts = [];
   for (const c of CATEGORIES) {
     for (const f of c.fields) {
@@ -834,31 +844,46 @@ function getNumericMetricOptions() {
         categoryId: c.id,
         fieldKey: f.key,
         unit: inferMetricUnit(f),
+        kind: "field",
+        viz: defaultVizForFieldMetric(c.id),
       });
     }
+  }
+  for (const m of EVENT_COUNT_METRICS) {
+    opts.push({ ...m });
   }
   return opts;
 }
 
 function getNumericMetricOptionsGrouped() {
-  /** @type {Array<{ key: string, title: string, emoji: string, items: Array<{ id: string, label: string, categoryId: string, fieldKey: string, unit: string }> }>} */
+  /** @type {Array<{ key: string, title: string, emoji: string, items: Array<{ id: string, label: string, categoryId: string, fieldKey: string, unit: string, kind?: string, viz?: string }> }>} */
   const groups = [];
   for (const bucket of CHART_METRIC_BUCKETS) {
-    /** @type {Array<{ id: string, label: string, categoryId: string, fieldKey: string, unit: string }>} */
+    /** @type {Array<{ id: string, label: string, categoryId: string, fieldKey: string, unit: string, kind?: string, viz?: string }>} */
     const items = [];
-    for (const catId of bucket.categoryIds) {
-      const c = CATEGORIES.find((x) => x.id === catId);
-      if (!c) continue;
-      for (const f of c.fields) {
-        if (f.type !== "number") continue;
-        const metricName = stripFieldUnit(String(f.label || f.key || "数值"));
-        items.push({
-          id: `${c.id}.${f.key}`,
-          label: `${c.emoji} ${c.label} · ${metricName}`,
-          categoryId: c.id,
-          fieldKey: f.key,
-          unit: inferMetricUnit(f),
-        });
+    if (bucket.key === "frequency") {
+      for (const m of EVENT_COUNT_METRICS) {
+        if (bucket.categoryIds.includes(m.categoryId)) {
+          items.push({ ...m });
+        }
+      }
+    } else {
+      for (const catId of bucket.categoryIds) {
+        const c = CATEGORIES.find((x) => x.id === catId);
+        if (!c) continue;
+        for (const f of c.fields) {
+          if (f.type !== "number") continue;
+          const metricName = stripFieldUnit(String(f.label || f.key || "数值"));
+          items.push({
+            id: `${c.id}.${f.key}`,
+            label: `${c.emoji} ${c.label} · ${metricName}`,
+            categoryId: c.id,
+            fieldKey: f.key,
+            unit: inferMetricUnit(f),
+            kind: "field",
+            viz: defaultVizForFieldMetric(c.id),
+          });
+        }
       }
     }
     if (items.length) groups.push({ key: bucket.key, title: bucket.title, emoji: bucket.emoji, items });
@@ -911,6 +936,7 @@ function formatDurationAxisTick(minutes) {
 function formatChartValueForUnit(unit, n) {
   if (n == null || Number.isNaN(Number(n))) return "—";
   const x = Number(n);
+  if (unit === "次") return String(Math.round(x));
   if (unit === "°C") return x.toFixed(1);
   if (unit === "kg") return x.toFixed(2);
   if (unit === "cm") return x.toFixed(1);
@@ -935,7 +961,7 @@ function isChartBodyMetric(metric) {
 }
 
 /**
- * @param {{ unit?: string, categoryId?: string, fieldKey?: string }} metric
+ * @param {{ unit?: string, categoryId?: string, fieldKey?: string, kind?: string }} metric
  * @param {Array<{ label: string, value: number }>} points
  */
 function computeTrendSummary(metric, points) {
@@ -950,24 +976,36 @@ function computeTrendSummary(metric, points) {
   const max = Math.max(...vals);
   const u = metric.unit || "";
   const body = isChartBodyMetric(metric);
-  const primary = body ? `平均 ${withChartUnit(u, mean)}` : `合计 ${withChartUnit(u, sum)}`;
-  const secondary = [
-    body ? `合计 ${withChartUnit(u, sum)}` : `日均 ${withChartUnit(u, mean)}`,
-    `高 ${withChartUnit(u, max)}`,
-    `低 ${withChartUnit(u, min)}`,
-    `${count} 个数据点`,
-  ].join(" · ");
+  const eventCount = isEventCountMetric(metric);
+  const primary = eventCount
+    ? `合计 ${withChartUnit(u, sum)}`
+    : body
+      ? `平均 ${withChartUnit(u, mean)}`
+      : `合计 ${withChartUnit(u, sum)}`;
+  const secondary = eventCount
+    ? [`日均 ${withChartUnit(u, mean)}`, `峰值桶 ${withChartUnit(u, max)}`, `${count} 个时间桶`].join(" · ")
+    : [
+        body ? `合计 ${withChartUnit(u, sum)}` : `日均 ${withChartUnit(u, mean)}`,
+        `高 ${withChartUnit(u, max)}`,
+        `低 ${withChartUnit(u, min)}`,
+        `${count} 个数据点`,
+      ].join(" · ");
   return { primary, secondary, sum, mean, min, max, count };
 }
 
 /**
- * @param {{ categoryId?: string, fieldKey?: string }} metric
+ * @param {{ categoryId?: string, fieldKey?: string, kind?: string }} metric
  * @param {number[]} vals
  */
 function getSmartYRange(metric, vals) {
   if (!vals.length) return { minY: 0, maxY: 10 };
   const minV = Math.min(...vals);
   const maxV = Math.max(...vals);
+  if (isEventCountMetric(metric)) {
+    const hi = Math.max(1, Math.ceil(maxV));
+    const pad = hi <= 3 ? 1 : Math.max(1, Math.ceil(hi * 0.08));
+    return { minY: 0, maxY: hi + pad };
+  }
   const key = String(metric.fieldKey || "");
   const cat = metric.categoryId || "";
   const natural =
@@ -1007,12 +1045,16 @@ function readCssColorVar(name, fallback) {
 function getChartLineCssColor(metric) {
   if (!metric) return TREND_LINE_COLOR;
   const id = String(metric.id || "");
+  if (id.startsWith("diaper.")) return readCssColorVar("--chart-line", TREND_LINE_COLOR);
+  if (id.startsWith("spitup.")) return readCssColorVar("--chart-line-care", TREND_LINE_COLOR);
+  if (id.startsWith("bath.eventCount")) return readCssColorVar("--chart-line-good", TREND_LINE_COLOR);
   if (id.startsWith("cry.")) return readCssColorVar("--chart-line-care", TREND_LINE_COLOR);
   if (id.includes("celsius")) return readCssColorVar("--chart-line-accent", TREND_LINE_COLOR);
   if (id.startsWith("sleep.") || id.startsWith("outdoor.") || id.startsWith("tummy_time.")) {
     return readCssColorVar("--chart-line-good", TREND_LINE_COLOR);
   }
   if (id.startsWith("medicine")) return readCssColorVar("--chart-line-care", TREND_LINE_COLOR);
+  if (id.startsWith("supplement.")) return readCssColorVar("--chart-line-care", TREND_LINE_COLOR);
   return readCssColorVar("--chart-line", TREND_LINE_COLOR);
 }
 
@@ -1545,44 +1587,6 @@ function renderModuleSummaries() {
   }
 }
 
-function getPreviousRange(start, end) {
-  if (!start || !end) return null;
-  const startDate = new Date(`${start}T00:00:00`);
-  const endDate = new Date(`${end}T00:00:00`);
-  const spanDays = Math.max(1, Math.floor((endDate - startDate) / 86400000) + 1);
-  const prevEnd = new Date(startDate);
-  prevEnd.setDate(prevEnd.getDate() - 1);
-  const prevStart = new Date(prevEnd);
-  prevStart.setDate(prevStart.getDate() - (spanDays - 1));
-  return { start: toLocalDateKey(prevStart), end: toLocalDateKey(prevEnd), spanDays };
-}
-
-function formatDelta(current, prev) {
-  if (prev <= 0) {
-    if (current > 0) return { text: "新增", tone: "new", arrow: "◆" };
-    return { text: "持平", tone: "flat", arrow: "→" };
-  }
-  const pct = Math.round(((current - prev) / prev) * 100);
-  if (Math.abs(pct) <= 2) return { text: "持平", tone: "flat", arrow: "→" };
-  if (pct > 0) return { text: `+${pct}%`, tone: "up", arrow: "↗" };
-  return { text: `${pct}%`, tone: "down", arrow: "↘" };
-}
-
-function summarizeAttention(inRangeEntries, dayCount) {
-  const notes = [];
-  const medicineCount = inRangeEntries.filter((e) => e.categoryId === "medicine").length;
-  const sleepMin = inRangeEntries
-    .filter((e) => e.categoryId === "sleep")
-    .reduce((sum, e) => sum + (Number(e.fields?.durationMin) || 0), 0);
-  const avgSleep = dayCount > 0 ? sleepMin / dayCount : 0;
-  if (medicineCount >= Math.max(2, Math.ceil(dayCount / 2))) notes.push("用药记录较频繁");
-  if (dayCount >= 3 && avgSleep > 0 && avgSleep < 180) notes.push("日均睡眠偏低");
-  const coveredDays = new Set(inRangeEntries.map((e) => toLocalDateKey(e.at))).size;
-  const missingDays = Math.max(0, dayCount - coveredDays);
-  if (dayCount >= 3 && missingDays >= 2) notes.push(`缺少 ${missingDays} 天记录`);
-  return notes.length ? notes.join(" · ") : "暂无明显异常";
-}
-
 function isLikelyIOS() {
   const ua = navigator.userAgent || "";
   if (/iPad|iPhone|iPod/i.test(ua)) return true;
@@ -1685,47 +1689,31 @@ function renderStats() {
   if (!grid || !chartWrap) return;
 
   const inRangeEntries = getEntriesByRange(statsRange.start, statsRange.end);
-  const prevRange = getPreviousRange(statsRange.start, statsRange.end);
-  const prevEntries = prevRange ? getEntriesByRange(prevRange.start, prevRange.end) : [];
   const cur = accumulateRangeStats(inRangeEntries);
-  const prev = accumulateRangeStats(prevEntries);
   const rangeStartDate = statsRange.start ? new Date(`${statsRange.start}T00:00:00`) : null;
   const rangeEndDate = statsRange.end ? new Date(`${statsRange.end}T00:00:00`) : null;
   const dayCount = rangeStartDate && rangeEndDate
     ? Math.max(1, Math.floor((rangeEndDate - rangeStartDate) / 86400000) + 1)
     : cur.dayKeys.size || 1;
   const feedMl = cur.feedMl;
-  const prevFeedMl = prev.feedMl;
   const sleepMin = cur.sleepMin;
-  const prevSleepMin = prev.sleepMin;
   const wetCount = cur.wetCount;
   const dirtyCount = cur.dirtyCount;
   const diaperCount = cur.diaperCount;
-  const prevDiaperCount = prev.diaperCount;
   const bathCount = cur.bathCount;
   const medicineCount = cur.medicineCount;
-  const prevMedicineCount = prev.medicineCount;
   const solidCount = cur.solidCount;
-  const prevSolidCount = prev.solidCount;
   const spitupCount = cur.spitupCount;
   const supplementCount = cur.supplementCount;
-  const prevSupplementCount = prev.supplementCount;
   const pumpCount = cur.pumpCount;
-  const prevPumpCount = prev.pumpCount;
   const pumpMl = cur.pumpMl;
-  const prevPumpMl = prev.pumpMl;
   const customCount = cur.customCount;
   const tummyMin = cur.tummyMin;
-  const prevTummyMin = prev.tummyMin;
   const outdoorMin = cur.outdoorMin;
-  const prevOutdoorMin = prev.outdoorMin;
   const cryMin = cur.cryMin;
-  const prevCryMin = prev.cryMin;
   const tempEntries = cur.latestTempEntry ? [cur.latestTempEntry] : [];
-  const prevTempCount = prev.tempCount;
   const latestTemp = tempEntries.length ? Number(tempEntries[0].fields?.celsius) || null : null;
   const growthCount = cur.growthCount;
-  const prevGrowthCount = prev.growthCount;
   const lg = cur.latestGrowthEntry;
   let growthMain = "暂无";
   let growthSub = "本范围内无生长测量";
@@ -1763,14 +1751,11 @@ function renderStats() {
     rangeHint.classList.remove("is-error");
   }
 
-  const insightText = summarizeAttention(inRangeEntries, dayCount);
-
   const iconMap = {
     records: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="2"></rect><path d="M9 9h6M9 13h6"></path></svg>',
     feeding: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3v7a4 4 0 1 0 8 0V3"></path><path d="M10 7h8"></path><path d="M14 14v7"></path></svg>',
     sleep: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 14a6 6 0 1 1-8-8 5 5 0 1 0 8 8z"></path></svg>',
     diaper: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9a8 8 0 0 1 16 0v6H4z"></path><path d="M8 15v3M16 15v3"></path></svg>',
-    attention: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"></path><path d="M12 17h.01"></path><circle cx="12" cy="12" r="9"></circle></svg>',
     medicine: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="10" width="18" height="4" rx="2"></rect><path d="M9 10V6M15 14v4"></path></svg>',
     temperature: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a2 2 0 0 0-2 2v7.5a4 4 0 1 0 4 0V6a2 2 0 0 0-2-2z"></path><path d="M12 12v4"></path></svg>',
     solid: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M7 8h10"></path><path d="M9 16h6"></path></svg>',
@@ -1793,10 +1778,7 @@ function renderStats() {
     const keyHeader = c.icon
       ? `<div class="stat-k-row"><span class="stat-k-icon">${iconMap[c.icon] || ""}</span><span class="k">${c.k}</span></div>`
       : `<div class="k">${c.k}</div>`;
-    const deltaHtml = c.delta
-      ? `<div class="stat-delta stat-delta--${c.delta.tone || "flat"}"><span class="stat-delta-arrow">${c.delta.arrow || "→"}</span>${c.delta.text} vs 上周期</div>`
-      : "";
-    return `<div class="stat-card ${c.tone || ""}${clickable}${heroClass}${extraClass}"${attrs}>${keyHeader}<div class="v">${c.v}</div>${c.sub ? `<div class="stat-sub">${c.sub}</div>` : ""}${deltaHtml}</div>`;
+    return `<div class="stat-card ${c.tone || ""}${clickable}${heroClass}${extraClass}"${attrs}>${keyHeader}<div class="v">${c.v}</div>${c.sub ? `<div class="stat-sub">${c.sub}</div>` : ""}</div>`;
   };
 
   const summaryCards = [
@@ -1804,7 +1786,6 @@ function renderStats() {
       k: "喂奶总量",
       v: `${feedMl} ml`,
       sub: `日均 ${Math.round(feedMl / dayCount)} ml`,
-      delta: formatDelta(feedMl, prevFeedMl),
       tone: "priority",
       metricId: "feeding.amountMl",
       icon: "feeding",
@@ -1814,7 +1795,6 @@ function renderStats() {
       k: "睡眠时长",
       v: formatDurationMinutes(sleepMin),
       sub: `日均 ${formatDurationMinutes(Math.round(sleepMin / dayCount))}`,
-      delta: formatDelta(sleepMin, prevSleepMin),
       tone: "priority",
       metricId: "sleep.durationMin",
       icon: "sleep",
@@ -1824,8 +1804,8 @@ function renderStats() {
       k: "尿布",
       v: `小便 ${wetCount} / 大便 ${dirtyCount}`,
       sub: `换片共 ${diaperCount} 次`,
-      delta: formatDelta(diaperCount, prevDiaperCount),
       tone: "priority",
+      metricId: "diaper.eventCount",
       icon: "diaper",
       hero: true,
     },
@@ -1833,7 +1813,6 @@ function renderStats() {
       k: "最近体温",
       v: latestTemp != null ? `${latestTemp.toFixed(1)} °C` : tempEntries.length ? "—" : "暂无",
       sub: tempEntries.length ? `记录 ${tempEntries.length} 次` : "本范围内无体温记录",
-      delta: formatDelta(tempEntries.length, prevTempCount),
       tone: "priority",
       metricId: cur.tempCount ? "temperature.celsius" : "",
       icon: "temperature",
@@ -1843,7 +1822,6 @@ function renderStats() {
       k: "生长测量",
       v: growthMain,
       sub: growthSub,
-      delta: formatDelta(growthCount, prevGrowthCount),
       tone: "priority",
       metricId: growthMetricId,
       icon: "growth",
@@ -1855,7 +1833,7 @@ function renderStats() {
     {
       k: "辅食次数",
       v: `${solidCount} 次`,
-      delta: formatDelta(solidCount, prevSolidCount),
+      metricId: "solid.eventCount",
       icon: "solid",
     },
   ];
@@ -1864,24 +1842,23 @@ function renderStats() {
     {
       k: "用药次数",
       v: `${medicineCount} 次`,
-      delta: formatDelta(medicineCount, prevMedicineCount),
+      metricId: "medicine.eventCount",
       icon: "medicine",
     },
     {
       k: "补剂次数",
       v: `${supplementCount} 次`,
-      delta: formatDelta(supplementCount, prevSupplementCount),
+      metricId: "supplement.eventCount",
       icon: "supplement",
     },
   ];
 
   const activityCards = [
-    { k: "洗澡次数", v: `${bathCount} 次`, icon: "bath" },
+    { k: "洗澡次数", v: `${bathCount} 次`, metricId: "bath.eventCount", icon: "bath" },
     {
       k: "趴玩时长",
       v: formatDurationMinutes(tummyMin),
       sub: `日均 ${formatDurationMinutes(Math.round(tummyMin / dayCount))}`,
-      delta: formatDelta(tummyMin, prevTummyMin),
       metricId: "tummy_time.durationMin",
       icon: "tummy",
     },
@@ -1889,7 +1866,6 @@ function renderStats() {
       k: "外出时长",
       v: formatDurationMinutes(outdoorMin),
       sub: `日均 ${formatDurationMinutes(Math.round(outdoorMin / dayCount))}`,
-      delta: formatDelta(outdoorMin, prevOutdoorMin),
       metricId: "outdoor.durationMin",
       icon: "outdoor",
     },
@@ -1897,11 +1873,10 @@ function renderStats() {
       k: "哭闹时长",
       v: formatDurationMinutes(cryMin),
       sub: `日均 ${formatDurationMinutes(Math.round(cryMin / dayCount))}`,
-      delta: formatDelta(cryMin, prevCryMin),
       metricId: "cry.durationMin",
       icon: "cry",
     },
-    { k: "吐奶/溢奶", v: `${spitupCount} 次`, icon: "spitup" },
+    { k: "吐奶/溢奶", v: `${spitupCount} 次`, metricId: "spitup.eventCount", icon: "spitup" },
   ];
 
   const caregiverCards = [
@@ -1909,7 +1884,6 @@ function renderStats() {
       k: "吸奶",
       v: pumpCount ? `${pumpMl} ml` : "暂无",
       sub: pumpCount ? `共 ${pumpCount} 次` : "",
-      delta: formatDelta(pumpMl, prevPumpMl),
       metricId: pumpCount ? "pump.amountMl" : "",
       icon: "pump",
     },
@@ -1925,19 +1899,12 @@ function renderStats() {
       k: "本范围记录数",
       v: `${inRangeEntries.length} 条`,
       sub: `日均 ${(inRangeEntries.length / dayCount).toFixed(1)} 条`,
-      delta: formatDelta(inRangeEntries.length, prevEntries.length),
       icon: "records",
     },
     { k: "累计总记录", v: `${entries.length} 条`, tone: "muted", icon: "records" },
   ];
 
   const browseGrid = "stats-section-grid stats-section-grid--compact";
-
-  const insightHtml = `
-    <div class="stats-insight" role="status">
-      <span class="stats-insight-icon" aria-hidden="true">${iconMap.attention}</span>
-      <p class="stats-insight-text">${escapeHtml(insightText)}</p>
-    </div>`;
 
   const summarySection = `
     <section class="stats-section stats-section--summary">
@@ -1978,7 +1945,6 @@ function renderStats() {
   };
 
   grid.innerHTML = [
-    insightHtml,
     summarySection,
     browseSection("营养", "辅食与进食过渡", nutritionCards),
     browseSection("用药与补剂", "医疗相关与例行补充", medicalCards),
@@ -2244,10 +2210,15 @@ function renderTrendChart() {
           : String(spanY < 6 ? Math.round(raw * 100) / 100 : Math.round(raw));
       ctx.fillText(tickLabel, 8, y + 4);
     }
-    ctx.fillText(unit === "分钟" ? "分钟 (累计)" : unit, 8, 14);
+    const yAxisTitle = unit === "分钟" ? "分钟 (累计)" : unit === "次" ? "次数" : unit;
+    ctx.fillText(yAxisTitle, 8, 14);
 
-    const mapX = (i) => left + (pw * i) / Math.max(1, points.length - 1);
+    const viz = String(trend.viz || "area_line");
+    const n = points.length;
+    const mapXLine = (i) => left + (pw * i) / Math.max(1, n - 1);
+    const mapXBarCenter = (i) => left + ((i + 0.5) / Math.max(1, n)) * pw;
     const mapY = (v) => top + ph - ((Number(v) - yMin) / spanY) * ph;
+    const mapX = viz === "bar" ? mapXBarCenter : mapXLine;
     const xs = points.map((_, i) => mapX(i));
     const ys = points.map((p) => mapY(p.value));
     chartPlotLayout = { xs, ys, left, plotW: pw, len: points.length };
@@ -2267,7 +2238,7 @@ function renderTrendChart() {
       ctx.lineCap = "round";
       ctx.beginPath();
       seriesVals.forEach((v, i) => {
-        const x = mapX(i);
+        const x = mapXLine(i);
         const y = mapY(v);
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
@@ -2275,38 +2246,61 @@ function renderTrendChart() {
       ctx.stroke();
     };
 
-    const gradient = ctx.createLinearGradient(0, top, 0, top + ph);
-    gradient.addColorStop(0, cssColorToRgba(lineColor, 0.2));
-    gradient.addColorStop(1, cssColorToRgba(lineColor, 0.02));
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    points.forEach((p, i) => {
-      const x = mapX(i);
-      const y = mapY(p.value);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.lineTo(mapX(points.length - 1), top + ph);
-    ctx.lineTo(mapX(0), top + ph);
-    ctx.closePath();
-    ctx.fill();
+    const y0 = top + ph;
 
-    drawSeries(vals, lineColor);
-    ctx.fillStyle = lineColor;
-    points.forEach((p, i) => {
-      const x = mapX(i);
-      const y = mapY(p.value);
-      ctx.beginPath();
-      ctx.arc(x, y, 3, 0, Math.PI * 2);
+    if (viz === "bar") {
+      ctx.fillStyle = cssColorToRgba(lineColor, 0.88);
+      const slotW = pw / Math.max(1, n);
+      const bw = Math.max(4, Math.min(slotW * 0.62, 28));
+      const r = Math.min(3, bw / 4);
+      points.forEach((p, i) => {
+        const cx = mapXBarCenter(i);
+        const yv = mapY(p.value);
+        const h = Math.max(0, y0 - yv);
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(cx - bw / 2, yv, bw, h, r);
+        } else {
+          ctx.rect(cx - bw / 2, yv, bw, h);
+        }
+        ctx.fill();
+      });
+    } else {
+      if (viz === "area_line") {
+        const gradient = ctx.createLinearGradient(0, top, 0, top + ph);
+        gradient.addColorStop(0, cssColorToRgba(lineColor, 0.2));
+        gradient.addColorStop(1, cssColorToRgba(lineColor, 0.02));
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        points.forEach((p, i) => {
+          const x = mapXLine(i);
+          const y = mapY(p.value);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.lineTo(mapXLine(n - 1), y0);
+        ctx.lineTo(mapXLine(0), y0);
+        ctx.closePath();
+        ctx.fill();
+      }
+      drawSeries(vals, lineColor);
       ctx.fillStyle = lineColor;
-      ctx.fill();
-    });
+      points.forEach((p, i) => {
+        const x = mapXLine(i);
+        const y = mapY(p.value);
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = lineColor;
+        ctx.fill();
+      });
+    }
 
     ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
     ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
+    const labelStep = Math.max(1, Math.ceil(n / 6));
     points.forEach((p, i) => {
-      if (i % Math.ceil(points.length / 6) !== 0 && i !== points.length - 1) return;
-      const x = mapX(i) - 12;
+      if (i % labelStep !== 0 && i !== n - 1) return;
+      const x = xs[i] - 12;
       const y = cssHeight - 8;
       ctx.fillText(p.label, x, y);
     });
@@ -2442,6 +2436,7 @@ function buildTrendData() {
     unit: metric?.unit || "数值",
     metricLabel: metric?.label || "当前指标",
     metric,
+    viz: metric?.viz || defaultVizForFieldMetric(metric?.categoryId || "") || "area_line",
     resolution: "day",
     resolutionLabel: "",
     summary: emptySummary(),
@@ -2460,6 +2455,7 @@ function buildTrendData() {
     const vals = points.map((p) => Number(p.value) || 0);
     const yRange = getSmartYRange(metric, vals);
     const resLabel = resLabelOverride || getAggregationLabel(resolution);
+    const viz = metric.viz || defaultVizForFieldMetric(metric.categoryId || "") || "area_line";
     if (hint) hint.textContent = `当前范围：${rangeLabel} · 图表聚合：${resLabel}`;
     return {
       mode,
@@ -2467,6 +2463,7 @@ function buildTrendData() {
       unit: metric.unit,
       metricLabel: metric.label,
       metric,
+      viz,
       resolution,
       resolutionLabel: resLabel,
       summary,
@@ -2483,6 +2480,19 @@ function buildTrendData() {
   const end = new Date(`${range.end}T00:00:00`);
   const resolution = getChartResolutionByRange();
   const isSingleDay = range.start === range.end;
+  if (isSingleDay && resolution === "day" && isEventCountMetric(metric)) {
+    const dayEntries = source.filter(
+      (e) => toLocalDateKey(e.at) === range.start && e.categoryId === metric.categoryId,
+    );
+    const hourBins = [];
+    for (let h = 0; h < 24; h += 1) {
+      const label = `${String(h).padStart(2, "0")}:00`;
+      const count = dayEntries.filter((e) => new Date(e.at).getHours() === h).length;
+      hourBins.push({ label, value: count });
+    }
+    return pack("range-line", hourBins, "day", "按小时");
+  }
+
   if (isSingleDay && resolution === "day") {
     const dayPoints = source
       .filter((e) => toLocalDateKey(e.at) === range.start && e.categoryId === metric.categoryId)
@@ -2501,13 +2511,21 @@ function buildTrendData() {
   }
 
   const metricEntries = source.filter((e) => e.categoryId === metric.categoryId);
+  const addFieldOrCount = (e, prev) => {
+    if (isEventCountMetric(metric)) return prev + 1;
+    return prev + (Number(e.fields?.[metric.fieldKey]) || 0);
+  };
+  const sumBucketEntries = (dayEntries) => {
+    if (isEventCountMetric(metric)) return dayEntries.length;
+    return dayEntries.reduce((sum, e) => sum + (Number(e.fields?.[metric.fieldKey]) || 0), 0);
+  };
   const data = [];
   if (resolution === "day") {
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const key = toLocalDateKey(d);
       const label = `${d.getMonth() + 1}/${d.getDate()}`;
       const dayEntries = metricEntries.filter((e) => toLocalDateKey(e.at) === key);
-      const value = dayEntries.reduce((sum, e) => sum + (Number(e.fields?.[metric.fieldKey]) || 0), 0);
+      const value = sumBucketEntries(dayEntries);
       data.push({ label, value });
     }
   } else if (resolution === "week") {
@@ -2517,7 +2535,7 @@ function buildTrendData() {
       const weekStart = getWeekStartDate(at);
       const key = toLocalDateKey(weekStart);
       const prev = buckets.get(key) || 0;
-      buckets.set(key, prev + (Number(e.fields?.[metric.fieldKey]) || 0));
+      buckets.set(key, addFieldOrCount(e, prev));
     }
     let cursor = getWeekStartDate(start);
     const endWeek = getWeekStartDate(end);
@@ -2533,7 +2551,7 @@ function buildTrendData() {
       const at = new Date(e.at);
       const key = getMonthKey(at);
       const prev = buckets.get(key) || 0;
-      buckets.set(key, prev + (Number(e.fields?.[metric.fieldKey]) || 0));
+      buckets.set(key, addFieldOrCount(e, prev));
     }
     let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
     const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
