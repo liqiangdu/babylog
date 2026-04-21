@@ -1434,7 +1434,7 @@ textarea:focus-visible {
 .stats-metric-detail {
   position: fixed;
   inset: 0;
-  z-index: 95;
+  z-index: 120;
   background: var(--bg);
   flex-direction: column;
   overflow: auto;

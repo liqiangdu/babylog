@@ -1982,7 +1982,7 @@ function updateChartPanelFromTrend(trend) {
   if (rangeEl) {
     rangeEl.textContent =
       statsRange.start && statsRange.end
-        ? `日期 ${statsRange.start} — ${statsRange.end}`
+        ? `${statsRange.start} — ${statsRange.end}`
         : "尚未选择具体日期范围";
   }
   if (inlineLegend) {
