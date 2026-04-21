@@ -22,8 +22,6 @@ import { API_BASE, API_ORIGIN } from "../config/api-base";
 import { mapEntryToApi } from "../api/mappers";
 import {
   TREND_LINE_COLOR,
-  CHART_METRIC_BUCKETS,
-  CHART_METRIC_SHEET_MAX_W,
   EVENT_COUNT_METRICS,
 } from "../chart/chart-config";
 import { initCustomDropdowns } from "../ui/custom-dropdown";
@@ -76,6 +74,8 @@ let chartLastTrend = null;
 let chartScrubIndex = null;
 /** @type {{ xs: number[], left: number, plotW: number, len: number }|null} */
 let chartPlotLayout = null;
+/** @type {WeakMap<HTMLCanvasElement, { xs: number[], ys: number[], left: number, plotW: number, len: number }>} */
+const chartPanelLayouts = new WeakMap();
 let statsRangeApplyTimer = null;
 /** Coalesces chart redraws during window resize (at most once per frame). */
 let chartResizeRafId = 0;
@@ -629,7 +629,6 @@ function setSidebarOpen(open) {
 function setActiveModule(moduleId) {
   if (activeModuleId === "stats" && moduleId !== "stats" && statsView === "metricDetail") {
     statsView = "summary";
-    hideChartMetricMenu();
     const shell = document.getElementById("stats-metric-detail");
     const grid = document.getElementById("stats-grid");
     if (shell) {
@@ -855,42 +854,6 @@ function getNumericMetricOptions() {
   return opts;
 }
 
-function getNumericMetricOptionsGrouped() {
-  /** @type {Array<{ key: string, title: string, emoji: string, items: Array<{ id: string, label: string, categoryId: string, fieldKey: string, unit: string, kind?: string, viz?: string }> }>} */
-  const groups = [];
-  for (const bucket of CHART_METRIC_BUCKETS) {
-    /** @type {Array<{ id: string, label: string, categoryId: string, fieldKey: string, unit: string, kind?: string, viz?: string }>} */
-    const items = [];
-    if (bucket.key === "frequency") {
-      for (const m of EVENT_COUNT_METRICS) {
-        if (bucket.categoryIds.includes(m.categoryId)) {
-          items.push({ ...m });
-        }
-      }
-    } else {
-      for (const catId of bucket.categoryIds) {
-        const c = CATEGORIES.find((x) => x.id === catId);
-        if (!c) continue;
-        for (const f of c.fields) {
-          if (f.type !== "number") continue;
-          const metricName = stripFieldUnit(String(f.label || f.key || "数值"));
-          items.push({
-            id: `${c.id}.${f.key}`,
-            label: `${c.emoji} ${c.label} · ${metricName}`,
-            categoryId: c.id,
-            fieldKey: f.key,
-            unit: inferMetricUnit(f),
-            kind: "field",
-            viz: defaultVizForFieldMetric(c.id),
-          });
-        }
-      }
-    }
-    if (items.length) groups.push({ key: bucket.key, title: bucket.title, emoji: bucket.emoji, items });
-  }
-  return groups;
-}
-
 /**
  * 将总分钟数格式化为「天 / 小时 / 分钟」可读文案（用于统计、图表、摘要等）。
  * @param {number|string} totalMin
@@ -976,19 +939,28 @@ function computeTrendSummary(metric, points) {
   const max = Math.max(...vals);
   const u = metric.unit || "";
   const body = isChartBodyMetric(metric);
+  const isTemperature = metric.categoryId === "temperature" || metric.fieldKey === "celsius";
   const eventCount = isEventCountMetric(metric);
-  const primary = eventCount
-    ? `合计 ${withChartUnit(u, sum)}`
-    : body
-      ? `平均 ${withChartUnit(u, mean)}`
-      : `合计 ${withChartUnit(u, sum)}`;
-  const secondary = eventCount
-    ? [`日均 ${withChartUnit(u, mean)}`, `峰值桶 ${withChartUnit(u, max)}`, `${count} 个时间桶`].join(" · ")
-    : [
-        body ? `合计 ${withChartUnit(u, sum)}` : `日均 ${withChartUnit(u, mean)}`,
-        `高 ${withChartUnit(u, max)}`,
-        `低 ${withChartUnit(u, min)}`,
-      ].join(" · ");
+  const primary = isTemperature
+    ? `均温 ${withChartUnit(u, mean)}`
+    : eventCount
+      ? `合计 ${withChartUnit(u, sum)}`
+      : body
+        ? `平均 ${withChartUnit(u, mean)}`
+        : `合计 ${withChartUnit(u, sum)}`;
+  const secondary = isTemperature
+    ? [
+        `最高 ${withChartUnit(u, max)}`,
+        `最低 ${withChartUnit(u, min)}`,
+        `波动 ${withChartUnit(u, max - min)}`,
+      ].join(" · ")
+    : eventCount
+      ? [`日均 ${withChartUnit(u, mean)}`, `峰值桶 ${withChartUnit(u, max)}`].join(" · ")
+      : [
+          body ? `变化区间 ${withChartUnit(u, min)} ~ ${withChartUnit(u, max)}` : `日均 ${withChartUnit(u, mean)}`,
+          `高 ${withChartUnit(u, max)}`,
+          `低 ${withChartUnit(u, min)}`,
+        ].join(" · ");
   return { primary, secondary, sum, mean, min, max, count };
 }
 
@@ -1614,7 +1586,6 @@ function syncStatsDetailVisibility() {
   const shell = document.getElementById("stats-metric-detail");
   const grid = document.getElementById("stats-grid");
   if (!shell || !grid) return;
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (statsView === "metricDetail") {
     grid.classList.add("hidden");
     shell.classList.remove("hidden");
@@ -1627,15 +1598,8 @@ function syncStatsDetailVisibility() {
     return;
   }
   shell.classList.remove("stats-metric-detail--open");
-  const finish = () => {
-    shell.classList.add("hidden");
-    grid.classList.remove("hidden");
-  };
-  if (reduceMotion) {
-    finish();
-    return;
-  }
-  window.setTimeout(finish, 280);
+  shell.classList.add("hidden");
+  grid.classList.remove("hidden");
 }
 
 function onStatsMetricDetailPopState() {
@@ -1646,13 +1610,11 @@ function onStatsMetricDetailPopState() {
   if (statsView !== "metricDetail" || !statsDetailPushed) return;
   statsDetailPushed = false;
   statsView = "summary";
-  hideChartMetricMenu();
   syncStatsDetailVisibility();
   renderStats();
 }
 
 function onStatsMetricDetailBackClick() {
-  hideChartMetricMenu();
   if (statsDetailPushed && shouldStatsDetailUseHistory()) {
     window.history.back();
     return;
@@ -1660,7 +1622,14 @@ function onStatsMetricDetailBackClick() {
   statsDetailPushed = false;
   statsView = "summary";
   syncStatsDetailVisibility();
-  renderStats();
+  try {
+    renderStats();
+  } catch {
+    const shell = document.getElementById("stats-metric-detail");
+    const grid = document.getElementById("stats-grid");
+    shell?.classList.add("hidden");
+    grid?.classList.remove("hidden");
+  }
 }
 
 function openStatsMetric(metricId) {
@@ -1961,7 +1930,7 @@ function renderStats() {
   });
 
   if (statsView === "summary") {
-    hideChartMetricMenu();
+    chartScrubIndex = null;
   }
   syncStatsDetailVisibility();
   if (statsView === "metricDetail") {
@@ -2005,29 +1974,32 @@ function syncChartResolutionButtons() {
 function updateChartPanelFromTrend(trend) {
   const titleEl = document.getElementById("chart-panel-metric-title");
   const rangeEl = document.getElementById("chart-panel-range-line");
-  const aggEl = document.getElementById("chart-aggregation-subtitle");
-  const pri = document.getElementById("chart-summary-primary");
-  const sec = document.getElementById("chart-summary-secondary");
+  const inlineLegend = document.getElementById("chart-inline-legend");
   const empty = document.getElementById("chart-empty-state");
-  const legendText = document.getElementById("chart-legend-text");
   const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById("stats-chart"));
   const ml = trend.metric ? trend.metric.label : String(trend.metricLabel || "趋势");
   if (titleEl) titleEl.textContent = ml;
-  if (legendText) legendText.textContent = ml;
   if (rangeEl) {
     rangeEl.textContent =
       statsRange.start && statsRange.end
         ? `日期 ${statsRange.start} — ${statsRange.end}`
         : "尚未选择具体日期范围";
   }
-  if (aggEl) {
-    aggEl.textContent = trend.resolutionLabel
-      ? `当前为「${trend.resolutionLabel}」汇总，可与时间范围配合理解。`
-      : "";
+  if (inlineLegend) {
+    const isDiaperSplit = trend?.metric?.id === "diaper.eventCount";
+    if (isDiaperSplit) {
+      const wetColor = readCssColorVar("--chart-line", getChartLineCssColor(trend.metric));
+      const dirtyColor = readCssColorVar("--chart-line-care", "#b45309");
+      inlineLegend.innerHTML = `
+        <span class="chart-inline-legend-item"><span class="chart-inline-legend-dot" style="background:${escapeHtml(wetColor)}"></span>小便</span>
+        <span class="chart-inline-legend-item"><span class="chart-inline-legend-dot" style="background:${escapeHtml(dirtyColor)}"></span>大便</span>
+      `;
+      inlineLegend.classList.remove("hidden");
+    } else {
+      inlineLegend.classList.add("hidden");
+      inlineLegend.innerHTML = "";
+    }
   }
-  const sum = /** @type {{ primary?: string, secondary?: string }} */ (trend.summary || {});
-  if (pri) pri.textContent = sum.primary || "—";
-  if (sec) sec.textContent = sum.secondary || "";
   const pts = /** @type {unknown[]} */ (trend.points || []);
   const hasPoints = pts.length > 0;
   if (empty) empty.classList.toggle("hidden", hasPoints);
@@ -2041,8 +2013,6 @@ function updateChartPanelFromTrend(trend) {
         ? "请选择统计的开始与结束日期，或使用下方按钮切换到常用范围。"
         : "本范围内没有该指标的数值。可拉长时间段或选择其他指标。";
   }
-  const dot = document.querySelector("#chart-legend-trigger .chart-legend-dot");
-  if (dot && trend.metric) dot.style.background = getChartLineCssColor(trend.metric);
   if (canvas) {
     canvas.setAttribute("aria-label", `${ml}，共 ${pts.length} 个数据点`);
   }
@@ -2076,7 +2046,14 @@ function showChartTooltipForIndex(index, trend) {
   const p = points[index];
   const u = String(trend.unit || "");
   const valStr = withChartUnit(u, p.value);
-  tip.innerHTML = `<div class="chart-tip-label">${escapeHtml(p.label)}</div><div class="chart-tip-value">${escapeHtml(valStr)}</div>`;
+  const isDiaperSplit = trend?.metric?.id === "diaper.eventCount" && (p.wet != null || p.dirty != null);
+  if (isDiaperSplit) {
+    const wet = Math.round(Number(p.wet) || 0);
+    const dirty = Math.round(Number(p.dirty) || 0);
+    tip.innerHTML = `<div class="chart-tip-label">${escapeHtml(p.label)}</div><div class="chart-tip-value">小便 ${wet} · 大便 ${dirty} · 合计 ${escapeHtml(valStr)}</div>`;
+  } else {
+    tip.innerHTML = `<div class="chart-tip-label">${escapeHtml(p.label)}</div><div class="chart-tip-value">${escapeHtml(valStr)}</div>`;
+  }
   const x = chartPlotLayout.xs[index];
   const y = chartPlotLayout.ys[index];
   const offsetX = Math.min(canvas.clientWidth - 130, Math.max(6, x + 8));
@@ -2146,173 +2123,252 @@ function onChartPointerLeave() {
   hideChartCrosshairAndTip();
 }
 
+function drawTrendToCanvas(canvas, trend, bindInteraction = false) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = canvas.clientWidth || 900;
+  const cssHeight = 320;
+  canvas.width = Math.floor(cssWidth * dpr);
+  canvas.height = Math.floor(cssHeight * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  const points = trend.points || [];
+  if (!points.length) return;
+  const vals = points.map((p) => Number(p.value) || 0);
+  const yRange = trend.yRange || { minY: 0, maxY: 10 };
+  const yMin = yRange.minY;
+  const yMax = yRange.maxY;
+  const spanY = Math.max(yMax - yMin, 1e-9);
+  const lineColor = getChartLineCssColor(trend.metric);
+  const unit = trend.unit || "数值";
+  const left = unit === "分钟" ? 78 : 56;
+  const right = 12;
+  const top = 22;
+  const bottom = 30;
+  const pw = cssWidth - left - right;
+  const ph = cssHeight - top - bottom;
+  ctx.strokeStyle = "rgba(128, 128, 128, 0.15)";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
+  ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
+  for (let i = 0; i <= 4; i += 1) {
+    const y = top + (ph / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(left + pw, y);
+    ctx.stroke();
+    const raw = yMax - (spanY / 4) * i;
+    const tickLabel = unit === "分钟" ? formatDurationAxisTick(raw) : String(spanY < 6 ? Math.round(raw * 100) / 100 : Math.round(raw));
+    ctx.fillText(tickLabel, 8, y + 4);
+  }
+  ctx.fillText(unit === "分钟" ? "分钟 (累计)" : unit === "次" ? "次数" : unit, 8, 14);
+  const viz = String(trend.viz || "area_line");
+  const n = points.length;
+  const mapXLine = (i) => left + (pw * i) / Math.max(1, n - 1);
+  const mapXBarCenter = (i) => left + ((i + 0.5) / Math.max(1, n)) * pw;
+  const mapY = (v) => top + ph - ((Number(v) - yMin) / spanY) * ph;
+  const mapX = viz === "bar" ? mapXBarCenter : mapXLine;
+  const xs = points.map((_, i) => mapX(i));
+  const ys = points.map((p) => mapY(p.value));
+  const layout = { xs, ys, left, plotW: pw, len: points.length };
+  if (bindInteraction) {
+    chartPlotLayout = layout;
+    chartHitPoints = points.map((p, i) => ({ x: xs[i], y: ys[i], label: p.label, value: p.value, unit }));
+  }
+  chartPanelLayouts.set(canvas, layout);
+  const y0 = top + ph;
+  if (viz === "bar") {
+    const isDiaperSplit = trend?.metric?.id === "diaper.eventCount";
+    const wetColor = readCssColorVar("--chart-line", lineColor);
+    const dirtyColor = readCssColorVar("--chart-line-care", "#b45309");
+    ctx.fillStyle = cssColorToRgba(lineColor, 0.88);
+    const slotW = pw / Math.max(1, n);
+    const bw = Math.max(4, Math.min(slotW * 0.62, 28));
+    const r = Math.min(3, bw / 4);
+    points.forEach((p, i) => {
+      const cx = mapXBarCenter(i);
+      if (isDiaperSplit) {
+        const wet = Math.max(0, Number(p.wet) || 0);
+        const dirty = Math.max(0, Number(p.dirty) || 0);
+        const wetTop = mapY(wet);
+        const totalTop = mapY(wet + dirty);
+        const wetH = Math.max(0, y0 - wetTop);
+        const dirtyH = Math.max(0, wetTop - totalTop);
+        if (wetH > 0) {
+          ctx.fillStyle = cssColorToRgba(wetColor, 0.9);
+          ctx.beginPath();
+          if (typeof ctx.roundRect === "function") ctx.roundRect(cx - bw / 2, wetTop, bw, wetH, [0, 0, r, r]);
+          else ctx.rect(cx - bw / 2, wetTop, bw, wetH);
+          ctx.fill();
+        }
+        if (dirtyH > 0) {
+          ctx.fillStyle = cssColorToRgba(dirtyColor, 0.9);
+          ctx.beginPath();
+          if (typeof ctx.roundRect === "function") ctx.roundRect(cx - bw / 2, totalTop, bw, dirtyH, [r, r, 0, 0]);
+          else ctx.rect(cx - bw / 2, totalTop, bw, dirtyH);
+          ctx.fill();
+        }
+      } else {
+        const yv = mapY(p.value);
+        const h = Math.max(0, y0 - yv);
+        ctx.fillStyle = cssColorToRgba(lineColor, 0.88);
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") ctx.roundRect(cx - bw / 2, yv, bw, h, r);
+        else ctx.rect(cx - bw / 2, yv, bw, h);
+        ctx.fill();
+      }
+    });
+  } else {
+    if (viz === "area_line") {
+      const gradient = ctx.createLinearGradient(0, top, 0, top + ph);
+      gradient.addColorStop(0, cssColorToRgba(lineColor, 0.2));
+      gradient.addColorStop(1, cssColorToRgba(lineColor, 0.02));
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const x = mapXLine(i);
+        const y = mapY(p.value);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.lineTo(mapXLine(n - 1), y0);
+      ctx.lineTo(mapXLine(0), y0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 1.8;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    vals.forEach((v, i) => {
+      const x = mapXLine(i);
+      const y = mapY(v);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    points.forEach((p, i) => {
+      ctx.beginPath();
+      ctx.arc(mapXLine(i), mapY(p.value), 3, 0, Math.PI * 2);
+      ctx.fillStyle = lineColor;
+      ctx.fill();
+    });
+  }
+  ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
+  ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
+  const labelStep = Math.max(1, Math.ceil(n / 6));
+  points.forEach((p, i) => {
+    if (i % labelStep !== 0 && i !== n - 1) return;
+    ctx.fillText(p.label, xs[i] - 12, cssHeight - 8);
+  });
+  return layout;
+}
+
+function bindGridChartInteractions(panelCanvas, panelTrend) {
+  const card = panelCanvas.closest(".chart-stage-card");
+  if (!card) return;
+  const cross = card.querySelector(".chart-crosshair");
+  const tip = card.querySelector(".chart-tooltip");
+  const points = /** @type {Array<{ label: string, value: number }>} */ (panelTrend.points || []);
+  const move = (ev) => {
+    const layout = chartPanelLayouts.get(panelCanvas);
+    if (!layout || !points.length || !cross || !tip) return;
+    const rect = panelCanvas.getBoundingClientRect();
+    const mx = ev.clientX - rect.left;
+    if (mx < layout.left - 8 || mx > layout.left + layout.plotW + 8) {
+      cross.classList.add("hidden");
+      tip.classList.add("hidden");
+      return;
+    }
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < layout.len; i += 1) {
+      const d = Math.abs(layout.xs[i] - mx);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    const p = points[best];
+    cross.style.left = `${panelCanvas.offsetLeft + layout.xs[best]}px`;
+    cross.style.top = `${panelCanvas.offsetTop}px`;
+    cross.style.height = `${panelCanvas.clientHeight}px`;
+    cross.classList.remove("hidden");
+    tip.innerHTML = `<div class="chart-tip-label">${escapeHtml(p.label)}</div><div class="chart-tip-value">${escapeHtml(withChartUnit(String(panelTrend.unit || ""), p.value))}</div>`;
+    const offsetX = Math.min(panelCanvas.clientWidth - 130, Math.max(6, layout.xs[best] + 8));
+    const y = layout.ys[best] || 8;
+    tip.style.left = `${offsetX}px`;
+    tip.style.top = `${Math.max(6, y - 40)}px`;
+    tip.classList.remove("hidden");
+  };
+  const leave = () => {
+    cross?.classList.add("hidden");
+    tip?.classList.add("hidden");
+  };
+  panelCanvas.addEventListener("pointermove", move);
+  panelCanvas.addEventListener("pointerleave", leave);
+  panelCanvas.addEventListener("pointerup", leave);
+  panelCanvas.addEventListener("pointercancel", leave);
+}
+
 function renderTrendChart() {
   syncChartResolutionButtons();
   const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById("stats-chart"));
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-
+  const stage = document.getElementById("chart-stage");
+  if (!canvas || !stage) return;
   chartScrubIndex = null;
   chartPlotLayout = null;
   chartHitPoints = [];
   chartLastTrend = null;
   hideChartCrosshairAndTip();
-
   const loading = document.getElementById("chart-loading");
-
   const runDraw = () => {
-    const dpr = window.devicePixelRatio || 1;
-    const cssWidth = canvas.clientWidth || 900;
-    const cssHeight = 320;
-    canvas.width = Math.floor(cssWidth * dpr);
-    canvas.height = Math.floor(cssHeight * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, cssWidth, cssHeight);
-
     const trend = buildTrendData();
     chartLastTrend = trend;
     updateChartPanelFromTrend(trend);
-
-    const points = trend.points || [];
-    const vals = points.map((p) => Number(p.value) || 0);
-    if (!points.length) return;
-
-    const yRange = trend.yRange || { minY: 0, maxY: 10 };
-    const yMin = yRange.minY;
-    const yMax = yRange.maxY;
-    const spanY = Math.max(yMax - yMin, 1e-9);
-    const lineColor = getChartLineCssColor(trend.metric);
-
-    const unit = trend.unit || "数值";
-    const left = unit === "分钟" ? 78 : 56;
-    const right = 12;
-    const top = 22;
-    const bottom = 30;
-    const pw = cssWidth - left - right;
-    const ph = cssHeight - top - bottom;
-
-    ctx.strokeStyle = "rgba(128, 128, 128, 0.15)";
-    ctx.lineWidth = 1;
-    ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
-    ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
-    for (let i = 0; i <= 4; i += 1) {
-      const y = top + (ph / 4) * i;
-      ctx.beginPath();
-      ctx.moveTo(left, y);
-      ctx.lineTo(left + pw, y);
-      ctx.stroke();
-      const raw = yMax - (spanY / 4) * i;
-      const tickLabel =
-        unit === "分钟"
-          ? formatDurationAxisTick(raw)
-          : String(spanY < 6 ? Math.round(raw * 100) / 100 : Math.round(raw));
-      ctx.fillText(tickLabel, 8, y + 4);
-    }
-    const yAxisTitle = unit === "分钟" ? "分钟 (累计)" : unit === "次" ? "次数" : unit;
-    ctx.fillText(yAxisTitle, 8, 14);
-
-    const viz = String(trend.viz || "area_line");
-    const n = points.length;
-    const mapXLine = (i) => left + (pw * i) / Math.max(1, n - 1);
-    const mapXBarCenter = (i) => left + ((i + 0.5) / Math.max(1, n)) * pw;
-    const mapY = (v) => top + ph - ((Number(v) - yMin) / spanY) * ph;
-    const mapX = viz === "bar" ? mapXBarCenter : mapXLine;
-    const xs = points.map((_, i) => mapX(i));
-    const ys = points.map((p) => mapY(p.value));
-    chartPlotLayout = { xs, ys, left, plotW: pw, len: points.length };
-
-    chartHitPoints = points.map((p, i) => ({
-      x: xs[i],
-      y: ys[i],
-      label: p.label,
-      value: p.value,
-      unit,
-    }));
-
-    const drawSeries = (seriesVals, color) => {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.8;
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      seriesVals.forEach((v, i) => {
-        const x = mapXLine(i);
-        const y = mapY(v);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-    };
-
-    const y0 = top + ph;
-
-    if (viz === "bar") {
-      ctx.fillStyle = cssColorToRgba(lineColor, 0.88);
-      const slotW = pw / Math.max(1, n);
-      const bw = Math.max(4, Math.min(slotW * 0.62, 28));
-      const r = Math.min(3, bw / 4);
-      points.forEach((p, i) => {
-        const cx = mapXBarCenter(i);
-        const yv = mapY(p.value);
-        const h = Math.max(0, y0 - yv);
-        ctx.beginPath();
-        if (typeof ctx.roundRect === "function") {
-          ctx.roundRect(cx - bw / 2, yv, bw, h, r);
-        } else {
-          ctx.rect(cx - bw / 2, yv, bw, h);
-        }
-        ctx.fill();
-      });
-    } else {
-      if (viz === "area_line") {
-        const gradient = ctx.createLinearGradient(0, top, 0, top + ph);
-        gradient.addColorStop(0, cssColorToRgba(lineColor, 0.2));
-        gradient.addColorStop(1, cssColorToRgba(lineColor, 0.02));
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        points.forEach((p, i) => {
-          const x = mapXLine(i);
-          const y = mapY(p.value);
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-        ctx.lineTo(mapXLine(n - 1), y0);
-        ctx.lineTo(mapXLine(0), y0);
-        ctx.closePath();
-        ctx.fill();
+    stage.querySelectorAll(".chart-stage-card").forEach((n) => n.remove());
+    const panels = Array.isArray(trend.panels) ? trend.panels : [];
+    if (panels.length > 1) {
+      stage.classList.add("chart-stage--grid");
+      canvas.classList.add("hidden");
+      chartLastTrend = null;
+      for (const panel of panels) {
+        const card = document.createElement("div");
+        card.className = "chart-stage-card";
+        const title = document.createElement("p");
+        title.className = "chart-stage-card-title";
+        title.textContent = panel.shortLabel || panel.metricLabel || "趋势";
+        const panelCanvas = document.createElement("canvas");
+        panelCanvas.width = 900;
+        panelCanvas.height = 320;
+        panelCanvas.style.cursor = "crosshair";
+        const cross = document.createElement("div");
+        cross.className = "chart-crosshair hidden";
+        cross.setAttribute("aria-hidden", "true");
+        const tip = document.createElement("div");
+        tip.className = "chart-tooltip hidden";
+        card.append(title, panelCanvas, cross, tip);
+        stage.appendChild(card);
+        drawTrendToCanvas(panelCanvas, panel, false);
+        bindGridChartInteractions(panelCanvas, panel);
       }
-      drawSeries(vals, lineColor);
-      ctx.fillStyle = lineColor;
-      points.forEach((p, i) => {
-        const x = mapXLine(i);
-        const y = mapY(p.value);
-        ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fillStyle = lineColor;
-        ctx.fill();
-      });
+      return;
     }
-
-    ctx.fillStyle = "rgba(128, 128, 128, 0.6)";
-    ctx.font = '11px "SF Pro Text", "Helvetica Neue", Arial';
-    const labelStep = Math.max(1, Math.ceil(n / 6));
-    points.forEach((p, i) => {
-      if (i % labelStep !== 0 && i !== n - 1) return;
-      const x = xs[i] - 12;
-      const y = cssHeight - 8;
-      ctx.fillText(p.label, x, y);
-    });
+    stage.classList.remove("chart-stage--grid");
+    canvas.classList.remove("hidden");
+    drawTrendToCanvas(canvas, trend, true);
   };
-
   if (loading) loading.classList.add("is-visible");
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const doneLoading = () => {
-    if (loading) loading.classList.remove("is-visible");
-  };
-  if (reduceMotion) {
+  const doneLoading = () => loading?.classList.remove("is-visible");
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     try {
       runDraw();
+    } catch {
+      const empty = document.getElementById("chart-empty-state");
+      empty?.classList.remove("hidden");
+      canvas.classList.add("hidden");
     } finally {
       doneLoading();
     }
@@ -2321,6 +2377,10 @@ function renderTrendChart() {
   requestAnimationFrame(() => {
     try {
       runDraw();
+    } catch {
+      const empty = document.getElementById("chart-empty-state");
+      empty?.classList.remove("hidden");
+      canvas.classList.add("hidden");
     } finally {
       requestAnimationFrame(doneLoading);
     }
@@ -2331,90 +2391,6 @@ function hideChartTooltip() {
   const tip = document.getElementById("chart-tooltip");
   if (!tip) return;
   tip.classList.add("hidden");
-}
-
-function renderChartMetricMenuItems() {
-  const menu = document.getElementById("chart-metric-menu");
-  if (!menu) return;
-  const groups = getNumericMetricOptionsGrouped();
-  menu.innerHTML = groups
-    .map((g) => {
-      const items = g.items
-        .map(
-          (o) =>
-            `<button type="button" class="chart-metric-menu-item${o.id === chartMetricId ? " is-active" : ""}" data-metric-id="${o.id}" role="menuitem">${escapeHtml(o.label)}</button>`,
-        )
-        .join("");
-      const head = `${escapeHtml(g.emoji)} ${escapeHtml(g.title)}`;
-      return `<div class="chart-metric-group" role="group" aria-label="${escapeHtml(g.title)}"><div class="chart-metric-group-title">${head}</div>${items}</div>`;
-    })
-    .join("");
-}
-
-function hideChartMetricMenu() {
-  const menu = document.getElementById("chart-metric-menu");
-  const backdrop = document.getElementById("chart-metric-menu-backdrop");
-  const legend = document.getElementById("chart-legend-trigger");
-  if (menu) {
-    menu.classList.add("hidden");
-    menu.classList.remove("chart-metric-menu--sheet", "chart-metric-menu--popover");
-    menu.style.left = "";
-    menu.style.top = "";
-    menu.style.right = "";
-    menu.style.bottom = "";
-  }
-  if (backdrop) backdrop.classList.add("hidden");
-  if (legend) legend.setAttribute("aria-expanded", "false");
-}
-
-/**
- * @param {number} clientX viewport X
- * @param {number} clientY viewport Y
- */
-function openChartMetricMenu(clientX, clientY) {
-  const wrap = document.getElementById("stats-chart-wrap");
-  const menu = document.getElementById("chart-metric-menu");
-  const backdrop = document.getElementById("chart-metric-menu-backdrop");
-  if (!wrap || !menu) return;
-  renderChartMetricMenuItems();
-  const sheet = window.innerWidth <= CHART_METRIC_SHEET_MAX_W;
-  menu.classList.remove("hidden");
-  if (sheet) {
-    menu.classList.add("chart-metric-menu--sheet");
-    menu.classList.remove("chart-metric-menu--popover");
-    if (backdrop) backdrop.classList.remove("hidden");
-    menu.style.left = "";
-    menu.style.top = "";
-  } else {
-    menu.classList.add("chart-metric-menu--popover");
-    menu.classList.remove("chart-metric-menu--sheet");
-    if (backdrop) backdrop.classList.add("hidden");
-    const wrapRect = wrap.getBoundingClientRect();
-    const localX = clientX - wrapRect.left;
-    const localY = clientY - wrapRect.top;
-    const menuW = menu.offsetWidth || 240;
-    const menuH = menu.offsetHeight || 200;
-    const left = Math.min(
-      wrapRect.width - menuW - 8,
-      Math.max(8, localX - menuW / 2),
-    );
-    const top = Math.min(
-      wrapRect.height - menuH - 8,
-      Math.max(8, localY - menuH - 8),
-    );
-    menu.style.left = `${Math.round(left)}px`;
-    menu.style.top = `${Math.round(top)}px`;
-  }
-  const legend = document.getElementById("chart-legend-trigger");
-  if (legend) legend.setAttribute("aria-expanded", "true");
-}
-
-function openChartMetricMenuByLegend() {
-  if (statsView !== "metricDetail") return;
-  const trigger = document.getElementById("chart-legend-trigger");
-  if (!trigger) return;
-  const rect = trigger.getBoundingClientRect();
-  openChartMetricMenu(rect.left + rect.width / 2, rect.top);
 }
 
 function buildTrendData() {
@@ -2478,90 +2454,165 @@ function buildTrendData() {
   const start = new Date(`${range.start}T00:00:00`);
   const end = new Date(`${range.end}T00:00:00`);
   const resolution = getChartResolutionByRange();
-  const isSingleDay = range.start === range.end;
-  if (isSingleDay && resolution === "day" && isEventCountMetric(metric)) {
-    const dayEntries = source.filter(
-      (e) => toLocalDateKey(e.at) === range.start && e.categoryId === metric.categoryId,
-    );
-    const hourBins = [];
-    for (let h = 0; h < 24; h += 1) {
-      const label = `${String(h).padStart(2, "0")}:00`;
-      const count = dayEntries.filter((e) => new Date(e.at).getHours() === h).length;
-      hourBins.push({ label, value: count });
+  const buildPointsForMetric = (targetMetric) => {
+    const isTemperatureMetric = targetMetric.categoryId === "temperature" || targetMetric.fieldKey === "celsius";
+    const isGrowthMetric = targetMetric.categoryId === "growth" && ["weightKg", "heightCm", "headCm"].includes(String(targetMetric.fieldKey || ""));
+    const isSingleDay = range.start === range.end;
+    if (isSingleDay && resolution === "day" && isEventCountMetric(targetMetric)) {
+      const dayEntries = source.filter((e) => toLocalDateKey(e.at) === range.start && e.categoryId === targetMetric.categoryId);
+      const hourBins = [];
+      for (let h = 0; h < 24; h += 1) {
+        const label = `${String(h).padStart(2, "0")}:00`;
+        const bucket = dayEntries.filter((e) => new Date(e.at).getHours() === h);
+        if (targetMetric.id === "diaper.eventCount") {
+          let wet = 0;
+          let dirty = 0;
+          for (const e of bucket) {
+            const subtype = String(e.fields?.subtype || "");
+            if (subtype === "wet") wet += 1;
+            else if (subtype === "dirty") dirty += 1;
+            else if (subtype === "both") {
+              wet += 1;
+              dirty += 1;
+            }
+          }
+          hourBins.push({ label, value: wet + dirty, wet, dirty });
+        } else {
+          hourBins.push({ label, value: bucket.length });
+        }
+      }
+      return { mode: "range-line", points: hourBins, label: "按小时" };
     }
-    return pack("range-line", hourBins, "day", "按小时");
-  }
-
-  if (isSingleDay && resolution === "day") {
-    const dayPoints = source
-      .filter((e) => toLocalDateKey(e.at) === range.start && e.categoryId === metric.categoryId)
-      .map((e) => {
-        const d = new Date(e.at);
-        const hh = String(d.getHours()).padStart(2, "0");
-        const mm = String(d.getMinutes()).padStart(2, "0");
+    if (isSingleDay && resolution === "day") {
+      const dayPoints = source
+        .filter((e) => toLocalDateKey(e.at) === range.start && e.categoryId === targetMetric.categoryId)
+        .map((e) => {
+          const d = new Date(e.at);
+          return { t: d.getTime(), label: `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`, value: Number(e.fields?.[targetMetric.fieldKey]) || 0 };
+        })
+        .sort((a, b) => a.t - b.t);
+      return { mode: "day-points", points: dayPoints, label: "按记录时间" };
+    }
+    const metricEntries = source.filter((e) => e.categoryId === targetMetric.categoryId);
+    const addFieldOrCount = (e, prev) => (isEventCountMetric(targetMetric) ? prev + 1 : prev + (Number(e.fields?.[targetMetric.fieldKey]) || 0));
+    const aggregateBucketEntries = (bucketEntries) => {
+      if (isEventCountMetric(targetMetric)) return bucketEntries.length;
+      if (!bucketEntries.length) return 0;
+      const total = bucketEntries.reduce((sum, e) => sum + (Number(e.fields?.[targetMetric.fieldKey]) || 0), 0);
+      // Body measurement metrics should be averaged for week/month buckets; summing is not meaningful.
+      if ((isTemperatureMetric || isGrowthMetric) && resolution !== "day") return total / bucketEntries.length;
+      return total;
+    };
+    const data = [];
+    if (resolution === "day") {
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const key = toLocalDateKey(d);
+        const bucket = metricEntries.filter((e) => toLocalDateKey(e.at) === key);
+        if (targetMetric.id === "diaper.eventCount") {
+          let wet = 0;
+          let dirty = 0;
+          for (const e of bucket) {
+            const subtype = String(e.fields?.subtype || "");
+            if (subtype === "wet") wet += 1;
+            else if (subtype === "dirty") dirty += 1;
+            else if (subtype === "both") {
+              wet += 1;
+              dirty += 1;
+            }
+          }
+          data.push({ label: `${d.getMonth() + 1}/${d.getDate()}`, value: wet + dirty, wet, dirty });
+        } else {
+          data.push({ label: `${d.getMonth() + 1}/${d.getDate()}`, value: aggregateBucketEntries(bucket) });
+        }
+      }
+    } else if (resolution === "week") {
+      const buckets = new Map();
+      for (const e of metricEntries) {
+        const key = toLocalDateKey(getWeekStartDate(new Date(e.at)));
+        buckets.set(key, addFieldOrCount(e, buckets.get(key) || 0));
+      }
+      let cursor = getWeekStartDate(start);
+      const endWeek = getWeekStartDate(end);
+      while (cursor <= endWeek) {
+        const key = toLocalDateKey(cursor);
+        const weekEntries = metricEntries.filter((e) => toLocalDateKey(getWeekStartDate(new Date(e.at))) === key);
+        if (targetMetric.id === "diaper.eventCount") {
+          let wet = 0;
+          let dirty = 0;
+          for (const e of weekEntries) {
+            const subtype = String(e.fields?.subtype || "");
+            if (subtype === "wet") wet += 1;
+            else if (subtype === "dirty") dirty += 1;
+            else if (subtype === "both") {
+              wet += 1;
+              dirty += 1;
+            }
+          }
+          data.push({ label: `${cursor.getMonth() + 1}/${cursor.getDate()}周`, value: wet + dirty, wet, dirty });
+        } else {
+          data.push({ label: `${cursor.getMonth() + 1}/${cursor.getDate()}周`, value: isTemperatureMetric || isGrowthMetric ? aggregateBucketEntries(weekEntries) : buckets.get(key) || 0 });
+        }
+        cursor.setDate(cursor.getDate() + 7);
+      }
+    } else {
+      const buckets = new Map();
+      for (const e of metricEntries) {
+        const key = getMonthKey(new Date(e.at));
+        buckets.set(key, addFieldOrCount(e, buckets.get(key) || 0));
+      }
+      let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+      const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+      while (cursor <= endMonth) {
+        const key = getMonthKey(cursor);
+        const monthEntries = metricEntries.filter((e) => getMonthKey(new Date(e.at)) === key);
+        if (targetMetric.id === "diaper.eventCount") {
+          let wet = 0;
+          let dirty = 0;
+          for (const e of monthEntries) {
+            const subtype = String(e.fields?.subtype || "");
+            if (subtype === "wet") wet += 1;
+            else if (subtype === "dirty") dirty += 1;
+            else if (subtype === "both") {
+              wet += 1;
+              dirty += 1;
+            }
+          }
+          data.push({ label: `${cursor.getFullYear()}/${cursor.getMonth() + 1}`, value: wet + dirty, wet, dirty });
+        } else {
+          data.push({ label: `${cursor.getFullYear()}/${cursor.getMonth() + 1}`, value: isTemperatureMetric || isGrowthMetric ? aggregateBucketEntries(monthEntries) : buckets.get(key) || 0 });
+        }
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+    }
+    return { mode: "range-line", points: data, label: "" };
+  };
+  if (metric.categoryId === "growth") {
+    const growthMetricIds = ["growth.weightKg", "growth.heightCm", "growth.headCm"];
+    const growthMetrics = getNumericMetricOptions().filter((m) => growthMetricIds.includes(m.id));
+    const available = growthMetrics.filter((m) => source.some((e) => e.categoryId === "growth" && Number.isFinite(Number(e.fields?.[m.fieldKey]))));
+    if (available.length > 1) {
+      const panels = available.map((m) => {
+        const built = buildPointsForMetric(m);
+        const vals = built.points.map((p) => Number(p.value) || 0);
         return {
-          t: d.getTime(),
-          label: `${hh}:${mm}`,
-          value: Number(e.fields?.[metric.fieldKey]) || 0,
+          ...pack(built.mode, built.points, resolution, built.label),
+          metric: m,
+          metricLabel: m.label,
+          shortLabel: stripFieldUnit(String(m.label).split("·").pop() || m.label).trim(),
+          summary: computeTrendSummary(m, built.points),
+          yRange: getSmartYRange(m, vals),
         };
-      })
-      .sort((a, b) => a.t - b.t);
-    return pack("day-points", dayPoints, "day", "按记录时间");
-  }
-
-  const metricEntries = source.filter((e) => e.categoryId === metric.categoryId);
-  const addFieldOrCount = (e, prev) => {
-    if (isEventCountMetric(metric)) return prev + 1;
-    return prev + (Number(e.fields?.[metric.fieldKey]) || 0);
-  };
-  const sumBucketEntries = (dayEntries) => {
-    if (isEventCountMetric(metric)) return dayEntries.length;
-    return dayEntries.reduce((sum, e) => sum + (Number(e.fields?.[metric.fieldKey]) || 0), 0);
-  };
-  const data = [];
-  if (resolution === "day") {
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const key = toLocalDateKey(d);
-      const label = `${d.getMonth() + 1}/${d.getDate()}`;
-      const dayEntries = metricEntries.filter((e) => toLocalDateKey(e.at) === key);
-      const value = sumBucketEntries(dayEntries);
-      data.push({ label, value });
-    }
-  } else if (resolution === "week") {
-    const buckets = new Map();
-    for (const e of metricEntries) {
-      const at = new Date(e.at);
-      const weekStart = getWeekStartDate(at);
-      const key = toLocalDateKey(weekStart);
-      const prev = buckets.get(key) || 0;
-      buckets.set(key, addFieldOrCount(e, prev));
-    }
-    let cursor = getWeekStartDate(start);
-    const endWeek = getWeekStartDate(end);
-    while (cursor <= endWeek) {
-      const key = toLocalDateKey(cursor);
-      const label = `${cursor.getMonth() + 1}/${cursor.getDate()}周`;
-      data.push({ label, value: buckets.get(key) || 0 });
-      cursor.setDate(cursor.getDate() + 7);
-    }
-  } else {
-    const buckets = new Map();
-    for (const e of metricEntries) {
-      const at = new Date(e.at);
-      const key = getMonthKey(at);
-      const prev = buckets.get(key) || 0;
-      buckets.set(key, addFieldOrCount(e, prev));
-    }
-    let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
-    while (cursor <= endMonth) {
-      const key = getMonthKey(cursor);
-      const label = `${cursor.getFullYear()}/${cursor.getMonth() + 1}`;
-      data.push({ label, value: buckets.get(key) || 0 });
-      cursor.setMonth(cursor.getMonth() + 1);
+      });
+      return {
+        ...panels[0],
+        metricLabel: "📏 生长测量",
+        summary: { primary: `共 ${available.length} 项指标`, secondary: "体重、身长、头围按同一范围并列展示" },
+        panels,
+      };
     }
   }
-  return pack("range-line", data, resolution, "");
+  const built = buildPointsForMetric(metric);
+  return pack(built.mode, built.points, resolution, built.label);
 }
 
 function getEntriesByRange(start, end) {
@@ -3988,7 +4039,6 @@ function populateFilter() {
 function populateChartMetricOptions() {
   const opts = getNumericMetricOptions();
   if (!opts.some((x) => x.id === chartMetricId) && opts[0]) chartMetricId = opts[0].id;
-  renderChartMetricMenuItems();
 }
 
 function exportData() {
@@ -4704,19 +4754,6 @@ export async function init() {
   if (statsEndEl) statsEndEl.addEventListener("input", scheduleAutoApplyCustomStatsRange);
   window.addEventListener("popstate", onStatsMetricDetailPopState);
   document.getElementById("btn-stats-metric-back")?.addEventListener("click", onStatsMetricDetailBackClick);
-  const chartMetricMenu = document.getElementById("chart-metric-menu");
-  if (chartMetricMenu) {
-    chartMetricMenu.addEventListener("click", (ev) => {
-      const target = /** @type {HTMLElement|null} */ (ev.target);
-      const item = target ? target.closest("[data-metric-id]") : null;
-      if (!item) return;
-      const nextMetricId = item.getAttribute("data-metric-id") || "";
-      if (!nextMetricId || nextMetricId === chartMetricId) return;
-      chartMetricId = nextMetricId;
-      hideChartMetricMenu();
-      if (statsView === "metricDetail") renderTrendChart();
-    });
-  }
   document.querySelectorAll(".chart-res-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const next = btn.getAttribute("data-resolution") || "day";
@@ -4741,33 +4778,9 @@ export async function init() {
     chartCanvas.addEventListener("pointercancel", onChartPointerUp);
     chartCanvas.addEventListener("pointerleave", onChartPointerLeave);
   }
-  const chartMenuBackdrop = document.getElementById("chart-metric-menu-backdrop");
-  if (chartMenuBackdrop) chartMenuBackdrop.addEventListener("click", hideChartMetricMenu);
   document.getElementById("chart-empty-to-cards")?.addEventListener("click", onStatsMetricDetailBackClick);
   document.getElementById("chart-empty-widen-range")?.addEventListener("click", () => {
     applyPresetRange("30d");
-  });
-  const chartLegendTrigger = document.getElementById("chart-legend-trigger");
-  if (chartLegendTrigger) {
-    chartLegendTrigger.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      openChartMetricMenuByLegend();
-    });
-    chartLegendTrigger.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter" || ev.key === " ") {
-        ev.preventDefault();
-        openChartMetricMenuByLegend();
-      }
-    });
-  }
-  document.addEventListener("click", (ev) => {
-    const target = /** @type {HTMLElement|null} */ (ev.target);
-    if (!target) return;
-    if (target.closest("#chart-metric-menu") || target.closest("#stats-chart") || target.closest("#chart-legend-trigger")) return;
-    hideChartMetricMenu();
-  });
-  document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") hideChartMetricMenu();
   });
   document.getElementById("btn-export").addEventListener("click", exportData);
   document.getElementById("import-file").addEventListener("change", (ev) => {

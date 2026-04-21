@@ -500,16 +500,12 @@
                   <h3 class="chart-panel-title" id="chart-panel-metric-title">趋势</h3>
                 </div>
                 <p class="chart-panel-range" id="chart-panel-range-line"></p>
-                <p class="chart-panel-agg" id="chart-aggregation-subtitle"></p>
+                <div id="chart-inline-legend" class="chart-inline-legend hidden" aria-label="图例"></div>
                 <div class="chart-toolbar chart-toolbar--segmented" role="tablist" aria-label="图表分辨率切换">
                   <button type="button" class="chart-res-btn is-active" data-resolution="day">天</button>
                   <button type="button" class="chart-res-btn" data-resolution="week">周</button>
                   <button type="button" class="chart-res-btn" data-resolution="month">月</button>
                 </div>
-              </div>
-              <div class="chart-summary-hero" id="chart-summary-hero" aria-live="polite">
-                <div class="chart-summary-primary" id="chart-summary-primary">—</div>
-                <div class="chart-summary-secondary" id="chart-summary-secondary"></div>
               </div>
               <div class="chart-stage" id="chart-stage">
                 <div class="chart-loading" id="chart-loading" aria-hidden="true"></div>
@@ -524,22 +520,6 @@
                     <button type="button" class="btn btn-primary" id="chart-empty-widen-range">查看最近 30 天</button>
                   </div>
                 </div>
-              </div>
-              <div id="chart-metric-menu-backdrop" class="chart-metric-menu-backdrop hidden" aria-hidden="true"></div>
-              <div id="chart-metric-menu" class="chart-metric-menu hidden" role="menu" aria-label="图表指标切换"></div>
-              <div
-                id="chart-legend-trigger"
-                class="chart-legend"
-                role="button"
-                tabindex="0"
-                aria-label="选择趋势指标"
-                aria-haspopup="menu"
-                aria-expanded="false"
-                aria-controls="chart-metric-menu"
-              >
-                <span class="chart-legend-dot"></span>
-                <span id="chart-legend-text">趋势指标</span>
-                <span class="chart-metric-hint">点击选择指标</span>
               </div>
               </div>
             </div>
