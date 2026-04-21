@@ -988,7 +988,6 @@ function computeTrendSummary(metric, points) {
         body ? `合计 ${withChartUnit(u, sum)}` : `日均 ${withChartUnit(u, mean)}`,
         `高 ${withChartUnit(u, max)}`,
         `低 ${withChartUnit(u, min)}`,
-        `${count} 个数据点`,
       ].join(" · ");
   return { primary, secondary, sum, mean, min, max, count };
 }

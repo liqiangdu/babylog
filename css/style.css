@@ -1468,6 +1468,20 @@ textarea:focus-visible {
 }
 .stats-metric-detail-back {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 10px;
+  padding-right: 12px;
+}
+.stats-metric-detail-back svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .stats-metric-detail .stats-chart-wrap {
   margin-top: 0;
