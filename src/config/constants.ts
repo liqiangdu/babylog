@@ -206,7 +206,7 @@ export const CATEGORIES: CategoryDef[] = [
   },
   {
     id: "spitup",
-    label: "吐奶/溢奶",
+    label: "吐奶",
     emoji: "💧",
     fields: [
       {

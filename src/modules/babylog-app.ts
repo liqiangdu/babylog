@@ -837,9 +837,10 @@ function getNumericMetricOptions() {
     for (const f of c.fields) {
       if (f.type !== "number") continue;
       const metricName = stripFieldUnit(String(f.label || f.key || "数值"));
+      const displayName = mergeCategoryMetricLabel(String(c.label || ""), metricName);
       opts.push({
         id: `${c.id}.${f.key}`,
-        label: `${c.emoji} ${c.label} · ${metricName}`,
+        label: `${c.emoji} ${displayName}`,
         categoryId: c.id,
         fieldKey: f.key,
         unit: inferMetricUnit(f),
@@ -1046,6 +1047,21 @@ function cssColorToRgba(color, alpha) {
 function stripFieldUnit(label) {
   // Remove trailing unit hints like "(ml)" / "（分钟）" for display labels.
   return String(label).replace(/\s*[（(][^()（）]{1,10}[)）]\s*$/u, "").trim();
+}
+
+function mergeCategoryMetricLabel(categoryLabel, metricName) {
+  const cat = String(categoryLabel || "").trim();
+  const metric = String(metricName || "").trim();
+  if (!cat) return metric || "趋势";
+  if (!metric) return cat;
+  if (cat === metric) return cat;
+  if (metric.startsWith(cat)) return metric;
+  if (cat.startsWith(metric)) return cat;
+  const maxOverlap = Math.min(cat.length, metric.length);
+  for (let size = maxOverlap; size >= 1; size -= 1) {
+    if (cat.slice(-size) === metric.slice(0, size)) return `${cat}${metric.slice(size)}`;
+  }
+  return `${cat}${metric}`;
 }
 
 function inferMetricUnit(field) {
@@ -1844,7 +1860,7 @@ function renderStats() {
       metricId: "cry.durationMin",
       icon: "cry",
     },
-    { k: "吐奶/溢奶", v: `${spitupCount} 次`, metricId: "spitup.eventCount", icon: "spitup" },
+    { k: "吐奶", v: `${spitupCount} 次`, metricId: "spitup.eventCount", icon: "spitup" },
   ];
 
   const caregiverCards = [
@@ -1977,7 +1993,7 @@ function updateChartPanelFromTrend(trend) {
   const inlineLegend = document.getElementById("chart-inline-legend");
   const empty = document.getElementById("chart-empty-state");
   const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById("stats-chart"));
-  const ml = trend.metric ? trend.metric.label : String(trend.metricLabel || "趋势");
+  const ml = String(trend.metricLabel || (trend.metric ? trend.metric.label : "趋势"));
   if (titleEl) titleEl.textContent = ml;
   if (rangeEl) {
     rangeEl.textContent =

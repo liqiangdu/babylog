@@ -18,7 +18,7 @@ export type EventCountMetric = {
 export const EVENT_COUNT_METRICS: readonly EventCountMetric[] = [
   {
     id: "diaper.eventCount",
-    label: "👶 换尿布 · 换片次数",
+    label: "👶 换片次数",
     categoryId: "diaper",
     unit: "次",
     kind: "event_count",
@@ -27,7 +27,7 @@ export const EVENT_COUNT_METRICS: readonly EventCountMetric[] = [
   },
   {
     id: "bath.eventCount",
-    label: "🛁 洗澡 · 次数",
+    label: "🛁 洗澡次数",
     categoryId: "bath",
     unit: "次",
     kind: "event_count",
@@ -36,7 +36,7 @@ export const EVENT_COUNT_METRICS: readonly EventCountMetric[] = [
   },
   {
     id: "spitup.eventCount",
-    label: "💧 吐奶/溢奶 · 次数",
+    label: "💧 吐奶次数",
     categoryId: "spitup",
     unit: "次",
     kind: "event_count",
@@ -45,7 +45,7 @@ export const EVENT_COUNT_METRICS: readonly EventCountMetric[] = [
   },
   {
     id: "medicine.eventCount",
-    label: "💊 用药 · 次数",
+    label: "💊 用药次数",
     categoryId: "medicine",
     unit: "次",
     kind: "event_count",
@@ -54,7 +54,7 @@ export const EVENT_COUNT_METRICS: readonly EventCountMetric[] = [
   },
   {
     id: "supplement.eventCount",
-    label: "✨ 补剂 · 次数",
+    label: "✨ 补剂次数",
     categoryId: "supplement",
     unit: "次",
     kind: "event_count",
@@ -63,7 +63,7 @@ export const EVENT_COUNT_METRICS: readonly EventCountMetric[] = [
   },
   {
     id: "solid.eventCount",
-    label: "🥣 辅食 · 次数",
+    label: "🥣 辅食次数",
     categoryId: "solid",
     unit: "次",
     kind: "event_count",
