@@ -2379,7 +2379,7 @@ html[data-theme="dark"] .module-ai::before {
 
 .ai-layout {
   display: grid;
-  grid-template-columns: clamp(200px, 22vw, 260px) minmax(0, 1fr);
+  grid-template-columns: clamp(244px, 26vw, 328px) minmax(0, 1fr);
   gap: 0;
   height: 100%;
   min-height: 0;
@@ -2393,14 +2393,20 @@ html[data-theme="dark"] .module-ai::before {
 .ai-sessions-panel {
   border: 0;
   border-radius: 0;
-  background: color-mix(in srgb, var(--text) 2.2%, transparent);
-  padding: var(--space-3) var(--space-3) 0 var(--space-2);
+  background: transparent;
+  padding: var(--space-3) 8px 0;
   border-right: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
   display: flex;
   flex-direction: column;
+  align-items: center;
   min-height: 100%;
   overflow: hidden;
   gap: var(--space-3);
+}
+
+.ai-sessions-panel > * {
+  width: min(calc(100% - 8px), 296px);
+  margin-inline: auto;
 }
 
 .ai-settings {
@@ -2624,7 +2630,7 @@ html[data-theme="dark"] .module-ai::before {
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  padding-right: 2px;
+  padding-right: 0;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-muted) 24%, transparent) transparent;
 }
@@ -2640,7 +2646,7 @@ html[data-theme="dark"] .module-ai::before {
 }
 
 .ai-session-search {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   min-height: 34px;
   font-size: 13px;
   border-radius: 10px;
