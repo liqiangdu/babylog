@@ -2675,46 +2675,64 @@ html[data-theme="dark"] .module-ai::before {
   background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
+.ai-session-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .ai-session-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
+  min-width: 0;
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .ai-session-meta {
-  margin-top: 3px;
   font-size: 11px;
   color: var(--text-muted);
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
-.ai-session-last {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.ai-session-side {
+  position: relative;
+  min-width: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .ai-session-actions {
-  margin-top: 2px;
+  margin-top: 0;
   display: flex;
   gap: 6px;
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-fast) var(--ease-standard);
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .ai-session-item:hover .ai-session-actions,
 .ai-session-item:focus-within .ai-session-actions {
   opacity: 1;
   pointer-events: auto;
+}
+
+.ai-session-item:hover .ai-session-meta,
+.ai-session-item:focus-within .ai-session-meta,
+.ai-session-item--delete-pending .ai-session-meta {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .ai-session-action-btn {
@@ -2744,25 +2762,16 @@ html[data-theme="dark"] .module-ai::before {
 
 .ai-session-item--delete-pending {
   cursor: default;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 42%, var(--border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 78%, transparent);
+  background: color-mix(in srgb, var(--text) 2%, transparent);
 }
 
-.ai-session-confirm-row {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 88%, var(--danger) 12%);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.ai-session-confirm-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  letter-spacing: 0.2px;
-  flex-shrink: 0;
+.ai-session-actions--confirm {
+  margin-top: 2px;
+  padding-top: 0;
+  border-top: 0;
+  justify-content: flex-start;
+  gap: 6px;
 }
 
 .ai-session-actions--visible {
@@ -2777,12 +2786,12 @@ html[data-theme="dark"] .module-ai::before {
 }
 
 .ai-session-action-btn--confirm {
-  color: var(--danger);
+  color: var(--text-muted);
 }
 
 .ai-session-action-btn--confirm:hover {
-  color: #fff;
-  background: color-mix(in srgb, var(--danger) 88%, #000);
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-soft) 76%, transparent);
 }
 
 .module-ai.ai-busy .ai-session-item--delete-pending {

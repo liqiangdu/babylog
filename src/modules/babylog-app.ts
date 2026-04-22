@@ -3412,20 +3412,15 @@ function renderAiSessionList() {
     const isPending = aiSessionDeletePendingId === s.id;
     item.className = `ai-session-item ${s.id === aiProject.activeSessionId ? "active" : ""}${isPending ? " ai-session-item--delete-pending" : ""}`;
     item.dataset.sid = s.id;
-    const lastMsg = s.messages[s.messages.length - 1];
-    const lastText = lastMsg?.content ? String(lastMsg.content).replace(/\s+/g, " ").trim() : "暂无消息";
     const updatedText = new Date(s.updatedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
     const actionsHtml = isPending
-      ? `<div class="ai-session-confirm-row" role="group" aria-label="确认删除会话">
-          <span class="ai-session-confirm-label">删除此会话？</span>
-          <div class="ai-session-actions ai-session-actions--visible">
-            <button type="button" class="ai-session-action-btn ai-session-action-btn--cancel" data-ai-delete-cancel aria-label="取消删除" title="取消">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>
-            </button>
-            <button type="button" class="ai-session-action-btn ai-session-action-btn--confirm" data-ai-delete-confirm aria-label="确认删除" title="确认删除">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
-            </button>
-          </div>
+      ? `<div class="ai-session-actions ai-session-actions--visible ai-session-actions--confirm" role="group" aria-label="确认删除会话">
+          <button type="button" class="ai-session-action-btn ai-session-action-btn--cancel" data-ai-delete-cancel aria-label="取消删除" title="取消">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>
+          </button>
+          <button type="button" class="ai-session-action-btn ai-session-action-btn--confirm" data-ai-delete-confirm aria-label="确认删除" title="确认删除">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+          </button>
         </div>`
       : `<div class="ai-session-actions">
         <button type="button" class="ai-session-action-btn" data-ai-rename aria-label="重命名会话" title="重命名">
@@ -3436,13 +3431,15 @@ function renderAiSessionList() {
         </button>
       </div>`;
     item.innerHTML = `
-      <div class="ai-session-title">${escapeHtml(s.title || "新会话")}</div>
-      <div class="ai-session-meta">
-        <span>${s.messages.length} 条消息</span>
-        <span>${updatedText}</span>
+      <div class="ai-session-head">
+        <div class="ai-session-title">${escapeHtml(s.title || "新会话")}</div>
+        <div class="ai-session-side">
+          <div class="ai-session-meta">
+            <span>${updatedText}</span>
+          </div>
+          ${actionsHtml}
+        </div>
       </div>
-      <div class="ai-session-last">${escapeHtml(lastText.slice(0, 36) || "暂无消息")}</div>
-      ${actionsHtml}
     `;
     item.addEventListener("click", () => {
       if (isPending) return;
