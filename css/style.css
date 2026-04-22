@@ -860,6 +860,17 @@ select option:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
   z-index: 800;
   scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 24%, transparent) transparent;
+}
+.cd-list::-webkit-scrollbar {
+  width: 7px;
+}
+.cd-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+.cd-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 .cd-wrap.is-open .cd-list {
   display: block;
@@ -2242,6 +2253,17 @@ textarea:focus-visible {
   transform: scale(0.97);
   transition: opacity var(--dur-mid) var(--ease-standard), transform var(--dur-mid) var(--ease-standard);
   scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 24%, transparent) transparent;
+}
+.modal::-webkit-scrollbar {
+  width: 7px;
+}
+.modal::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+.modal::-webkit-scrollbar-track {
+  background: transparent;
 }
 .modal-overlay.open .modal { opacity: 1; transform: scale(1); }
 .modal h2 {
@@ -2465,15 +2487,37 @@ html[data-theme="dark"] .module-ai::before {
   color: var(--text);
   border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
   border-radius: 14px;
-  min-height: 200px;
+  height: 200px;
+  max-height: min(52vh, 420px);
   padding: 14px 16px;
   font-size: 14px;
   line-height: 1.6;
-  resize: vertical;
+  resize: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 24%, transparent) transparent;
+}
+
+.ai-instruction-modal-panel .ai-textarea.ai-instruction::-webkit-scrollbar {
+  width: 7px;
+}
+
+.ai-instruction-modal-panel .ai-textarea.ai-instruction::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.ai-instruction-modal-panel .ai-textarea.ai-instruction::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .ai-instruction-modal-panel .ai-textarea.ai-instruction:focus {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-color: color-mix(in srgb, var(--border) 50%, transparent);
+  box-shadow: none;
+  outline: none;
+}
+
+.ai-instruction-modal-panel .ai-textarea.ai-instruction:focus-visible {
   outline: none;
 }
 
@@ -2565,7 +2609,17 @@ html[data-theme="dark"] .module-ai::before {
   overscroll-behavior: contain;
   padding-right: 2px;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--border) 40%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 24%, transparent) transparent;
+}
+.ai-session-list::-webkit-scrollbar {
+  width: 7px;
+}
+.ai-session-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+.ai-session-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .ai-session-search {
@@ -2834,7 +2888,17 @@ html[data-theme="dark"] .module-ai::before {
   border-radius: 0;
   background: transparent;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--border) 40%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 24%, transparent) transparent;
+}
+.ai-chat-log::-webkit-scrollbar {
+  width: 7px;
+}
+.ai-chat-log::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+.ai-chat-log::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .ai-chat-log.ai-chat-log-empty {
@@ -2955,16 +3019,16 @@ html[data-theme="dark"] .module-ai::before {
 .module-ai .ai-textarea#ai-user-input.ai-user-input--overflow {
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--text-muted) 55%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 24%, transparent) transparent;
 }
 
 .module-ai .ai-textarea#ai-user-input.ai-user-input--overflow::-webkit-scrollbar {
-  width: 8px;
+  width: 7px;
 }
 
 .module-ai .ai-textarea#ai-user-input.ai-user-input--overflow::-webkit-scrollbar-thumb {
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
 }
 
 .module-ai .ai-textarea#ai-user-input.ai-user-input--overflow::-webkit-scrollbar-track {
