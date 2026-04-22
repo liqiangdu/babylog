@@ -4281,9 +4281,10 @@ html[data-theme="dark"] .module-ai::before {
   display: none;
 }
 .command-palette-input {
-  width: 100%;
+  width: calc(100% + 28px);
   box-sizing: border-box;
-  padding: 6px 0 10px;
+  margin: 0 -14px;
+  padding: 6px 14px 10px;
   font-size: 15px;
   border: none;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
