@@ -217,6 +217,15 @@ body {
   color: var(--text);
 }
 
+.sidebar-collapse-btn-bottom {
+  display: none;
+  margin: 0 auto 6px;
+}
+
+.app-sidebar:not(.app-sidebar--collapsed) .sidebar-collapse-btn-bottom {
+  display: none !important;
+}
+
 .sidebar-collapse-icon {
   width: 16px;
   height: 16px;
@@ -234,7 +243,7 @@ body {
   }
 
   .app-sidebar.app-sidebar--collapsed .sidebar-header {
-    flex-direction: column-reverse;
+    flex-direction: column;
     align-items: center;
     gap: 6px;
     padding: 0 0 4px;
@@ -253,6 +262,14 @@ body {
 
   .app-sidebar.app-sidebar--collapsed .sidebar-header-text {
     display: none;
+  }
+
+  .app-sidebar.app-sidebar--collapsed .sidebar-collapse-btn {
+    display: none;
+  }
+
+  .app-sidebar.app-sidebar--collapsed .sidebar-collapse-btn-bottom {
+    display: inline-flex;
   }
 
   .app-sidebar.app-sidebar--collapsed .sidebar-collapse-icon {

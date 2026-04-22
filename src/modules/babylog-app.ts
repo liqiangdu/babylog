@@ -584,7 +584,7 @@ function readSidebarCollapsedPreference() {
 function applySidebarCollapsed(collapsed) {
   const shell = document.getElementById("app-shell");
   const sidebar = document.getElementById("app-sidebar");
-  const btn = document.getElementById("btn-toggle-sidebar-collapse");
+  const btns = Array.from(document.querySelectorAll("#btn-toggle-sidebar-collapse, #btn-toggle-sidebar-collapse-collapsed"));
   if (!shell || !sidebar) return;
   sidebarCollapsedDesktop = Boolean(collapsed);
   shell.classList.toggle("app-shell--sidebar-collapsed", sidebarCollapsedDesktop);
@@ -594,22 +594,21 @@ function applySidebarCollapsed(collapsed) {
   } catch {
     // ignore quota / private mode
   }
-  if (btn) {
+  btns.forEach((btn) => {
     btn.setAttribute("aria-expanded", String(!sidebarCollapsedDesktop));
     btn.setAttribute("aria-label", sidebarCollapsedDesktop ? "展开侧栏" : "收起侧栏");
     btn.setAttribute("title", sidebarCollapsedDesktop ? "展开侧栏" : "收起侧栏");
-  }
+  });
 }
 
 function initSidebarCollapse() {
   applySidebarCollapsed(readSidebarCollapsedPreference());
-  const btn = document.getElementById("btn-toggle-sidebar-collapse");
-  if (btn) {
+  document.querySelectorAll("#btn-toggle-sidebar-collapse, #btn-toggle-sidebar-collapse-collapsed").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (window.innerWidth <= 760) return;
       applySidebarCollapsed(!sidebarCollapsedDesktop);
     });
-  }
+  });
 }
 
 function setSidebarOpen(open) {
