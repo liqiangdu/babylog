@@ -1878,14 +1878,14 @@ function renderStats() {
   ];
 
   const qualityCards = [
-    { k: "疫苗完成进度", v: vaccines.length ? `${doneVaccines}/${vaccines.length}` : "未生成", tone: "muted", icon: "records" },
+    { k: "疫苗完成进度", v: vaccines.length ? `${doneVaccines}/${vaccines.length}` : "未生成", icon: "records" },
     {
       k: "本范围记录数",
       v: `${inRangeEntries.length} 条`,
       sub: `日均 ${(inRangeEntries.length / dayCount).toFixed(1)} 条`,
       icon: "records",
     },
-    { k: "累计总记录", v: `${entries.length} 条`, tone: "muted", icon: "records" },
+    { k: "累计总记录", v: `${entries.length} 条`, icon: "records" },
   ];
 
   const browseGrid = "stats-section-grid stats-section-grid--compact";
