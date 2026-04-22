@@ -240,6 +240,7 @@ body {
   .app-sidebar.app-sidebar--collapsed {
     padding: 12px 6px;
     align-items: center;
+    overflow: visible;
   }
 
   .app-sidebar.app-sidebar--collapsed .sidebar-header {
