@@ -56,6 +56,7 @@ cargo run
 
 - `GET /health`
 - `POST /api/auth/register`、`POST /api/auth/login`、`GET /api/auth/me`、`POST /api/auth/logout`
+- `PUT /api/auth/email`、`PUT /api/auth/password`、`PUT /api/auth/avatar`
 - `GET /api/audit`（返回当前用户最近 100 条审计记录）
 - `GET/PUT /api/profile`
 - `GET/POST /api/entries`
@@ -67,6 +68,7 @@ cargo run
 登录态说明：
 
 - 账号密码使用 Argon2 哈希，session token 保存在 `sessions` 表（默认 30 天有效）。
+- 登录支持「用户名或邮箱」。
 - **默认启用 HttpOnly Cookie 会话**（`BABYLOG_COOKIE_MODE=1`）：登录成功后后端把 session token 写入 `Set-Cookie: babylog_session=...; HttpOnly; SameSite=Lax`，前端完全不接触 token，也不写 `localStorage`，抗 XSS 窃取。写请求通过 `babylog_csrf` Cookie + `X-CSRF-Token` 头双提交防 CSRF。设置 `BABYLOG_COOKIE_MODE=0` 可退回纯 Bearer 模式（仅推荐跨域 API 场景）。
 - 本地开发前端（`npm run dev` / Vite，默认 `http://localhost:3000`）访问 API 时使用 `http://localhost:8787/api`，和前端同 site（`localhost`），`SameSite=Lax` Cookie 可以正常带上。如果换成 `127.0.0.1` 访问前端，请同时把 API 地址也改成 `127.0.0.1:8787`，保持同 site。
 - 所有业务接口（profile / entries / vaccines / stats / uploads / chat）都按登录态授权，数据按 `user_id` 隔离，不同账号彼此不可见。

@@ -26,6 +26,8 @@ const SESSION_TTL_SECS: i64 = 60 * 60 * 24 * 30;
 pub struct AuthUser {
     pub id: String,
     pub username: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub email: String,
     /// Optional avatar as a data URL (client stores it inline for simplicity).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub avatar: String,
@@ -49,6 +51,9 @@ pub struct RegisterPayload {
 
 #[derive(Debug, Deserialize)]
 pub struct LoginPayload {
+    #[serde(default)]
+    login: String,
+    #[serde(default)]
     username: String,
     password: String,
 }
@@ -59,10 +64,14 @@ pub fn ensure_auth_schema(conn: &Connection) -> rusqlite::Result<()> {
         CREATE TABLE IF NOT EXISTS users (
           id TEXT PRIMARY KEY,
           username TEXT NOT NULL UNIQUE,
+          email TEXT NOT NULL DEFAULT '',
           password_hash TEXT NOT NULL,
           created_at INTEGER NOT NULL,
           avatar TEXT NOT NULL DEFAULT ''
         );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+          ON users(lower(email))
+          WHERE email <> '';
 
         CREATE TABLE IF NOT EXISTS sessions (
           token TEXT PRIMARY KEY,
@@ -118,6 +127,18 @@ pub fn ensure_auth_schema(conn: &Connection) -> rusqlite::Result<()> {
             [],
         )?;
     }
+    if !cols.iter().any(|c| c == "email") {
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+         ON users(lower(email))
+         WHERE email <> ''",
+        [],
+    )?;
     Ok(())
 }
 
@@ -165,6 +186,20 @@ fn normalize_username(s: &str) -> String {
     s.trim().to_lowercase()
 }
 
+fn normalize_email(s: &str) -> String {
+    s.trim().to_lowercase()
+}
+
+fn is_valid_email(email: &str) -> bool {
+    if email.is_empty() || email.len() > 254 || email.contains(' ') {
+        return false;
+    }
+    let Some((local, domain)) = email.split_once('@') else {
+        return false;
+    };
+    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+}
+
 fn validate_credentials(username: &str, password: &str) -> Result<(), &'static str> {
     if username.is_empty() || username.len() > 48 {
         return Err("username length must be 1..=48");
@@ -190,6 +225,13 @@ fn generate_token() -> String {
         out.push_str(&format!("{:02x}", b));
     }
     out
+}
+
+fn validate_password_len(password: &str) -> Result<(), &'static str> {
+    if password.len() < 6 || password.len() > 128 {
+        return Err("password length must be 6..=128");
+    }
+    Ok(())
 }
 
 /// HMAC-SHA256(pepper, password) → bytes. Used to pre-hash the password before
@@ -322,6 +364,7 @@ pub async fn register(
             AuthUser {
                 id: user_id,
                 username: username_for_db,
+                email: String::new(),
                 avatar: String::new(),
             },
         ))
@@ -398,9 +441,14 @@ pub async fn login(
     headers: HeaderMap,
     Json(payload): Json<LoginPayload>,
 ) -> impl IntoResponse {
-    let username = normalize_username(&payload.username);
-    if username.is_empty() || payload.password.is_empty() {
-        return err_json(StatusCode::BAD_REQUEST, "missing username or password");
+    let login_input = payload.login.trim().to_string();
+    let login = if login_input.is_empty() {
+        normalize_username(&payload.username)
+    } else {
+        normalize_username(&login_input)
+    };
+    if login.is_empty() || payload.password.is_empty() {
+        return err_json(StatusCode::BAD_REQUEST, "missing login or password");
     }
     let password = payload.password.clone();
 
@@ -409,7 +457,7 @@ pub async fn login(
     // Couple IP + username so a single attacker can't exhaust a victim's bucket
     // while also being unable to tumble across many usernames from one IP.
     let ip_key = format!("login-ip:{}", ip);
-    let user_key = format!("login-user:{}", username);
+    let user_key = format!("login-user:{}", login);
     let limiter = state.auth_limiter.clone();
     if let Some(retry_after) = limiter.check(&ip_key).or_else(|| limiter.check(&user_key)) {
         return too_many_requests(retry_after);
@@ -419,23 +467,26 @@ pub async fn login(
     let pepper = state.password_pepper.clone();
     let ip_for_session = ip.clone();
     let ua_for_session = ua.clone();
-    let username_for_db = username.clone();
+    let login_for_db = login.clone();
     let result = tokio::task::spawn_blocking(move || -> Result<LoginOutcome, (StatusCode, String)> {
         let conn = open_conn(&db_path)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let row = conn.query_row(
-            "SELECT id, username, password_hash, avatar FROM users WHERE username = ?1",
-            params![username_for_db],
+            "SELECT id, username, email, password_hash, avatar FROM users
+             WHERE username = ?1 OR (email <> '' AND lower(email) = ?2)
+             LIMIT 1",
+            params![login_for_db, login_for_db],
             |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, String>(1)?,
                     r.get::<_, String>(2)?,
                     r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
                 ))
             },
         );
-        let (user_id, username, password_hash, avatar) = match row {
+        let (user_id, username, email, password_hash, avatar) = match row {
             Ok(v) => v,
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 return Err((StatusCode::UNAUTHORIZED, "invalid credentials".to_string()));
@@ -487,6 +538,7 @@ pub async fn login(
             user: AuthUser {
                 id: user_id,
                 username,
+                email,
                 avatar,
             },
             new_device,
@@ -514,7 +566,7 @@ pub async fn login(
         Ok(Err((status, msg))) => {
             limiter.register_failure(&ip_key);
             limiter.register_failure(&user_key);
-            write_audit(&state.db_path, "", &username, "login_failed", &ip, &ua, &msg);
+            write_audit(&state.db_path, "", &login, "login_failed", &ip, &ua, &msg);
             // Always return the same message for unauthorized outcomes.
             if status == StatusCode::UNAUTHORIZED {
                 return err_json(StatusCode::UNAUTHORIZED, "invalid credentials");
@@ -861,20 +913,22 @@ pub async fn me(State(state): State<AppState>, headers: HeaderMap) -> impl IntoR
         let conn = open_conn(&state.db_path)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let row = conn.query_row(
-            "SELECT id, username, avatar FROM users WHERE id = ?1",
+            "SELECT id, username, email, avatar FROM users WHERE id = ?1",
             params![user_id],
             |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, String>(1)?,
                     r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
                 ))
             },
         );
         match row {
-            Ok((id, username, avatar)) => Ok(AuthUser {
+            Ok((id, username, email, avatar)) => Ok(AuthUser {
                 id,
                 username,
+                email,
                 avatar,
             }),
             Err(rusqlite::Error::QueryReturnedNoRows) => {
@@ -889,6 +943,185 @@ pub async fn me(State(state): State<AppState>, headers: HeaderMap) -> impl IntoR
         Ok(Ok(user)) => (StatusCode::OK, Json(serde_json::json!({ "user": user }))).into_response(),
         Ok(Err((status, msg))) => err_json(status, &msg),
         Err(_) => err_json(StatusCode::INTERNAL_SERVER_ERROR, "session lookup failed"),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateEmailPayload {
+    email: String,
+}
+
+pub async fn update_email(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<UpdateEmailPayload>,
+) -> impl IntoResponse {
+    let user_id = match authenticate_unsafe(&state, &headers).await {
+        Ok(v) => v,
+        Err(e) => return auth_err_response(e),
+    };
+    let email = normalize_email(&payload.email);
+    if !is_valid_email(&email) {
+        return err_json(StatusCode::BAD_REQUEST, "invalid email");
+    }
+    let ip = ratelimit::client_ip(&headers, state.trust_proxy, None);
+    let ua = user_agent(&headers);
+    let db_path = state.db_path.clone();
+    let user_id_for_db = user_id.clone();
+    let email_for_db = email.clone();
+    let result = tokio::task::spawn_blocking(move || -> Result<String, (StatusCode, String)> {
+        let conn = open_conn(&db_path)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let username: String = conn
+            .query_row(
+                "SELECT username FROM users WHERE id = ?1",
+                params![user_id_for_db],
+                |r| r.get(0),
+            )
+            .map_err(|_| (StatusCode::UNAUTHORIZED, "invalid or expired token".to_string()))?;
+        let updated = conn
+            .execute(
+                "UPDATE users SET email = ?1 WHERE id = ?2",
+                params![email_for_db, user_id_for_db],
+            )
+            .map_err(|e| {
+                if let rusqlite::Error::SqliteFailure(err, _) = &e {
+                    if err.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
+                        || err.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_PRIMARYKEY
+                    {
+                        return (StatusCode::BAD_REQUEST, "email update failed".to_string());
+                    }
+                }
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            })?;
+        if updated == 0 {
+            return Err((StatusCode::UNAUTHORIZED, "invalid or expired token".to_string()));
+        }
+        Ok(username)
+    })
+    .await;
+    match result {
+        Ok(Ok(username)) => {
+            write_audit(
+                &state.db_path,
+                &user_id,
+                &username,
+                "email_update",
+                &ip,
+                &ua,
+                "",
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "saved": true, "email": email })),
+            )
+                .into_response()
+        }
+        Ok(Err((status, msg))) => {
+            write_audit(
+                &state.db_path,
+                &user_id,
+                "",
+                "email_update_failed",
+                &ip,
+                &ua,
+                &msg,
+            );
+            err_json(status, &msg)
+        }
+        Err(_) => err_json(StatusCode::INTERNAL_SERVER_ERROR, "email update failed"),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePasswordPayload {
+    current_password: String,
+    new_password: String,
+}
+
+pub async fn update_password(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<UpdatePasswordPayload>,
+) -> impl IntoResponse {
+    let user_id = match authenticate_unsafe(&state, &headers).await {
+        Ok(v) => v,
+        Err(e) => return auth_err_response(e),
+    };
+    if payload.current_password.is_empty() || payload.new_password.is_empty() {
+        return err_json(StatusCode::BAD_REQUEST, "missing password");
+    }
+    if let Err(msg) = validate_password_len(&payload.new_password) {
+        return err_json(StatusCode::BAD_REQUEST, msg);
+    }
+    let ip = ratelimit::client_ip(&headers, state.trust_proxy, None);
+    let ua = user_agent(&headers);
+    let current_token = bearer_token(&headers).or_else(|| cookie_token(&headers));
+    let db_path = state.db_path.clone();
+    let pepper = state.password_pepper.clone();
+    let current_password = payload.current_password.clone();
+    let new_password = payload.new_password.clone();
+    let user_id_for_db = user_id.clone();
+    let result = tokio::task::spawn_blocking(move || -> Result<String, (StatusCode, String)> {
+        let conn = open_conn(&db_path)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let (username, password_hash): (String, String) = conn
+            .query_row(
+                "SELECT username, password_hash FROM users WHERE id = ?1",
+                params![user_id_for_db],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .map_err(|_| (StatusCode::UNAUTHORIZED, "invalid or expired token".to_string()))?;
+        if !verify_password(&pepper, &current_password, &password_hash) {
+            return Err((StatusCode::UNAUTHORIZED, "current password is incorrect".to_string()));
+        }
+        if let Err(msg) = check_password_strength(&username, &new_password) {
+            return Err((StatusCode::BAD_REQUEST, format!("weak password: {}", msg)));
+        }
+        let new_hash = hash_password(&pepper, &new_password)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        conn.execute(
+            "UPDATE users SET password_hash = ?1 WHERE id = ?2",
+            params![new_hash, user_id_for_db],
+        )
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        if let Some(token) = current_token {
+            let _ = conn.execute(
+                "DELETE FROM sessions WHERE user_id = ?1 AND token <> ?2",
+                params![user_id_for_db, token],
+            );
+        } else {
+            let _ = conn.execute("DELETE FROM sessions WHERE user_id = ?1", params![user_id_for_db]);
+        }
+        Ok(username)
+    })
+    .await;
+    match result {
+        Ok(Ok(username)) => {
+            write_audit(
+                &state.db_path,
+                &user_id,
+                &username,
+                "password_update",
+                &ip,
+                &ua,
+                "",
+            );
+            (StatusCode::OK, Json(serde_json::json!({ "saved": true }))).into_response()
+        }
+        Ok(Err((status, msg))) => {
+            write_audit(
+                &state.db_path,
+                &user_id,
+                "",
+                "password_update_failed",
+                &ip,
+                &ua,
+                &msg,
+            );
+            err_json(status, &msg)
+        }
+        Err(_) => err_json(StatusCode::INTERNAL_SERVER_ERROR, "password update failed"),
     }
 }
 

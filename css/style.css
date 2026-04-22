@@ -3850,13 +3850,13 @@ html[data-theme="dark"] .module-ai::before {
 }
 
 .settings-nav-item:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent, #1d9bf0) 55%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--text) 24%, transparent);
   outline-offset: 2px;
 }
 
 .settings-nav-item.is-active,
 .settings-nav-item[aria-selected="true"] {
-  background: color-mix(in srgb, var(--accent, #1d9bf0) 16%, transparent);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
   color: var(--text);
   font-weight: 600;
 }
@@ -3959,7 +3959,7 @@ html[data-theme="dark"] .module-ai::before {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent, #1d9bf0) 16%, transparent);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
   color: var(--text);
   display: inline-flex;
   align-items: center;
@@ -4054,6 +4054,62 @@ html[data-theme="dark"] .module-ai::before {
   align-self: flex-end;
 }
 
+.settings-row--stack {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.settings-action-inline {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.settings-text-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 2.5%, var(--bg));
+  color: var(--text);
+}
+
+.settings-text-input:focus,
+.settings-text-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--text) 28%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.settings-primary-btn {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, var(--bg));
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-primary-btn:hover {
+  background: color-mix(in srgb, var(--text) 15%, var(--bg));
+}
+
+.settings-primary-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.settings-password-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
 @media (max-width: 520px) {
   .settings-row--theme {
     flex-direction: column;
@@ -4082,7 +4138,7 @@ html[data-theme="dark"] .module-ai::before {
 .settings-switch-slider {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--text) 20%, transparent);
+  background: color-mix(in srgb, var(--text) 34%, transparent);
   border-radius: 999px;
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-standard);
@@ -4095,18 +4151,21 @@ html[data-theme="dark"] .module-ai::before {
   left: 2px;
   top: 2px;
   border-radius: 50%;
-  background: #fff;
+  background: #b8b8b8;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   transition: transform var(--dur-fast) var(--ease-standard);
 }
 .settings-switch input:checked + .settings-switch-slider {
-  background: var(--accent, #1d9bf0);
+  background: #ffffff;
+  border: 1px solid color-mix(in srgb, #000 35%, transparent);
 }
 .settings-switch input:checked + .settings-switch-slider::before {
   transform: translateX(18px);
+  background: #000000;
+  box-shadow: none;
 }
 .settings-switch input:focus-visible + .settings-switch-slider {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #1d9bf0) 30%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 18%, transparent);
 }
 
 .settings-switch--capsule {
@@ -4131,9 +4190,16 @@ html[data-theme="dark"] .module-ai::before {
   font-size: 13px;
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   border-radius: 8px;
-  background: var(--bg);
+  background: color-mix(in srgb, var(--text) 2.5%, var(--bg));
   color: var(--text);
   text-align: center;
+}
+
+.settings-number:focus,
+.settings-number:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--text) 28%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .settings-ai-intro {

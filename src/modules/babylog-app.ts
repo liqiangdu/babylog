@@ -85,7 +85,7 @@ let statsDetailPushed = false;
 let ignoreNextStatsDetailPopstate = false;
 
 let apiReady = false;
-/** @type {{token: string, user: {id: string, username: string} | null, csrf: string}} */
+/** @type {{token: string, user: {id: string, username: string, email?: string, avatar?: string} | null, csrf: string}} */
 let authState = { token: "", user: null, csrf: "" };
 let authMode = "login";
 let authBusy = false;
@@ -421,8 +421,11 @@ async function authApi(path, payload) {
 
 function validateAuthInputs(username, password) {
   if (!username || !password) return "请填写用户名和密码";
-  if (username.length > 48) return "用户名过长";
-  if (!/^[A-Za-z0-9_.\-]+$/.test(username)) return "用户名只能包含字母、数字、_ - .";
+  if (username.length > 254) return "输入过长";
+  if (authMode === "register") {
+    if (username.length > 48) return "用户名过长";
+    if (!/^[A-Za-z0-9_.\-]+$/.test(username)) return "用户名只能包含字母、数字、_ - .";
+  }
   if (password.length < 6) return "密码至少 6 位";
   if (password.length > 128) return "密码过长";
   return "";
@@ -443,13 +446,15 @@ async function submitAuthForm() {
   setAuthError("");
   try {
     const path = authMode === "register" ? "/auth/register" : "/auth/login";
-    const data = await authApi(path, { username, password });
+    const payload = authMode === "register" ? { username, password } : { login: username, password };
+    const data = await authApi(path, payload);
     authState = {
       token: "",
       user: data?.user
         ? {
             id: String(data.user.id),
             username: String(data.user.username),
+            email: typeof data.user.email === "string" ? data.user.email : "",
             avatar: typeof data.user.avatar === "string" ? data.user.avatar : "",
           }
         : null,
@@ -518,6 +523,7 @@ async function restoreSessionFromCookie() {
     authState.user = {
       id: String(data.user.id),
       username: String(data.user.username),
+      email: typeof data.user.email === "string" ? data.user.email : "",
       avatar: typeof data.user.avatar === "string" ? data.user.avatar : "",
     };
     authState.csrf = readCookie(AUTH_CSRF_COOKIE) || authState.csrf;
@@ -4309,7 +4315,9 @@ function syncSettingsDialog() {
   const nameEl = document.getElementById("settings-username");
   const avatarEl = document.getElementById("settings-user-avatar");
   const clearBtn = document.getElementById("btn-clear-user-avatar");
+  const emailEl = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-email"));
   if (nameEl) nameEl.textContent = u?.username || "未登录";
+  if (emailEl) emailEl.value = u?.email || "";
   renderAvatarInto(avatarEl, u || { username: "", avatar: "" });
   if (clearBtn) clearBtn.style.display = u?.avatar ? "" : "none";
 
@@ -4344,6 +4352,107 @@ function syncSettingsDialog() {
   if (ack) ack.checked = Boolean(aiProject.syncSessionsDisclaimerAck);
 
   syncThemeToggleUi();
+}
+
+function isValidEmailInput(email) {
+  if (!email || email.length > 254 || email.includes(" ")) return false;
+  const parts = email.split("@");
+  if (parts.length !== 2) return false;
+  const [local, domain] = parts;
+  return Boolean(local) && domain.includes(".") && !domain.startsWith(".") && !domain.endsWith(".");
+}
+
+async function saveAccountEmail() {
+  if (!authState.user) {
+    showToast("请先登录");
+    return;
+  }
+  const emailInput = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-email"));
+  const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById("btn-save-account-email"));
+  const email = (emailInput?.value || "").trim().toLowerCase();
+  if (!isValidEmailInput(email)) {
+    showToast("请输入有效邮箱");
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/auth/email`, {
+      method: "PUT",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      credentials: "include",
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(data?.error || "邮箱保存失败");
+      return;
+    }
+    if (authState.user) authState.user.email = String(data?.email || email);
+    syncSettingsDialog();
+    showToast("邮箱已保存");
+  } catch {
+    showToast("邮箱保存失败");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function clearPasswordForm() {
+  const current = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-current-password"));
+  const next = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-new-password"));
+  const confirm = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-confirm-password"));
+  if (current) current.value = "";
+  if (next) next.value = "";
+  if (confirm) confirm.value = "";
+}
+
+async function changeAccountPassword() {
+  if (!authState.user) {
+    showToast("请先登录");
+    return;
+  }
+  const current = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-current-password"));
+  const next = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-new-password"));
+  const confirm = /** @type {HTMLInputElement|null} */ (document.getElementById("settings-confirm-password"));
+  const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById("btn-change-account-password"));
+  const currentPassword = current?.value || "";
+  const newPassword = next?.value || "";
+  const confirmPassword = confirm?.value || "";
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    showToast("请完整填写密码项");
+    return;
+  }
+  if (newPassword.length < 6 || newPassword.length > 128) {
+    showToast("新密码长度需为 6-128 位");
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showToast("两次输入的新密码不一致");
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/auth/password`, {
+      method: "PUT",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      credentials: "include",
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(data?.error || "密码更新失败");
+      return;
+    }
+    clearPasswordForm();
+    showToast("密码已更新");
+  } catch {
+    showToast("密码更新失败");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 
@@ -4647,6 +4756,10 @@ function initSettingsDialog() {
       await saveUserAvatar("");
     });
   }
+  const saveEmailBtn = document.getElementById("btn-save-account-email");
+  if (saveEmailBtn) saveEmailBtn.addEventListener("click", saveAccountEmail);
+  const updatePasswordBtn = document.getElementById("btn-change-account-password");
+  if (updatePasswordBtn) updatePasswordBtn.addEventListener("click", changeAccountPassword);
 
   const persistAiPrivacy = () => {
     const g = (id) => /** @type {HTMLInputElement|null} */ (document.getElementById(id));
