@@ -35,6 +35,10 @@
   --chart-line-care: #c9344f;
   --chart-line-accent: #1d9bf0;
   --chart-fill-mix: 16%;
+  --ai-send-bg: #0d0d0d;
+  --ai-send-fg: #ffffff;
+  --ai-send-bg-hover: #2c2c2c;
+  --ai-send-bg-active: #000000;
 }
 
 html[data-theme="light"] {
@@ -53,6 +57,10 @@ html[data-theme="light"] {
   --chart-line-accent: #1d9bf0;
   --chart-fill-mix: 16%;
   --shadow: var(--shadow-lg);
+  --ai-send-bg: #0d0d0d;
+  --ai-send-fg: #ffffff;
+  --ai-send-bg-hover: #2c2c2c;
+  --ai-send-bg-active: #000000;
 }
 
 html[data-theme="dark"] {
@@ -74,6 +82,10 @@ html[data-theme="dark"] {
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
   --shadow: var(--shadow-lg);
+  --ai-send-bg: #ffffff;
+  --ai-send-fg: #0d0d0d;
+  --ai-send-bg-hover: #e8e8e8;
+  --ai-send-bg-active: #cfcfcf;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -95,6 +107,10 @@ html[data-theme="dark"] {
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
     --shadow: var(--shadow-lg);
+    --ai-send-bg: #ffffff;
+    --ai-send-fg: #0d0d0d;
+    --ai-send-bg-hover: #e8e8e8;
+    --ai-send-bg-active: #cfcfcf;
   }
 }
 
@@ -2563,8 +2579,12 @@ html[data-theme="dark"] .module-ai::before {
 }
 
 .ai-session-search:focus {
-  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
-  background: var(--bg-elev);
+  border-color: color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.module-ai .ai-session-search:focus-visible {
+  outline: none;
 }
 
 .ai-session-item {
@@ -2926,14 +2946,38 @@ html[data-theme="dark"] .module-ai::before {
   line-height: 1.5;
   letter-spacing: -0.01em;
   resize: none;
+  overflow-y: hidden;
   transition:
     border-color var(--dur-fast) var(--ease-standard),
     box-shadow var(--dur-fast) var(--ease-standard);
 }
 
+.module-ai .ai-textarea#ai-user-input.ai-user-input--overflow {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 55%, transparent) transparent;
+}
+
+.module-ai .ai-textarea#ai-user-input.ai-user-input--overflow::-webkit-scrollbar {
+  width: 8px;
+}
+
+.module-ai .ai-textarea#ai-user-input.ai-user-input--overflow::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+
+.module-ai .ai-textarea#ai-user-input.ai-user-input--overflow::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .module-ai .ai-textarea#ai-user-input:focus {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+  border-color: color-mix(in srgb, var(--border) 55%, transparent);
+  box-shadow: none;
+}
+
+.module-ai .ai-textarea#ai-user-input:focus-visible {
+  outline: none;
 }
 
 .module-ai .ai-compose {
@@ -2952,14 +2996,15 @@ html[data-theme="dark"] .module-ai::before {
 .ai-send-btn {
   position: absolute;
   right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: auto;
+  bottom: 10px;
+  transform: none;
   width: 32px;
   height: 32px;
   border-radius: 50%;
   border: 0;
-  background: none;
-  color: var(--text-muted);
+  background: var(--ai-send-bg);
+  color: var(--ai-send-fg);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2982,13 +3027,13 @@ html[data-theme="dark"] .module-ai::before {
 }
 
 .ai-send-btn:hover:not(:disabled) {
-  color: var(--text);
-  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--ai-send-fg);
+  background: var(--ai-send-bg-hover);
 }
 
 .ai-send-btn:active:not(:disabled) {
-  color: var(--text-sec);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--ai-send-fg);
+  background: var(--ai-send-bg-active);
 }
 
 .ai-send-btn:disabled,
@@ -4094,6 +4139,17 @@ html[data-theme="dark"] .module-ai::before {
 .module-ai .ai-context-policy-row .cd-option-label {
   font-size: inherit;
 }
+
+.module-ai .cd-trigger:focus-visible,
+.module-ai .ai-context-policy-select:focus-visible {
+  outline: none;
+}
+
+.module-ai .cd-trigger:focus,
+.module-ai .ai-context-policy-select:focus {
+  border-color: color-mix(in srgb, var(--border) 60%, transparent);
+}
+
 .ai-context-policy-hint {
   font-size: 12px;
   margin: 4px 0 0;

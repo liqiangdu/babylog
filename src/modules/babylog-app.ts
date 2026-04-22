@@ -3746,6 +3746,20 @@ function setAiStatus(text) {
   el.classList.toggle("ai-status-busy", Boolean(text));
 }
 
+function adjustAiUserInputHeight() {
+  const el = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-user-input"));
+  if (!el) return;
+  const cs = getComputedStyle(el);
+  const maxRaw = cs.maxHeight;
+  const maxPx = maxRaw === "none" ? 200 : parseFloat(maxRaw);
+  const cap = Number.isFinite(maxPx) ? maxPx : 200;
+  el.style.height = "auto";
+  const needed = el.scrollHeight;
+  const applied = Math.min(needed, cap);
+  el.style.height = `${applied}px`;
+  el.classList.toggle("ai-user-input--overflow", needed > cap);
+}
+
 function refreshAiUiState() {
   const moduleEl = document.getElementById("module-ai");
   const input = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-user-input"));
@@ -3979,6 +3993,7 @@ async function sendAiMessage() {
     if (!active) return;
   }
   input.value = "";
+  adjustAiUserInputHeight();
   dismissPendingAiEntryDraft();
   const userMsg = { role: "user", content: text, ts: nowIso() };
   const assistantMsg = { role: "assistant", content: "", ts: nowIso() };
@@ -4838,7 +4853,10 @@ export async function init() {
   }
   const aiUserInput = document.getElementById("ai-user-input");
   if (aiUserInput) {
-    aiUserInput.addEventListener("input", refreshAiUiState);
+    aiUserInput.addEventListener("input", () => {
+      refreshAiUiState();
+      adjustAiUserInputHeight();
+    });
     aiUserInput.addEventListener("keydown", (ev) => {
       if (ev.key !== "Enter" || ev.shiftKey) return;
       ev.preventDefault();
@@ -4856,5 +4874,6 @@ export async function init() {
   initCommandPalette();
   renderAiSessionList();
   refreshAiUiState();
+  adjustAiUserInputHeight();
   initCustomDropdowns();
 }
