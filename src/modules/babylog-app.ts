@@ -134,6 +134,9 @@ let aiBusy = false;
 let aiSessionSearchKeyword = "";
 /** @type {string|null} 列表内删除确认：当前待确认的会话 id */
 let aiSessionDeletePendingId = null;
+/** @type {string|null} 列表内重命名：当前编辑中的会话 id */
+let aiSessionRenameEditingId = null;
+let aiSessionRenameDraft = "";
 /** @type {import("../types/models").LogEntry|null} 服务端草稿，确认后写入时间轴 */
 let pendingAiEntryDraft = null;
 let commandPaletteOpen = false;
@@ -3403,6 +3406,10 @@ function renderAiSessionList() {
   if (aiSessionDeletePendingId && !filtered.some((s) => s.id === aiSessionDeletePendingId)) {
     aiSessionDeletePendingId = null;
   }
+  if (aiSessionRenameEditingId && !filtered.some((s) => s.id === aiSessionRenameEditingId)) {
+    aiSessionRenameEditingId = null;
+    aiSessionRenameDraft = "";
+  }
   if (filtered.length === 0) {
     root.innerHTML = `<div class="empty-state">没有匹配的会话</div>`;
     return;
@@ -3410,7 +3417,8 @@ function renderAiSessionList() {
   for (const s of filtered) {
     const item = document.createElement("div");
     const isPending = aiSessionDeletePendingId === s.id;
-    item.className = `ai-session-item ${s.id === aiProject.activeSessionId ? "active" : ""}${isPending ? " ai-session-item--delete-pending" : ""}`;
+    const isRenaming = aiSessionRenameEditingId === s.id;
+    item.className = `ai-session-item ${s.id === aiProject.activeSessionId ? "active" : ""}${isPending ? " ai-session-item--delete-pending" : ""}${isRenaming ? " ai-session-item--renaming" : ""}`;
     item.dataset.sid = s.id;
     const updatedText = new Date(s.updatedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
     const actionsHtml = isPending
@@ -3419,6 +3427,15 @@ function renderAiSessionList() {
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>
           </button>
           <button type="button" class="ai-session-action-btn ai-session-action-btn--confirm" data-ai-delete-confirm aria-label="确认删除" title="确认删除">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
+          </button>
+        </div>`
+      : isRenaming
+      ? `<div class="ai-session-actions ai-session-actions--visible ai-session-actions--confirm" role="group" aria-label="确认重命名会话">
+          <button type="button" class="ai-session-action-btn ai-session-action-btn--cancel" data-ai-rename-cancel aria-label="取消重命名" title="取消">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>
+          </button>
+          <button type="button" class="ai-session-action-btn ai-session-action-btn--confirm" data-ai-rename-confirm aria-label="确认重命名" title="确认">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>
           </button>
         </div>`
@@ -3432,7 +3449,11 @@ function renderAiSessionList() {
       </div>`;
     item.innerHTML = `
       <div class="ai-session-head">
-        <div class="ai-session-title">${escapeHtml(s.title || "新会话")}</div>
+        ${
+          isRenaming
+            ? `<input type="text" class="ai-session-title ai-session-title-input" data-ai-rename-input value="${escapeHtml(aiSessionRenameDraft)}" maxlength="40" aria-label="编辑会话标题" />`
+            : `<div class="ai-session-title">${escapeHtml(s.title || "新会话")}</div>`
+        }
         <div class="ai-session-side">
           <div class="ai-session-meta">
             <span>${updatedText}</span>
@@ -3442,14 +3463,14 @@ function renderAiSessionList() {
       </div>
     `;
     item.addEventListener("click", () => {
-      if (isPending) return;
+      if (isPending || isRenaming) return;
       switchAiSession(s.id);
     });
     const btnRename = item.querySelector("[data-ai-rename]");
     if (btnRename) {
       btnRename.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        renameAiSession(s.id);
+        startAiSessionRename(s.id);
       });
     }
     const btnDelete = item.querySelector("[data-ai-delete]");
@@ -3473,6 +3494,41 @@ function renderAiSessionList() {
         confirmPendingAiSessionDelete(s.id);
       });
     }
+    const renameInput = /** @type {HTMLInputElement|null} */ (item.querySelector("[data-ai-rename-input]"));
+    if (renameInput) {
+      renameInput.addEventListener("click", (ev) => ev.stopPropagation());
+      renameInput.addEventListener("input", () => {
+        aiSessionRenameDraft = String(renameInput.value || "");
+      });
+      renameInput.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          confirmAiSessionRename(s.id);
+        } else if (ev.key === "Escape") {
+          ev.preventDefault();
+          cancelAiSessionRename();
+        }
+      });
+      requestAnimationFrame(() => {
+        if (aiSessionRenameEditingId !== s.id) return;
+        renameInput.focus();
+        renameInput.setSelectionRange(renameInput.value.length, renameInput.value.length);
+      });
+    }
+    const btnRenameCancel = item.querySelector("[data-ai-rename-cancel]");
+    if (btnRenameCancel) {
+      btnRenameCancel.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        cancelAiSessionRename();
+      });
+    }
+    const btnRenameConfirm = item.querySelector("[data-ai-rename-confirm]");
+    if (btnRenameConfirm) {
+      btnRenameConfirm.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        confirmAiSessionRename(s.id);
+      });
+    }
     root.appendChild(item);
   }
 }
@@ -3483,6 +3539,8 @@ function switchAiSession(sessionId) {
     return;
   }
   aiSessionDeletePendingId = null;
+  aiSessionRenameEditingId = null;
+  aiSessionRenameDraft = "";
   if (!aiProject.sessions.some((s) => s.id === sessionId)) return;
   aiProject.activeSessionId = sessionId;
   saveAiProject();
@@ -3497,6 +3555,8 @@ function createAiSession() {
     return;
   }
   aiSessionDeletePendingId = null;
+  aiSessionRenameEditingId = null;
+  aiSessionRenameDraft = "";
   const s = makeAiSession("新会话");
   aiProject.sessions.unshift(s);
   aiProject.activeSessionId = s.id;
@@ -3516,7 +3576,7 @@ function handleAiGlobalShortcuts(ev) {
   createAiSession();
 }
 
-function renameAiSession(sessionId) {
+function startAiSessionRename(sessionId) {
   if (aiBusy) {
     alert("请等待当前回答完成后再重命名");
     return;
@@ -3524,14 +3584,34 @@ function renameAiSession(sessionId) {
   aiSessionDeletePendingId = null;
   const target = aiProject.sessions.find((s) => s.id === sessionId);
   if (!target) return;
-  const next = window.prompt("请输入新的会话名称", target.title || "新会话");
-  if (next == null) return;
-  const value = String(next).trim();
+  aiSessionRenameEditingId = sessionId;
+  aiSessionRenameDraft = String(target.title || "新会话");
+  renderAiSessionList();
+}
+
+function cancelAiSessionRename() {
+  aiSessionRenameEditingId = null;
+  aiSessionRenameDraft = "";
+  renderAiSessionList();
+}
+
+function confirmAiSessionRename(sessionId) {
+  if (aiBusy) {
+    alert("请等待当前回答完成后再重命名");
+    return;
+  }
+  if (aiSessionRenameEditingId !== sessionId) return;
+  const target = aiProject.sessions.find((s) => s.id === sessionId);
+  if (!target) return;
+  const value = String(aiSessionRenameDraft || "").trim().slice(0, 40);
   if (!value) return;
-  target.title = value.slice(0, 40);
+  target.title = value;
   target.updatedAt = nowIso();
+  aiSessionRenameEditingId = null;
+  aiSessionRenameDraft = "";
   saveAiProject();
   renderAiSessionList();
+  renderModuleSummaries();
 }
 
 function requestAiSessionDelete(sessionId) {
@@ -3540,6 +3620,8 @@ function requestAiSessionDelete(sessionId) {
     return;
   }
   if (!aiProject.sessions.some((s) => s.id === sessionId)) return;
+  aiSessionRenameEditingId = null;
+  aiSessionRenameDraft = "";
   aiSessionDeletePendingId = sessionId;
   renderAiSessionList();
 }
@@ -3562,6 +3644,8 @@ function performAiSessionDelete(sessionId) {
   const target = aiProject.sessions.find((s) => s.id === sessionId);
   if (!target) return;
   aiSessionDeletePendingId = null;
+  aiSessionRenameEditingId = null;
+  aiSessionRenameDraft = "";
   aiProject.sessions = aiProject.sessions.filter((s) => s.id !== sessionId);
   if (aiProject.sessions.length === 0) {
     const created = makeAiSession("新会话");

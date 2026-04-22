@@ -2699,6 +2699,22 @@ html[data-theme="dark"] .module-ai::before {
   text-overflow: ellipsis;
 }
 
+.ai-session-title-input {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  min-width: 0;
+  width: 100%;
+  appearance: none;
+}
+
+.ai-session-title-input:focus {
+  outline: none;
+  border: 0;
+  background: transparent;
+}
+
 .ai-session-meta {
   font-size: 11px;
   color: var(--text-muted);
@@ -2736,7 +2752,8 @@ html[data-theme="dark"] .module-ai::before {
 
 .ai-session-item:hover .ai-session-meta,
 .ai-session-item:focus-within .ai-session-meta,
-.ai-session-item--delete-pending .ai-session-meta {
+.ai-session-item--delete-pending .ai-session-meta,
+.ai-session-item--renaming .ai-session-meta {
   opacity: 0;
   pointer-events: none;
 }
