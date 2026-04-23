@@ -3158,19 +3158,13 @@ html[data-theme="dark"] .module-ai::before {
 
 .module-ai.ai-busy .ai-send-btn,
 .module-ai.ai-busy .ai-chat-head-icon-btn,
-.module-ai.ai-busy .ai-session-search,
 .module-ai.ai-busy .ai-session-action-btn {
   opacity: 0.68;
 }
 
-.module-ai.ai-busy .ai-session-search,
 .module-ai.ai-busy .ai-send-btn,
 .module-ai.ai-busy .ai-chat-head-icon-btn {
   pointer-events: none;
-}
-
-.module-ai.ai-busy .ai-session-item {
-  cursor: not-allowed;
 }
 
 .ai-compose-actions {

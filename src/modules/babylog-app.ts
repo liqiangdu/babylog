@@ -137,6 +137,7 @@ let aiProjectHydrateEpoch = 0;
 let aiProjectAppliedEpoch = 0;
 let aiStreamRenderScheduled = false;
 let aiBusy = false;
+let aiStreamingSessionId = "";
 let aiSessionSearchKeyword = "";
 /** @type {string|null} 列表内删除确认：当前待确认的会话 id */
 let aiSessionDeletePendingId = null;
@@ -3594,10 +3595,6 @@ function renderAiSessionList() {
 }
 
 function switchAiSession(sessionId) {
-  if (aiBusy) {
-    alert("请等待当前回答完成后再切换会话");
-    return;
-  }
   aiSessionDeletePendingId = null;
   aiSessionRenameEditingId = null;
   aiSessionRenameDraft = "";
@@ -3912,7 +3909,7 @@ function refreshAiUiState() {
     moduleEl.setAttribute("aria-busy", aiBusy ? "true" : "false");
   }
   if (input) input.disabled = aiBusy;
-  if (searchInput) searchInput.disabled = aiBusy;
+  if (searchInput) searchInput.disabled = false;
   if (newSessionBtn) newSessionBtn.disabled = aiBusy;
   if (sendBtn) {
     sendBtn.disabled = !canSend;
@@ -3938,7 +3935,8 @@ function renderAiChat() {
   }
   for (let i = 0; i < active.messages.length; i += 1) {
     const m = active.messages[i];
-    const isLastAssistantStreaming = aiBusy && m.role === "assistant" && i === active.messages.length - 1;
+    const isActiveStreamingSession = aiBusy && Boolean(aiStreamingSessionId) && active.id === aiStreamingSessionId;
+    const isLastAssistantStreaming = isActiveStreamingSession && m.role === "assistant" && i === active.messages.length - 1;
     const row = document.createElement("div");
     row.className = `ai-msg ai-msg-${m.role}`;
     const bubble = document.createElement("div");
@@ -3972,6 +3970,7 @@ function renderAiChat() {
 function updateStreamingAssistantBubbleOnly() {
   const root = document.getElementById("ai-chat-log");
   if (!root || !aiBusy) return false;
+  if (!aiStreamingSessionId || aiProject.activeSessionId !== aiStreamingSessionId) return false;
   const active = getActiveAiSession();
   if (!active?.messages.length) return false;
   const last = active.messages[active.messages.length - 1];
@@ -4150,6 +4149,7 @@ async function sendAiMessage() {
   renderAiSessionList();
   renderModuleSummaries();
   aiBusy = true;
+  aiStreamingSessionId = active.id;
   refreshAiUiState();
   const assistant = assistantMsg;
   const messageWindow = active.messages.slice(0, -1).slice(-40).map((m) => ({ role: m.role, content: m.content }));
@@ -4188,6 +4188,7 @@ async function sendAiMessage() {
   } finally {
     flushStreamingMarkdownThrottle();
     aiBusy = false;
+    aiStreamingSessionId = "";
     setAiStatus("");
     refreshAiUiState();
     scheduleAiChatRender();
