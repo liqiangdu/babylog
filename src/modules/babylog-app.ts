@@ -136,8 +136,12 @@ let aiProjectHydrateEpoch = 0;
 /** 最近一次成功应用到内存的批次号。 */
 let aiProjectAppliedEpoch = 0;
 let aiStreamRenderScheduled = false;
-let aiBusy = false;
-let aiStreamingSessionId = "";
+/** sessions currently streaming (supports cross-session parallel generation). */
+const aiStreamingSessionIds = new Set();
+/** per-session abort handle for stopping in-flight stream. */
+const aiStreamAbortControllers = new Map();
+/** sessions with user-requested stop pending/just triggered. */
+const aiStopRequestedSessionIds = new Set();
 let aiSessionSearchKeyword = "";
 /** @type {string|null} 列表内删除确认：当前待确认的会话 id */
 let aiSessionDeletePendingId = null;
@@ -3607,7 +3611,7 @@ function switchAiSession(sessionId) {
 }
 
 function createAiSession() {
-  if (aiBusy) {
+  if (isAiBusy()) {
     alert("请等待当前回答完成后再新建会话");
     return;
   }
@@ -3634,7 +3638,7 @@ function handleAiGlobalShortcuts(ev) {
 }
 
 function startAiSessionRename(sessionId) {
-  if (aiBusy) {
+  if (isAiBusy()) {
     alert("请等待当前回答完成后再重命名");
     return;
   }
@@ -3653,7 +3657,7 @@ function cancelAiSessionRename() {
 }
 
 function confirmAiSessionRename(sessionId) {
-  if (aiBusy) {
+  if (isAiBusy()) {
     alert("请等待当前回答完成后再重命名");
     return;
   }
@@ -3672,7 +3676,7 @@ function confirmAiSessionRename(sessionId) {
 }
 
 function requestAiSessionDelete(sessionId) {
-  if (aiBusy) {
+  if (isAiBusy()) {
     alert("请等待当前回答完成后再删除");
     return;
   }
@@ -3689,7 +3693,7 @@ function cancelPendingAiSessionDelete() {
 }
 
 function confirmPendingAiSessionDelete(sessionId) {
-  if (aiBusy) {
+  if (isAiBusy()) {
     alert("请等待当前回答完成后再删除");
     return;
   }
@@ -3719,7 +3723,7 @@ function performAiSessionDelete(sessionId) {
 }
 
 function clearAiChat() {
-  if (aiBusy) return;
+  if (isAiBusy()) return;
   const active = getActiveAiSession();
   if (!active) return;
   if (active.messages.length && !confirm("确定清空当前会话消息？")) return;
@@ -3876,6 +3880,22 @@ function scheduleAiChatRender() {
   });
 }
 
+function isAiBusy() {
+  return aiStreamingSessionIds.size > 0;
+}
+
+function isAiSessionBusy(sessionId) {
+  return Boolean(sessionId) && aiStreamingSessionIds.has(sessionId);
+}
+
+function stopAiSessionStreaming(sessionId) {
+  const ctl = aiStreamAbortControllers.get(sessionId);
+  if (!ctl) return false;
+  aiStopRequestedSessionIds.add(sessionId);
+  ctl.abort();
+  return true;
+}
+
 function setAiStatus(text) {
   const el = document.getElementById("ai-status");
   if (!el) return;
@@ -3903,17 +3923,26 @@ function refreshAiUiState() {
   const sendBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById("btn-ai-send"));
   const newSessionBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById("btn-ai-new-session"));
   const searchInput = /** @type {HTMLInputElement|null} */ (document.getElementById("ai-session-search"));
-  const canSend = Boolean(input && input.value.trim()) && !aiBusy;
+  const active = getActiveAiSession();
+  const activeBusy = Boolean(active && isAiSessionBusy(active.id));
+  const busy = isAiBusy();
+  const canSend = Boolean(input && input.value.trim()) && !activeBusy;
   if (moduleEl) {
-    moduleEl.classList.toggle("ai-busy", aiBusy);
-    moduleEl.setAttribute("aria-busy", aiBusy ? "true" : "false");
+    moduleEl.classList.toggle("ai-busy", busy);
+    moduleEl.setAttribute("aria-busy", busy ? "true" : "false");
   }
-  if (input) input.disabled = aiBusy;
+  if (input) input.disabled = activeBusy;
   if (searchInput) searchInput.disabled = false;
-  if (newSessionBtn) newSessionBtn.disabled = aiBusy;
+  if (newSessionBtn) newSessionBtn.disabled = activeBusy;
   if (sendBtn) {
-    sendBtn.disabled = !canSend;
-    sendBtn.setAttribute("aria-disabled", String(!canSend));
+    sendBtn.classList.toggle("ai-send-btn--stop", activeBusy);
+    sendBtn.setAttribute("aria-label", activeBusy ? "停止生成" : "发送消息");
+    sendBtn.innerHTML = activeBusy
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"></rect></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5"></path><path d="M5 12l7-7 7 7"></path></svg>';
+    const disabled = activeBusy ? false : !canSend;
+    sendBtn.disabled = disabled;
+    sendBtn.setAttribute("aria-disabled", String(disabled));
   }
 }
 
@@ -3935,7 +3964,7 @@ function renderAiChat() {
   }
   for (let i = 0; i < active.messages.length; i += 1) {
     const m = active.messages[i];
-    const isActiveStreamingSession = aiBusy && Boolean(aiStreamingSessionId) && active.id === aiStreamingSessionId;
+    const isActiveStreamingSession = isAiSessionBusy(active.id);
     const isLastAssistantStreaming = isActiveStreamingSession && m.role === "assistant" && i === active.messages.length - 1;
     const row = document.createElement("div");
     row.className = `ai-msg ai-msg-${m.role}`;
@@ -3945,7 +3974,7 @@ function renderAiChat() {
       bubble.classList.add("ai-md");
       const raw = m.content || "";
       if (isLastAssistantStreaming) {
-        const streamMd = raw || (aiBusy ? "…" : "");
+        const streamMd = raw || "…";
         bubble.innerHTML = streamMd ? renderMarkdownToHtml(streamMd) : "";
         bubble.classList.add("ai-streaming");
       } else {
@@ -3969,9 +3998,9 @@ function renderAiChat() {
  */
 function updateStreamingAssistantBubbleOnly() {
   const root = document.getElementById("ai-chat-log");
-  if (!root || !aiBusy) return false;
-  if (!aiStreamingSessionId || aiProject.activeSessionId !== aiStreamingSessionId) return false;
+  if (!root) return false;
   const active = getActiveAiSession();
+  if (!active || !isAiSessionBusy(active.id)) return false;
   if (!active?.messages.length) return false;
   const last = active.messages[active.messages.length - 1];
   if (last.role !== "assistant") return false;
@@ -3980,7 +4009,7 @@ function updateStreamingAssistantBubbleOnly() {
   const bubble = lastRow.querySelector(".ai-bubble");
   if (!bubble || !bubble.classList.contains("ai-streaming")) return false;
   const raw = last.content || "";
-  const streamMd = raw || (aiBusy ? "…" : "");
+  const streamMd = raw || "…";
   bubble.innerHTML = streamMd ? renderMarkdownToHtml(streamMd) : "";
   root.scrollTop = root.scrollHeight;
   refreshAiUiState();
@@ -3991,14 +4020,16 @@ function updateStreamingAssistantBubbleOnly() {
  * @param {object} payload
  * @param {(chunk: string) => void} onChunk
  * @param {(draft: object) => void} [onDraft] snake_case draft from server tool
+ * @param {AbortSignal} [signal]
  */
-async function consumeSseChatStream(payload, onChunk, onDraft) {
+async function consumeSseChatStream(payload, onChunk, onDraft, signal) {
   const chatHeaders = authHeaders({ "Content-Type": "application/json" });
   const res = await fetch(`${API_BASE}/chat/stream`, {
     method: "POST",
     headers: chatHeaders,
     credentials: "include",
     body: JSON.stringify(payload),
+    signal,
   });
   if (res.status === 401 && authState.user) {
     clearAuth();
@@ -4090,7 +4121,7 @@ function dismissPendingAiEntryDraft() {
 }
 
 async function confirmPendingAiEntryDraft() {
-  if (!pendingAiEntryDraft || aiBusy) return;
+  if (!pendingAiEntryDraft || isAiBusy()) return;
   if (!apiReady) {
     handleBackendUnavailable("后端不可用，无法写入 AI 草稿。");
     return;
@@ -4118,7 +4149,6 @@ async function confirmPendingAiEntryDraft() {
 }
 
 async function sendAiMessage() {
-  if (aiBusy) return;
   const input = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("ai-user-input"));
   if (!input) return;
   const text = input.value.trim();
@@ -4133,6 +4163,7 @@ async function sendAiMessage() {
     active = getActiveAiSession();
     if (!active) return;
   }
+  if (isAiSessionBusy(active.id)) return;
   input.value = "";
   adjustAiUserInputHeight();
   dismissPendingAiEntryDraft();
@@ -4148,8 +4179,9 @@ async function sendAiMessage() {
   renderAiChat();
   renderAiSessionList();
   renderModuleSummaries();
-  aiBusy = true;
-  aiStreamingSessionId = active.id;
+  aiStreamingSessionIds.add(active.id);
+  const streamAbortCtl = new AbortController();
+  aiStreamAbortControllers.set(active.id, streamAbortCtl);
   refreshAiUiState();
   const assistant = assistantMsg;
   const messageWindow = active.messages.slice(0, -1).slice(-40).map((m) => ({ role: m.role, content: m.content }));
@@ -4164,6 +4196,7 @@ async function sendAiMessage() {
     await consumeSseChatStream(
       payload,
       (chunk) => {
+        if (aiStopRequestedSessionIds.has(active.id)) return;
         assistant.content += chunk;
         assistant.ts = nowIso();
       },
@@ -4174,21 +4207,35 @@ async function sendAiMessage() {
           renderAiDraftBanner();
         }
       },
+      streamAbortCtl.signal,
     );
     active.updatedAt = nowIso();
     saveAiProject();
     scheduleAiChatRender();
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    assistant.content = (assistant.content ? `${assistant.content}\n\n` : "") + `**出错：** ${msg}`;
-    assistant.ts = nowIso();
-    active.updatedAt = nowIso();
-    saveAiProject();
-    scheduleAiChatRender();
+    const isAbort = e instanceof DOMException && e.name === "AbortError";
+    const isStopRequested = aiStopRequestedSessionIds.has(active.id);
+    if (isAbort && isStopRequested) {
+      const stopNote = "_已停止生成_";
+      const content = String(assistant.content || "").trim();
+      assistant.content = content ? `${content}\n\n${stopNote}` : stopNote;
+      assistant.ts = nowIso();
+      active.updatedAt = nowIso();
+      saveAiProject();
+      scheduleAiChatRender();
+    } else if (!isAbort) {
+      const msg = e instanceof Error ? e.message : String(e);
+      assistant.content = (assistant.content ? `${assistant.content}\n\n` : "") + `**出错：** ${msg}`;
+      assistant.ts = nowIso();
+      active.updatedAt = nowIso();
+      saveAiProject();
+      scheduleAiChatRender();
+    }
   } finally {
     flushStreamingMarkdownThrottle();
-    aiBusy = false;
-    aiStreamingSessionId = "";
+    aiStreamingSessionIds.delete(active.id);
+    aiStreamAbortControllers.delete(active.id);
+    aiStopRequestedSessionIds.delete(active.id);
     setAiStatus("");
     refreshAiUiState();
     scheduleAiChatRender();
@@ -5115,7 +5162,17 @@ export async function init() {
     });
   }
   const btnAiSend = document.getElementById("btn-ai-send");
-  if (btnAiSend) btnAiSend.addEventListener("click", sendAiMessage);
+  if (btnAiSend) {
+    btnAiSend.addEventListener("click", () => {
+      const active = getActiveAiSession();
+      if (active && isAiSessionBusy(active.id)) {
+        const stopped = stopAiSessionStreaming(active.id);
+        if (stopped) setAiStatus("正在停止生成…");
+        return;
+      }
+      sendAiMessage();
+    });
+  }
   document.getElementById("btn-ai-draft-dismiss")?.addEventListener("click", dismissPendingAiEntryDraft);
   document.getElementById("btn-ai-draft-confirm")?.addEventListener("click", () => {
     confirmPendingAiEntryDraft();

@@ -3130,6 +3130,11 @@ html[data-theme="dark"] .module-ai::before {
     opacity var(--dur-fast) var(--ease-standard);
 }
 
+.ai-send-btn--stop {
+  background: color-mix(in srgb, var(--text) 82%, var(--bg-elev) 18%);
+  color: #ffffff;
+}
+
 .ai-send-btn svg {
   width: 18px;
   height: 18px;
@@ -3143,6 +3148,16 @@ html[data-theme="dark"] .module-ai::before {
 .ai-send-btn:hover:not(:disabled) {
   color: var(--ai-send-fg);
   background: var(--ai-send-bg-hover);
+}
+
+.ai-send-btn.ai-send-btn--stop:hover:not(:disabled) {
+  color: #ffffff;
+  background: color-mix(in srgb, var(--text) 72%, var(--bg-elev) 28%);
+}
+
+.ai-send-btn.ai-send-btn--stop:active:not(:disabled) {
+  color: #ffffff;
+  background: color-mix(in srgb, var(--text) 90%, var(--bg-elev) 10%);
 }
 
 .ai-send-btn:active:not(:disabled) {
@@ -3162,7 +3177,6 @@ html[data-theme="dark"] .module-ai::before {
   opacity: 0.68;
 }
 
-.module-ai.ai-busy .ai-send-btn,
 .module-ai.ai-busy .ai-chat-head-icon-btn {
   pointer-events: none;
 }
