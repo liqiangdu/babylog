@@ -75,6 +75,8 @@ export interface AiContextConsent {
 }
 
 export interface AiProject {
+  /** Auth user id owning this project snapshot (used for anti-cross-account guard). */
+  ownerUserId?: string;
   instruction: string;
   activeSessionId: string;
   /** full_recent | stats_only | recent_7d | timeline_filter */

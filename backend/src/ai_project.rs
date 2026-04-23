@@ -171,7 +171,7 @@ pub async fn get_ai_project(
 pub async fn put_ai_project(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(payload): Json<Value>,
+    Json(mut payload): Json<Value>,
 ) -> impl IntoResponse {
     let user_id = match auth::authenticate_unsafe(&state, &headers).await {
         Ok(v) => v,
@@ -184,6 +184,19 @@ pub async fn put_ai_project(
             Json(json!({ "error": msg })),
         )
             .into_response();
+    }
+
+    if let Some(owner) = payload.get("ownerUserId").and_then(|x| x.as_str()) {
+        if !owner.is_empty() && owner != user_id {
+            return (
+                axum::http::StatusCode::CONFLICT,
+                Json(json!({ "error": "ownerUserId does not match authenticated user" })),
+            )
+                .into_response();
+        }
+    }
+    if let Some(obj) = payload.as_object_mut() {
+        obj.insert("ownerUserId".to_string(), Value::String(user_id.clone()));
     }
 
     let json_str = match serde_json::to_string(&payload) {

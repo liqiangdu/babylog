@@ -117,6 +117,7 @@ function setImportProgress(done, total, show) {
 }
 /** @type {AiProject} */
 let aiProject = {
+  ownerUserId: "",
   instruction: DEFAULT_AI_INSTRUCTION,
   activeSessionId: "",
   contextPolicy: "full_recent",
@@ -128,6 +129,12 @@ let aiProject = {
 let suppressAiProjectPush = false;
 let _aiProjectPushTimer = null;
 const AI_PROJECT_PUSH_MS = 700;
+/** 当前内存 aiProject 绑定的用户；用于避免跨账号串写。 */
+let aiProjectOwnerUserId = "";
+/** AI 项目加载批次号，防止异步加载结果串回旧账号。 */
+let aiProjectHydrateEpoch = 0;
+/** 最近一次成功应用到内存的批次号。 */
+let aiProjectAppliedEpoch = 0;
 let aiStreamRenderScheduled = false;
 let aiBusy = false;
 let aiSessionSearchKeyword = "";
@@ -219,9 +226,14 @@ function loadAuth() {
   };
 }
 
+function currentAuthUserId() {
+  return String(authState.user?.id || "");
+}
+
 function clearAuth() {
   authState = { token: "", user: null, csrf: "" };
   syncSidebarAccount();
+  resetInMemoryUserData();
 }
 
 /**
@@ -677,6 +689,9 @@ function initModuleNavigation() {
 }
 
 async function initDataSource() {
+  const requestUserId = currentAuthUserId();
+  if (!requestUserId) throw new Error("missing auth user");
+  const epoch = ++aiProjectHydrateEpoch;
   try {
     const [apiProfile, apiVaccines, apiVaccineSettings, apiVaccineTemplates, entryList, apiAiProject] = await Promise.all([
       apiRequest("/profile"),
@@ -686,6 +701,7 @@ async function initDataSource() {
       fetchAllEntriesPaged(apiRequest, { pageSize: 500, maxEntries: 25000 }),
       apiRequest("/ai-project"),
     ]);
+    if (epoch !== aiProjectHydrateEpoch || requestUserId !== currentAuthUserId()) return;
     profile = {
       name: apiProfile?.name || "",
       birthDate: apiProfile?.birth_date || "",
@@ -719,7 +735,11 @@ async function initDataSource() {
     const serverHadProject = apiAiProject?.project != null && typeof apiAiProject.project === "object";
     suppressAiProjectPush = true;
     if (serverHadProject) {
-      applyAiProjectFromData(apiAiProject.project);
+      applyAiProjectFromData(apiAiProject.project, requestUserId, epoch);
+    } else {
+      initAiProjectInMemoryDefaults();
+      aiProjectOwnerUserId = requestUserId;
+      aiProjectAppliedEpoch = epoch;
     }
     suppressAiProjectPush = false;
 
@@ -3198,6 +3218,7 @@ function render() {
   renderVaccines();
   renderPhotoGallery();
   renderTimeline();
+  renderAiSessionList();
   renderAiChat();
 }
 
@@ -3250,6 +3271,7 @@ function ensureAiProjectConsistency() {
 /** Default in-memory AI project (no browser persistence). */
 function initAiProjectInMemoryDefaults() {
   aiProject = {
+    ownerUserId: currentAuthUserId(),
     instruction: DEFAULT_AI_INSTRUCTION,
     activeSessionId: "",
     contextPolicy: "full_recent",
@@ -3259,39 +3281,49 @@ function initAiProjectInMemoryDefaults() {
   };
   ensureAiProjectConsistency();
   aiInstruction = aiProject.instruction;
+  aiProjectOwnerUserId = currentAuthUserId();
+  aiProjectAppliedEpoch = aiProjectHydrateEpoch;
 }
 
 function normalizeAiProjectFromData(data) {
   const policies = ["full_recent", "stats_only", "recent_7d", "timeline_filter"];
   const rawPolicy = String(data?.contextPolicy || "full_recent");
+  const mappedSessions = Array.isArray(data?.sessions)
+    ? data.sessions.map((s) => ({
+      id: String(s?.id || randomUuid()),
+      title: String(s?.title || "新会话"),
+      createdAt: String(s?.createdAt || nowIso()),
+      updatedAt: String(s?.updatedAt || nowIso()),
+      messages: Array.isArray(s?.messages)
+        ? s.messages
+          .filter((m) => m && (m.role === "user" || m.role === "assistant"))
+          .map((m) => ({
+            role: m.role,
+            content: String(m.content || ""),
+            ts: String(m.ts || s?.updatedAt || nowIso()),
+          }))
+        : [],
+    }))
+    : [];
+  const sessions = mappedSessions.filter((s) => {
+    if (s.messages.length > 0) return true;
+    // Historical cross-account bug could produce title-only ghost sessions.
+    const t = String(s.title || "").trim();
+    return !t || t === "新会话" || t === "默认会话";
+  });
   return {
+    ownerUserId: String(data?.ownerUserId || ""),
     instruction: String(data?.instruction || DEFAULT_AI_INSTRUCTION),
     activeSessionId: String(data?.activeSessionId || ""),
     contextPolicy: policies.includes(rawPolicy) ? rawPolicy : "full_recent",
     aiContextConsent:
       data?.aiContextConsent && typeof data.aiContextConsent === "object" ? data.aiContextConsent : {},
     syncSessionsDisclaimerAck: Boolean(data?.syncSessionsDisclaimerAck),
-    sessions: Array.isArray(data?.sessions)
-      ? data.sessions.map((s) => ({
-        id: String(s?.id || randomUuid()),
-        title: String(s?.title || "新会话"),
-        createdAt: String(s?.createdAt || nowIso()),
-        updatedAt: String(s?.updatedAt || nowIso()),
-        messages: Array.isArray(s?.messages)
-          ? s.messages
-            .filter((m) => m && (m.role === "user" || m.role === "assistant"))
-            .map((m) => ({
-              role: m.role,
-              content: String(m.content || ""),
-              ts: String(m.ts || s?.updatedAt || nowIso()),
-            }))
-          : [],
-      }))
-      : [],
+    sessions,
   };
 }
 
-function applyAiProjectFromData(data) {
+function applyAiProjectFromData(data, ownerUserId = "", epoch = 0) {
   try {
     aiProject = normalizeAiProjectFromData(data);
   } catch {
@@ -3300,10 +3332,17 @@ function applyAiProjectFromData(data) {
   }
   ensureAiProjectConsistency();
   aiInstruction = aiProject.instruction;
+  aiProjectOwnerUserId = ownerUserId || currentAuthUserId();
+  aiProject.ownerUserId = aiProjectOwnerUserId;
+  aiProjectAppliedEpoch = epoch || aiProjectHydrateEpoch;
 }
 
-function flushAiProjectRemote() {
+function flushAiProjectRemote(targetUserId = "") {
   if (!apiReady || !authState.user || suppressAiProjectPush) return;
+  const currentUserId = currentAuthUserId();
+  if (!targetUserId || targetUserId !== currentUserId) return;
+  if (aiProjectOwnerUserId && aiProjectOwnerUserId !== currentUserId) return;
+  aiProject.ownerUserId = currentUserId;
   apiRequest("/ai-project", { method: "PUT", body: JSON.stringify(aiProject) }).catch(() => {
     apiReady = false;
   });
@@ -3311,10 +3350,16 @@ function flushAiProjectRemote() {
 
 function schedulePushAiProjectDebounced() {
   if (!apiReady || !authState.user || suppressAiProjectPush) return;
+  const currentUserId = currentAuthUserId();
+  if (!currentUserId) return;
+  if (!aiProjectOwnerUserId) aiProjectOwnerUserId = currentUserId;
+  if (aiProjectOwnerUserId !== currentUserId) return;
+  aiProject.ownerUserId = currentUserId;
   clearTimeout(_aiProjectPushTimer);
+  const targetUserId = currentUserId;
   _aiProjectPushTimer = setTimeout(() => {
     _aiProjectPushTimer = null;
-    flushAiProjectRemote();
+    flushAiProjectRemote(targetUserId);
   }, AI_PROJECT_PUSH_MS);
 }
 
@@ -3394,6 +3439,22 @@ function summarizeAsTitle(text) {
 function renderAiSessionList() {
   const root = document.getElementById("ai-session-list");
   if (!root) return;
+  const currentUserId = currentAuthUserId();
+  if (currentUserId && aiProjectOwnerUserId && aiProjectOwnerUserId !== currentUserId) {
+    initAiProjectInMemoryDefaults();
+    root.innerHTML = `<div class="empty-state">正在同步当前账号会话…</div>`;
+    if (apiReady) {
+      Promise.resolve()
+        .then(() => initDataSource())
+        .then(() => renderAiSessionList())
+        .catch(() => {});
+    }
+    return;
+  }
+  if (aiProjectAppliedEpoch !== aiProjectHydrateEpoch) {
+    root.innerHTML = `<div class="empty-state">正在同步会话…</div>`;
+    return;
+  }
   root.innerHTML = "";
   const keyword = String(aiSessionSearchKeyword || "").trim().toLowerCase();
   const sessions = [...aiProject.sessions].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
