@@ -99,46 +99,6 @@ pub fn ensure_auth_schema(conn: &Connection) -> rusqlite::Result<()> {
         CREATE INDEX IF NOT EXISTS idx_audit_kind ON audit_log(kind, at DESC);
         ",
     )?;
-    // Migrate pre-existing sessions tables that lack last_ip/last_ua columns.
-    let mut stmt = conn.prepare("PRAGMA table_info(sessions)")?;
-    let cols: Vec<String> = stmt
-        .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<Result<_, _>>()?;
-    if !cols.iter().any(|c| c == "last_ip") {
-        conn.execute(
-            "ALTER TABLE sessions ADD COLUMN last_ip TEXT NOT NULL DEFAULT ''",
-            [],
-        )?;
-    }
-    if !cols.iter().any(|c| c == "last_ua") {
-        conn.execute(
-            "ALTER TABLE sessions ADD COLUMN last_ua TEXT NOT NULL DEFAULT ''",
-            [],
-        )?;
-    }
-    // users.avatar was added later; migrate existing installs.
-    let mut stmt = conn.prepare("PRAGMA table_info(users)")?;
-    let cols: Vec<String> = stmt
-        .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<Result<_, _>>()?;
-    if !cols.iter().any(|c| c == "avatar") {
-        conn.execute(
-            "ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
-            [],
-        )?;
-    }
-    if !cols.iter().any(|c| c == "email") {
-        conn.execute(
-            "ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''",
-            [],
-        )?;
-    }
-    conn.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
-         ON users(lower(email))
-         WHERE email <> ''",
-        [],
-    )?;
     Ok(())
 }
 

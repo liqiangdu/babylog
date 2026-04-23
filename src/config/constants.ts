@@ -4,11 +4,6 @@ export const STORAGE_KEY = "babylog_entries_v1";
 export const STORAGE_PROFILE_KEY = "babylog_profile_v1";
 export const STORAGE_THEME_KEY = "babylog_theme_mode_v1";
 export const STORAGE_SIDEBAR_COLLAPSED_KEY = "babylog_sidebar_collapsed_v1";
-/** Legacy keys: app may read once to migrate to `/api/ai-project`, then removes them. Not used for ongoing storage. */
-export const STORAGE_AI_INSTRUCTION_KEY = "babylog_ai_instruction_v1";
-export const STORAGE_AI_PROJECT_KEY = "babylog_ai_project_v1";
-/** Legacy key: removed from UI; app deletes this on load/login/clear for migration. */
-export const STORAGE_AUTH_LOCAL_ONLY_KEY = "babylog_auth_local_only_v1";
 export const AUTH_CSRF_COOKIE = "babylog_csrf";
 export const DEFAULT_AI_INSTRUCTION =
   "你是婴幼儿照护与成长数据助手，正在协助家长阅读「Babylog」里的记录。\n\n回答要清晰、可执行；不要夸大确定性。凡涉及疾病诊断、用药调整或紧急情况，必须提醒家长咨询医生或前往医院。";

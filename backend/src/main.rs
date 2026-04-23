@@ -611,47 +611,7 @@ fn ensure_schema(db_path: &PathBuf) -> rusqlite::Result<()> {
         );
         ",
     )?;
-    // Upgrade path for DBs that predate the per-user refactor.
-    add_column_if_missing(&conn, "entries", "user_id", "TEXT NOT NULL DEFAULT ''")?;
-    add_column_if_missing(&conn, "vaccines", "user_id", "TEXT NOT NULL DEFAULT ''")?;
-    migrate_entries_photos_column(&conn)?;
     auth::ensure_auth_schema(&conn)?;
-    Ok(())
-}
-
-
-fn add_column_if_missing(
-    conn: &Connection,
-    table: &str,
-    column: &str,
-    decl: &str,
-) -> rusqlite::Result<()> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({})", table))?;
-    let cols: Vec<String> = stmt
-        .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<Result<_, _>>()?;
-    if cols.iter().any(|c| c == column) {
-        return Ok(());
-    }
-    conn.execute(
-        &format!("ALTER TABLE {} ADD COLUMN {} {}", table, column, decl),
-        [],
-    )?;
-    Ok(())
-}
-
-fn migrate_entries_photos_column(conn: &Connection) -> rusqlite::Result<()> {
-    let mut stmt = conn.prepare("PRAGMA table_info(entries)")?;
-    let cols: Vec<String> = stmt
-        .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<Result<_, _>>()?;
-    if cols.iter().any(|c| c == "photos_json") {
-        return Ok(());
-    }
-    conn.execute(
-        "ALTER TABLE entries ADD COLUMN photos_json TEXT NOT NULL DEFAULT '[]'",
-        [],
-    )?;
     Ok(())
 }
 

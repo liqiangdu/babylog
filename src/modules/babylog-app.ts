@@ -7,9 +7,6 @@ import {
   STORAGE_PROFILE_KEY,
   STORAGE_THEME_KEY,
   STORAGE_SIDEBAR_COLLAPSED_KEY,
-  STORAGE_AI_INSTRUCTION_KEY,
-  STORAGE_AI_PROJECT_KEY,
-  STORAGE_AUTH_LOCAL_ONLY_KEY,
   AUTH_CSRF_COOKIE,
   DEFAULT_AI_INSTRUCTION,
   MAX_ENTRY_PHOTOS,
@@ -243,17 +240,7 @@ function readCookie(name) {
   return "";
 }
 
-
-function scrubLegacyAuthLocalOnlyFlag() {
-  try {
-    localStorage.removeItem(STORAGE_AUTH_LOCAL_ONLY_KEY);
-  } catch {
-    /* ignore quota/private-mode errors */
-  }
-}
-
 function loadAuth() {
-  scrubLegacyAuthLocalOnlyFlag();
   authState = {
     token: "",
     user: null,
@@ -263,7 +250,6 @@ function loadAuth() {
 
 function clearAuth() {
   authState = { token: "", user: null, csrf: "" };
-  scrubLegacyAuthLocalOnlyFlag();
   syncSidebarAccount();
 }
 
@@ -464,7 +450,6 @@ async function submitAuthForm() {
         : null,
       csrf: readCookie(AUTH_CSRF_COOKIE) || String(data?.csrf_token || ""),
     };
-    scrubLegacyAuthLocalOnlyFlag();
     hideAuthOverlay();
     if (p) p.value = "";
     showToast(authMode === "register" ? "注册成功" : "登录成功");
@@ -766,7 +751,6 @@ async function initDataSource() {
       applyAiProjectFromData(apiAiProject.project);
     }
     suppressAiProjectPush = false;
-    await migrateLegacyAiProjectLocalStorage(serverHadProject);
 
     apiReady = true;
   } catch {
@@ -3361,41 +3345,6 @@ function schedulePushAiProjectDebounced() {
 /** Persist AI project to the server (debounced). Does not use localStorage. */
 function saveAiProject() {
   schedulePushAiProjectDebounced();
-}
-
-/** One-time: upload legacy localStorage AI keys then remove them. */
-async function migrateLegacyAiProjectLocalStorage(serverHadProject) {
-  const projKey = STORAGE_AI_PROJECT_KEY;
-  const instKey = STORAGE_AI_INSTRUCTION_KEY;
-  if (serverHadProject) {
-    try {
-      localStorage.removeItem(projKey);
-      localStorage.removeItem(instKey);
-    } catch {
-      /* ignore */
-    }
-    return;
-  }
-  const raw = localStorage.getItem(projKey);
-  if (!raw) {
-    try {
-      localStorage.removeItem(instKey);
-    } catch {
-      /* ignore */
-    }
-    return;
-  }
-  try {
-    const data = JSON.parse(raw);
-    suppressAiProjectPush = true;
-    applyAiProjectFromData(data);
-    suppressAiProjectPush = false;
-    await apiRequest("/ai-project", { method: "PUT", body: JSON.stringify(aiProject) });
-    localStorage.removeItem(projKey);
-    localStorage.removeItem(instKey);
-  } catch {
-    /* keep legacy keys if parse or upload failed */
-  }
 }
 
 function syncAiInstructionField() {
