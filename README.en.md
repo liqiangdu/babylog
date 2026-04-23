@@ -1,6 +1,6 @@
 # BabyLog
 
-Chinese version: `README.md`
+[Chinese version](README.md)
 
 BabyLog is a baby growth tracking app for families. The frontend uses Vite + TypeScript, and the backend uses Rust + Axum + SQLite.
 

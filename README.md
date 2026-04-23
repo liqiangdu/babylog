@@ -1,6 +1,6 @@
 ﻿# BabyLog
 
-English version: `README.en.md`
+[英文版](README.en.md)
 
 BabyLog 是一个面向家庭场景的婴儿成长记录应用，前端使用 Vite + TypeScript，后端使用 Rust + Axum + SQLite。
 
