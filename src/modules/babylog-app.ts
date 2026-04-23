@@ -3257,8 +3257,7 @@ function getActiveAiSession() {
 
 function ensureAiProjectConsistency() {
   if (!Array.isArray(aiProject.sessions)) aiProject.sessions = [];
-  const policies = ["full_recent", "stats_only", "recent_7d", "timeline_filter"];
-  if (!policies.includes(aiProject.contextPolicy)) aiProject.contextPolicy = "full_recent";
+  aiProject.contextPolicy = "full_recent";
   if (!aiProject.aiContextConsent || typeof aiProject.aiContextConsent !== "object") aiProject.aiContextConsent = {};
   if (!aiProject.instruction || !String(aiProject.instruction).trim()) aiProject.instruction = DEFAULT_AI_INSTRUCTION;
   if (!aiProject.sessions.length) {
@@ -3291,8 +3290,6 @@ function initAiProjectInMemoryDefaults() {
 }
 
 function normalizeAiProjectFromData(data) {
-  const policies = ["full_recent", "stats_only", "recent_7d", "timeline_filter"];
-  const rawPolicy = String(data?.contextPolicy || "full_recent");
   const mappedSessions = Array.isArray(data?.sessions)
     ? data.sessions.map((s) => ({
       id: String(s?.id || randomUuid()),
@@ -3320,7 +3317,7 @@ function normalizeAiProjectFromData(data) {
     ownerUserId: String(data?.ownerUserId || ""),
     instruction: String(data?.instruction || DEFAULT_AI_INSTRUCTION),
     activeSessionId: String(data?.activeSessionId || ""),
-    contextPolicy: policies.includes(rawPolicy) ? rawPolicy : "full_recent",
+    contextPolicy: "full_recent",
     aiContextConsent:
       data?.aiContextConsent && typeof data.aiContextConsent === "object" ? data.aiContextConsent : {},
     syncSessionsDisclaimerAck: Boolean(data?.syncSessionsDisclaimerAck),
@@ -3800,7 +3797,7 @@ function buildEntryContextLines(slice, consent) {
 
 function buildBabyContextForAi() {
   const consent = getAiContextConsent();
-  const policy = aiProject.contextPolicy || "full_recent";
+  const policy = "full_recent";
   const lines = [];
   const genderMap = { boy: "男", girl: "女", other: "未设置/其他" };
 
@@ -4611,28 +4608,7 @@ function closeSettingsDialog() {
 function syncAiContextPolicyHint() {
   const el = document.getElementById("ai-context-policy-hint");
   if (!el) return;
-  const p = aiProject.contextPolicy || "full_recent";
-  const hints = {
-    full_recent: "发送最近最多 300 条记录摘要。",
-    recent_7d: "仅包含最近 7 天内最多 150 条记录。",
-    timeline_filter: "与「活动」模块的类型、日期筛选一致，最多 200 条。",
-    stats_only: "仅发送各分类条数统计，不包含逐条记录正文。",
-  };
-  el.textContent = hints[p] || "";
-}
-
-function initAiContextPolicySelect() {
-  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById("ai-context-policy"));
-  if (!sel) return;
-  sel.value = ["full_recent", "stats_only", "recent_7d", "timeline_filter"].includes(aiProject.contextPolicy)
-    ? aiProject.contextPolicy
-    : "full_recent";
-  syncAiContextPolicyHint();
-  sel.addEventListener("change", () => {
-    aiProject.contextPolicy = sel.value;
-    saveAiProject();
-    syncAiContextPolicyHint();
-  });
+  el.textContent = "上下文默认由 AI 在后端按问题智能选择；若智能策略失败，会自动回退到客户端最近记录摘要兜底。";
 }
 
 function openCommandPalette() {
@@ -5178,7 +5154,7 @@ export async function init() {
     confirmPendingAiEntryDraft();
   });
   document.addEventListener("keydown", handleAiGlobalShortcuts);
-  initAiContextPolicySelect();
+  syncAiContextPolicyHint();
   initCommandPalette();
   renderAiSessionList();
   refreshAiUiState();
