@@ -1,6 +1,6 @@
 /**
  * `localStorage` key names shared with the runtime app.
- * Read/write logic lives in `src/modules/babylog-app.ts`.
+ * AI project keys are legacy-only (migration / removal); live data uses `/api/ai-project`.
  */
 export {
   STORAGE_KEY,

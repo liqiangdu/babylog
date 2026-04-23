@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, env, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
+mod ai_project;
 mod ai_tools;
 mod auth;
 mod chat;
@@ -174,6 +175,13 @@ async fn main() {
         .route("/api/uploads", post(upload_images))
         .layer(DefaultBodyLimit::max(48 * 1024 * 1024));
 
+    let ai_project_router = Router::new()
+        .route(
+            "/api/ai-project",
+            get(ai_project::get_ai_project).put(ai_project::put_ai_project),
+        )
+        .layer(DefaultBodyLimit::max(8 * 1024 * 1024));
+
     let api_router = Router::new()
         .route("/api/profile", get(get_profile).put(put_profile))
         .route("/api/entries", get(list_entries).post(create_entry))
@@ -202,6 +210,7 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health))
         .merge(uploads_router)
+        .merge(ai_project_router)
         .merge(api_router)
         .with_state(state)
         .nest_service("/media", ServeDir::new(objects_dir))
@@ -593,6 +602,12 @@ fn ensure_schema(db_path: &PathBuf) -> rusqlite::Result<()> {
           label TEXT NOT NULL,
           items_json TEXT NOT NULL,
           PRIMARY KEY (user_id, template_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS user_ai_project (
+          user_id TEXT PRIMARY KEY,
+          payload_json TEXT NOT NULL,
+          updated_at INTEGER NOT NULL
         );
         ",
     )?;

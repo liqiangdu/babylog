@@ -129,6 +129,10 @@ let aiProject = {
   syncSessionsDisclaimerAck: false,
   sessions: [],
 };
+/** When true, applying remote state; do not schedule PUT. */
+let suppressAiProjectPush = false;
+let _aiProjectPushTimer = null;
+const AI_PROJECT_PUSH_MS = 700;
 let aiStreamRenderScheduled = false;
 let aiBusy = false;
 let aiSessionSearchKeyword = "";
@@ -478,13 +482,22 @@ async function submitAuthForm() {
   }
 }
 
+function clearAiProjectPushTimer() {
+  if (_aiProjectPushTimer) {
+    clearTimeout(_aiProjectPushTimer);
+    _aiProjectPushTimer = null;
+  }
+}
+
 function resetInMemoryUserData() {
+  clearAiProjectPushTimer();
   entries = [];
   profile = { name: "", birthDate: "", gender: "", blood: "", avatar: "" };
   vaccines = [];
   vaccineSettings = { region: "cn", reminderDays: 3, notificationsEnabled: false, notifiedMap: {} };
   customVaccineTemplates = {};
   timelineVisibleCount = 20;
+  initAiProjectInMemoryDefaults();
   try { render(); } catch { /* render may not be ready yet */ }
 }
 
@@ -709,12 +722,13 @@ function initModuleNavigation() {
 
 async function initDataSource() {
   try {
-    const [apiProfile, apiVaccines, apiVaccineSettings, apiVaccineTemplates, entryList] = await Promise.all([
+    const [apiProfile, apiVaccines, apiVaccineSettings, apiVaccineTemplates, entryList, apiAiProject] = await Promise.all([
       apiRequest("/profile"),
       apiRequest("/vaccines"),
       apiRequest("/vaccine-settings"),
       apiRequest("/vaccine-templates"),
       fetchAllEntriesPaged(apiRequest, { pageSize: 500, maxEntries: 25000 }),
+      apiRequest("/ai-project"),
     ]);
     profile = {
       name: apiProfile?.name || "",
@@ -745,6 +759,15 @@ async function initDataSource() {
     customVaccineTemplates = apiVaccineTemplates && typeof apiVaccineTemplates === "object"
       ? apiVaccineTemplates
       : {};
+
+    const serverHadProject = apiAiProject?.project != null && typeof apiAiProject.project === "object";
+    suppressAiProjectPush = true;
+    if (serverHadProject) {
+      applyAiProjectFromData(apiAiProject.project);
+    }
+    suppressAiProjectPush = false;
+    await migrateLegacyAiProjectLocalStorage(serverHadProject);
+
     apiReady = true;
   } catch {
     apiReady = false;
@@ -3264,70 +3287,115 @@ function ensureAiProjectConsistency() {
   }
 }
 
-function saveAiProject() {
-  try {
-    localStorage.setItem(STORAGE_AI_PROJECT_KEY, JSON.stringify(aiProject));
-    localStorage.setItem(STORAGE_AI_INSTRUCTION_KEY, aiProject.instruction || DEFAULT_AI_INSTRUCTION);
-  } catch {
-    // ignore quota errors
-  }
+/** Default in-memory AI project (no browser persistence). */
+function initAiProjectInMemoryDefaults() {
+  aiProject = {
+    instruction: DEFAULT_AI_INSTRUCTION,
+    activeSessionId: "",
+    contextPolicy: "full_recent",
+    aiContextConsent: {},
+    syncSessionsDisclaimerAck: false,
+    sessions: [],
+  };
+  ensureAiProjectConsistency();
+  aiInstruction = aiProject.instruction;
 }
 
-function loadAiInstruction() {
-  try {
-    const rawProject = localStorage.getItem(STORAGE_AI_PROJECT_KEY);
-    if (rawProject) {
-      const data = JSON.parse(rawProject);
-      const policies = ["full_recent", "stats_only", "recent_7d", "timeline_filter"];
-      const rawPolicy = String(data?.contextPolicy || "full_recent");
-      aiProject = {
-        instruction: String(data?.instruction || DEFAULT_AI_INSTRUCTION),
-        activeSessionId: String(data?.activeSessionId || ""),
-        contextPolicy: policies.includes(rawPolicy) ? rawPolicy : "full_recent",
-        aiContextConsent:
-          data?.aiContextConsent && typeof data.aiContextConsent === "object" ? data.aiContextConsent : {},
-        syncSessionsDisclaimerAck: Boolean(data?.syncSessionsDisclaimerAck),
-        sessions: Array.isArray(data?.sessions)
-          ? data.sessions.map((s) => ({
-            id: String(s?.id || randomUuid()),
-            title: String(s?.title || "新会话"),
-            createdAt: String(s?.createdAt || nowIso()),
-            updatedAt: String(s?.updatedAt || nowIso()),
-            messages: Array.isArray(s?.messages)
-              ? s.messages
-                .filter((m) => m && (m.role === "user" || m.role === "assistant"))
-                .map((m) => ({
-                  role: m.role,
-                  content: String(m.content || ""),
-                  ts: String(m.ts || s?.updatedAt || nowIso()),
-                }))
-              : [],
-          }))
+function normalizeAiProjectFromData(data) {
+  const policies = ["full_recent", "stats_only", "recent_7d", "timeline_filter"];
+  const rawPolicy = String(data?.contextPolicy || "full_recent");
+  return {
+    instruction: String(data?.instruction || DEFAULT_AI_INSTRUCTION),
+    activeSessionId: String(data?.activeSessionId || ""),
+    contextPolicy: policies.includes(rawPolicy) ? rawPolicy : "full_recent",
+    aiContextConsent:
+      data?.aiContextConsent && typeof data.aiContextConsent === "object" ? data.aiContextConsent : {},
+    syncSessionsDisclaimerAck: Boolean(data?.syncSessionsDisclaimerAck),
+    sessions: Array.isArray(data?.sessions)
+      ? data.sessions.map((s) => ({
+        id: String(s?.id || randomUuid()),
+        title: String(s?.title || "新会话"),
+        createdAt: String(s?.createdAt || nowIso()),
+        updatedAt: String(s?.updatedAt || nowIso()),
+        messages: Array.isArray(s?.messages)
+          ? s.messages
+            .filter((m) => m && (m.role === "user" || m.role === "assistant"))
+            .map((m) => ({
+              role: m.role,
+              content: String(m.content || ""),
+              ts: String(m.ts || s?.updatedAt || nowIso()),
+            }))
           : [],
-      };
-    } else {
-      aiProject = {
-        instruction: DEFAULT_AI_INSTRUCTION,
-        activeSessionId: "",
-        contextPolicy: "full_recent",
-        aiContextConsent: {},
-        syncSessionsDisclaimerAck: false,
-        sessions: [],
-      };
-    }
+      }))
+      : [],
+  };
+}
+
+function applyAiProjectFromData(data) {
+  try {
+    aiProject = normalizeAiProjectFromData(data);
   } catch {
-    aiProject = {
-      instruction: DEFAULT_AI_INSTRUCTION,
-      activeSessionId: "",
-      contextPolicy: "full_recent",
-      aiContextConsent: {},
-      syncSessionsDisclaimerAck: false,
-      sessions: [],
-    };
+    initAiProjectInMemoryDefaults();
+    return;
   }
   ensureAiProjectConsistency();
   aiInstruction = aiProject.instruction;
-  saveAiProject();
+}
+
+function flushAiProjectRemote() {
+  if (!apiReady || !authState.user || suppressAiProjectPush) return;
+  apiRequest("/ai-project", { method: "PUT", body: JSON.stringify(aiProject) }).catch(() => {
+    apiReady = false;
+  });
+}
+
+function schedulePushAiProjectDebounced() {
+  if (!apiReady || !authState.user || suppressAiProjectPush) return;
+  clearTimeout(_aiProjectPushTimer);
+  _aiProjectPushTimer = setTimeout(() => {
+    _aiProjectPushTimer = null;
+    flushAiProjectRemote();
+  }, AI_PROJECT_PUSH_MS);
+}
+
+/** Persist AI project to the server (debounced). Does not use localStorage. */
+function saveAiProject() {
+  schedulePushAiProjectDebounced();
+}
+
+/** One-time: upload legacy localStorage AI keys then remove them. */
+async function migrateLegacyAiProjectLocalStorage(serverHadProject) {
+  const projKey = STORAGE_AI_PROJECT_KEY;
+  const instKey = STORAGE_AI_INSTRUCTION_KEY;
+  if (serverHadProject) {
+    try {
+      localStorage.removeItem(projKey);
+      localStorage.removeItem(instKey);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  const raw = localStorage.getItem(projKey);
+  if (!raw) {
+    try {
+      localStorage.removeItem(instKey);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    const data = JSON.parse(raw);
+    suppressAiProjectPush = true;
+    applyAiProjectFromData(data);
+    suppressAiProjectPush = false;
+    await apiRequest("/ai-project", { method: "PUT", body: JSON.stringify(aiProject) });
+    localStorage.removeItem(projKey);
+    localStorage.removeItem(instKey);
+  } catch {
+    /* keep legacy keys if parse or upload failed */
+  }
 }
 
 function syncAiInstructionField() {
@@ -4896,7 +4964,7 @@ export async function init() {
   initTheme();
   initSidebarCollapse();
   loadProfile();
-  loadAiInstruction();
+  initAiProjectInMemoryDefaults();
   loadAuth();
   initAuthUi();
 

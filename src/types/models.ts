@@ -80,7 +80,7 @@ export interface AiProject {
   /** full_recent | stats_only | recent_7d | timeline_filter */
   contextPolicy: string;
   aiContextConsent?: Partial<AiContextConsent>;
-  /** User acknowledged that AI sessions stay in localStorage unless exported. */
+  /** User acknowledged that AI sessions persist on the server when logged in (not in browser storage). */
   syncSessionsDisclaimerAck?: boolean;
   sessions: AiSession[];
 }

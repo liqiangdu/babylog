@@ -17,7 +17,7 @@
 ## 技术栈
 
 - 前端：HTML + CSS + **TypeScript**（Vite 开发与打包；入口 `src/main.ts`）
-- 浏览器 `localStorage` 持久化
+- 浏览器 `localStorage` 作为部分数据的离线回退（时间轴、宝宝档案等）；**登录后的问答会话与 AI 项目设置仅存服务端**（见 `/api/ai-project`）
 - 可选 Rust 后端（Axum + Tokio）用于高性能 API
 
 ## 快速开始
@@ -64,6 +64,8 @@ cargo run
 - `POST /api/uploads`（multipart，字段名 `file`，返回 `{ "urls": ["…/media/<uuid>.jpg"] }`）
 - `GET /media/<file>`（静态图片，高性能直出）
 - `GET /api/stats`
+- `POST /api/chat/stream`（SSE 流式问答，需配置 `DEEPSEEK_API_KEY`）
+- `GET/PUT /api/ai-project`（登录用户问答会话与 AI 设置整包读写，SQLite `user_ai_project` 表；**不写入**浏览器 `localStorage`；`PUT` 请求体单独放宽至 8 MB）
 
 登录态说明：
 
@@ -71,7 +73,7 @@ cargo run
 - 登录支持「用户名或邮箱」。
 - **默认启用 HttpOnly Cookie 会话**（`BABYLOG_COOKIE_MODE=1`）：登录成功后后端把 session token 写入 `Set-Cookie: babylog_session=...; HttpOnly; SameSite=Lax`，前端完全不接触 token，也不写 `localStorage`，抗 XSS 窃取。写请求通过 `babylog_csrf` Cookie + `X-CSRF-Token` 头双提交防 CSRF。设置 `BABYLOG_COOKIE_MODE=0` 可退回纯 Bearer 模式（仅推荐跨域 API 场景）。
 - 本地开发前端（`npm run dev` / Vite，默认 `http://localhost:3000`）访问 API 时使用 `http://localhost:8787/api`，和前端同 site（`localhost`），`SameSite=Lax` Cookie 可以正常带上。如果换成 `127.0.0.1` 访问前端，请同时把 API 地址也改成 `127.0.0.1:8787`，保持同 site。
-- 所有业务接口（profile / entries / vaccines / stats / uploads / chat）都按登录态授权，数据按 `user_id` 隔离，不同账号彼此不可见。
+- 所有业务接口（profile / entries / vaccines / stats / uploads / chat / ai-project）都按登录态授权，数据按 `user_id` 隔离，不同账号彼此不可见。
 - 历史遗留的 pre-auth 数据（multi-user 迁移时临时落户到虚拟 `__legacy__` 账号的记录，以及老版本的单行表 `profile` / `vaccine_settings` / `vaccine_templates`）不再保留：启动时会自动 DELETE / DROP 掉，并把只被其引用的照片对象文件一并清掉。日志会打印本次清理的行数（若无则静默）。
 - 后端不可达时前端可切换「仅在本机使用」，走 `localStorage` 回退（仅此场景使用本地缓存）。
 
@@ -97,7 +99,7 @@ cargo run
 - 审计日志：`audit_log` 表记录 register / login / login_failed / logout / upload / entry_delete / profile_update，带 IP 和 User-Agent；用户可通过 `GET /api/audit` 查询自己的最近 100 条。
 - 所有 `/api` 响应自动带上 `X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Permissions-Policy: geolocation=(), microphone=(), camera=()`、`X-Frame-Options: DENY`；设置 `BABYLOG_HSTS=1` 时再加 HSTS。
 - Cookie 模式下所有写请求 (`POST` / `PUT` / `DELETE`) 都要求 `X-CSRF-Token` 与 `babylog_csrf` Cookie 常量时间比对；Bearer 模式不触发 CSRF 检查（浏览器无法自动注入 Authorization）。
-- JSON 接口默认 1 MB body 上限，`/api/uploads` 仍是 48 MB。
+- JSON 接口默认 1 MB body 上限，`/api/uploads` 仍是 48 MB；`/api/ai-project` 的 `PUT` 为 8 MB（问答历史可能较大）。
 - 过期 session 由后台任务每小时清理；上传文件名是服务端生成的 UUID 并按文件头探测扩展名，不接受客户端文件名。
 - 上传日志会记录 `user_id`（审计用）。
 
@@ -179,7 +181,7 @@ FRONTEND_PORT=5173 BACKEND_PORT=9000 ./start.sh
 
 浏览器打开 `http://localhost:3000` 开始用；**请保持 `localhost` 访问**（不要换成 `127.0.0.1`），否则 session cookie 会因为和后端不同 site 而带不上来，表现为刷新后要求重新登录。
 
-前端会优先调用 Rust API（记录、宝宝信息、疫苗计划/设置/自定义模板），当 API 不可用时自动回退到 `localStorage`。
+前端会优先调用 Rust API（记录、宝宝信息、疫苗计划/设置/自定义模板、**问答项目快照**），当 API 不可用时自动回退到 `localStorage`（**不含**已登录用户的问答会话：后者仅在后端 SQLite，刷新后需再次登录从 `/api/ai-project` 拉取）。
 
 Rust API 持久化使用 SQLite（`backend/data/babylog.db`），并包含时间轴/分类/日期等查询索引。
 
