@@ -4380,9 +4380,9 @@ html[data-theme="dark"] .module-ai::before {
 }
 .command-palette-panel {
   width: min(820px, 90vw);
-  aspect-ratio: 4 / 3;
-  min-height: 320px;
-  max-height: 78vh;
+  aspect-ratio: 3 / 2;
+  min-height: 260px;
+  max-height: 64vh;
   background: var(--bg);
   color: var(--text);
   border-radius: 24px;
