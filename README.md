@@ -12,13 +12,12 @@
 - 疫苗计划：地区模板、提醒设置、浏览器通知
 - 模板编辑：支持表格化自定义疫苗模板编辑
 - 数据导入导出：JSON 备份与恢复
-- 每条记录可选附加多张照片（走 API 时上传到服务端对象目录 `data/objects/`，通过 `/media/...` 提供直链，SQLite 仅存 URL；纯本地模式需启动后端才能上传）
+- 每条记录可选附加多张照片（上传到服务端对象目录 `data/objects/`，通过 `/media/...` 提供直链，SQLite 仅存 URL）
 
 ## 技术栈
 
 - 前端：HTML + CSS + **TypeScript**（Vite 开发与打包；入口 `src/main.ts`）
-- 浏览器 `localStorage` 作为部分数据的离线回退（时间轴、宝宝档案等）；**登录后的问答会话与 AI 项目设置仅存服务端**（见 `/api/ai-project`）
-- 可选 Rust 后端（Axum + Tokio）用于高性能 API
+- Rust 后端（Axum + Tokio）提供认证与所有业务 API（应用必须连接后端并登录后才能使用）
 
 ## 快速开始
 
@@ -39,7 +38,7 @@ npm run build
 npx --yes serve dist
 ```
 
-### 方式 3：运行 Rust API（可选）
+### 方式 3：运行 Rust API（必须）
 
 > 目录：`backend/`
 
@@ -75,7 +74,7 @@ cargo run
 - 本地开发前端（`npm run dev` / Vite，默认 `http://localhost:3000`）访问 API 时使用 `http://localhost:8787/api`，和前端同 site（`localhost`），`SameSite=Lax` Cookie 可以正常带上。如果换成 `127.0.0.1` 访问前端，请同时把 API 地址也改成 `127.0.0.1:8787`，保持同 site。
 - 所有业务接口（profile / entries / vaccines / stats / uploads / chat / ai-project）都按登录态授权，数据按 `user_id` 隔离，不同账号彼此不可见。
 - 历史遗留的 pre-auth 数据（multi-user 迁移时临时落户到虚拟 `__legacy__` 账号的记录，以及老版本的单行表 `profile` / `vaccine_settings` / `vaccine_templates`）不再保留：启动时会自动 DELETE / DROP 掉，并把只被其引用的照片对象文件一并清掉。日志会打印本次清理的行数（若无则静默）。
-- 后端不可达时前端可切换「仅在本机使用」，走 `localStorage` 回退（仅此场景使用本地缓存）。
+- 前端不再提供本地离线模式：后端不可达或会话失效时，应用会停留在登录层并提示修复后端连接。
 
 安全加固相关环境变量（可选）：
 
@@ -181,7 +180,7 @@ FRONTEND_PORT=5173 BACKEND_PORT=9000 ./start.sh
 
 浏览器打开 `http://localhost:3000` 开始用；**请保持 `localhost` 访问**（不要换成 `127.0.0.1`），否则 session cookie 会因为和后端不同 site 而带不上来，表现为刷新后要求重新登录。
 
-前端会优先调用 Rust API（记录、宝宝信息、疫苗计划/设置/自定义模板、**问答项目快照**），当 API 不可用时自动回退到 `localStorage`（**不含**已登录用户的问答会话：后者仅在后端 SQLite，刷新后需再次登录从 `/api/ai-project` 拉取）。
+前端所有业务数据（记录、宝宝信息、疫苗计划/设置/自定义模板、问答项目快照）均通过 Rust API 读写；后端不可用时应用不可用。
 
 Rust API 持久化使用 SQLite（`backend/data/babylog.db`），并包含时间轴/分类/日期等查询索引。
 
@@ -201,14 +200,9 @@ babylog/
 
 ## 数据存储说明
 
-数据保存在浏览器本地 `localStorage`，主要键包括：
+业务数据统一持久化在后端 SQLite（`backend/data/babylog.db`），并按登录账号隔离。
 
-- `babylog_entries_v1`：日常记录
-- `babylog_profile_v1`：宝宝信息
-
-> 疫苗计划、疫苗提醒设置、自定义疫苗模板由 Rust API 持久化到 SQLite，不写入浏览器 `localStorage`。
-
-> 提示：清理浏览器站点数据会导致本地记录丢失，建议定期导出 JSON 备份。
+浏览器 `localStorage` 仅用于非业务偏好项（如主题、侧栏折叠状态），不承载记录与档案数据。
 
 ## 测试数据生成（Python）
 

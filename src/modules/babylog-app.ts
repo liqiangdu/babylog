@@ -3,8 +3,6 @@
  * Babylog — application UI (ported from classic `js/app.js`).
  */
 import {
-  STORAGE_KEY,
-  STORAGE_PROFILE_KEY,
   STORAGE_THEME_KEY,
   STORAGE_SIDEBAR_COLLAPSED_KEY,
   AUTH_CSRF_COOKIE,
@@ -141,38 +139,11 @@ let aiSessionRenameDraft = "";
 /** @type {import("../types/models").LogEntry|null} 服务端草稿，确认后写入时间轴 */
 let pendingAiEntryDraft = null;
 let commandPaletteOpen = false;
-function load() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    entries = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(entries)) entries = [];
-  } catch {
-    entries = [];
-  }
-}
 
-function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-}
-
-function loadProfile() {
-  try {
-    const raw = localStorage.getItem(STORAGE_PROFILE_KEY);
-    const data = raw ? JSON.parse(raw) : {};
-    profile = {
-      name: data?.name || "",
-      birthDate: data?.birthDate || "",
-      gender: data?.gender || "",
-      blood: data?.blood || "",
-      avatar: data?.avatar || "",
-    };
-  } catch {
-    profile = { name: "", birthDate: "", gender: "", blood: "", avatar: "" };
-  }
-}
-
-function saveProfile() {
-  localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profile));
+function handleBackendUnavailable(message = "后端暂不可用，请检查服务后重试。") {
+  apiReady = false;
+  showAuthOverlay("login", message);
+  showToast(message);
 }
 
 function loadVaccines() {
@@ -720,7 +691,7 @@ async function initDataSource() {
       birthDate: apiProfile?.birth_date || "",
       gender: apiProfile?.gender || "",
       blood: apiProfile?.blood || "",
-      avatar: apiProfile?.avatar || apiProfile?.avatar_url || profile.avatar || "",
+      avatar: apiProfile?.avatar || apiProfile?.avatar_url || authState.user?.avatar || "",
     };
     entries = entryList;
     vaccines = Array.isArray(apiVaccines)
@@ -753,15 +724,9 @@ async function initDataSource() {
     suppressAiProjectPush = false;
 
     apiReady = true;
-  } catch {
+  } catch (err) {
     apiReady = false;
-    if (authState.user) {
-      load();
-      loadProfile();
-      loadVaccines();
-      loadVaccineSettings();
-      loadCustomVaccineTemplates();
-    }
+    throw err;
   }
 }
 
@@ -1325,7 +1290,12 @@ async function submitModal() {
     entries.push(changedEntry);
   }
   entries.sort((a, b) => new Date(b.at) - new Date(a.at));
-  if (apiReady && changedEntry) {
+  if (!apiReady) {
+    handleBackendUnavailable("后端不可用，无法保存记录。");
+    return;
+  }
+  if (changedEntry) {
+    const prevEntries = [...entries];
     try {
       if (editingId) {
         await apiRequest(`/entries/${changedEntry.id}`, {
@@ -1340,28 +1310,30 @@ async function submitModal() {
         if (created?.id) changedEntry.id = created.id;
       }
     } catch {
-      apiReady = false;
-      save();
-      alert("后端暂不可用，已回退到本地存储。");
+      entries = prevEntries;
+      handleBackendUnavailable("后端不可用，无法保存记录。");
+      renderAfterEntriesMutated();
+      return;
     }
-  } else {
-    save();
   }
   closeModal();
   renderAfterEntriesMutated();
 }
 
 async function deleteEntry(id) {
+  if (!apiReady) {
+    handleBackendUnavailable("后端不可用，无法删除记录。");
+    return;
+  }
+  const prevEntries = [...entries];
   entries = entries.filter((e) => e.id !== id);
-  if (apiReady) {
-    try {
-      await apiRequest(`/entries/${id}`, { method: "DELETE" });
-    } catch {
-      apiReady = false;
-      save();
-    }
-  } else {
-    save();
+  try {
+    await apiRequest(`/entries/${id}`, { method: "DELETE" });
+  } catch {
+    entries = prevEntries;
+    handleBackendUnavailable("后端不可用，无法删除记录。");
+    renderAfterEntriesMutated();
+    return;
   }
   renderAfterEntriesMutated();
   showToast("已删除");
@@ -1442,31 +1414,35 @@ function syncProfileEditState() {
 }
 
 async function saveProfileFromForm() {
-  profile = {
+  if (!apiReady) {
+    handleBackendUnavailable("后端不可用，无法保存档案。");
+    return;
+  }
+  const nextProfile = {
     name: /** @type {HTMLInputElement} */ (document.getElementById("baby-name")).value.trim(),
     birthDate: /** @type {HTMLInputElement} */ (document.getElementById("baby-birth")).value,
     gender: /** @type {HTMLSelectElement} */ (document.getElementById("baby-gender")).value,
     blood: /** @type {HTMLInputElement} */ (document.getElementById("baby-blood")).value.trim(),
     avatar: profile.avatar || "",
   };
-  if (apiReady) {
-    try {
-      await apiRequest("/profile", {
-        method: "PUT",
-        body: JSON.stringify({
-          name: profile.name,
-          birth_date: profile.birthDate,
-          gender: profile.gender,
-          blood: profile.blood,
-        }),
-      });
-    } catch {
-      apiReady = false;
-      saveProfile();
-      showToast("后端不可用，已存到本地");
-    }
+  const prevProfile = { ...profile };
+  profile = nextProfile;
+  try {
+    await apiRequest("/profile", {
+      method: "PUT",
+      body: JSON.stringify({
+        name: profile.name,
+        birth_date: profile.birthDate,
+        gender: profile.gender,
+        blood: profile.blood,
+      }),
+    });
+  } catch {
+    profile = prevProfile;
+    handleBackendUnavailable("后端不可用，无法保存档案。");
+    renderProfile();
+    return;
   }
-  saveProfile();
   setProfileEditing(false);
   renderProfile();
   renderVaccines();
@@ -1498,19 +1474,19 @@ async function handleAvatarChange(ev) {
   }
   try {
     const dataUrl = await readFileAsDataURL(file);
+    await saveUserAvatar(dataUrl);
     profile.avatar = dataUrl;
-    saveProfile();
     renderProfile();
   } catch {
-    alert("头像读取失败，请重试");
+    alert("头像保存失败，请重试");
   } finally {
     input.value = "";
   }
 }
 
-function clearAvatar() {
+async function clearAvatar() {
+  await saveUserAvatar("");
   profile.avatar = "";
-  saveProfile();
   renderProfile();
 }
 
@@ -4055,24 +4031,26 @@ function dismissPendingAiEntryDraft() {
 
 async function confirmPendingAiEntryDraft() {
   if (!pendingAiEntryDraft || aiBusy) return;
+  if (!apiReady) {
+    handleBackendUnavailable("后端不可用，无法写入 AI 草稿。");
+    return;
+  }
   const changedEntry = { ...pendingAiEntryDraft };
   dismissPendingAiEntryDraft();
+  const prevEntries = [...entries];
   entries.push(changedEntry);
   entries.sort((a, b) => new Date(b.at) - new Date(a.at));
-  if (apiReady) {
-    try {
-      const created = await apiRequest("/entries", {
-        method: "POST",
-        body: JSON.stringify(mapEntryToApi(changedEntry)),
-      });
-      if (created?.id) changedEntry.id = created.id;
-    } catch {
-      apiReady = false;
-      save();
-      alert("后端暂不可用，已回退到本地存储。");
-    }
-  } else {
-    save();
+  try {
+    const created = await apiRequest("/entries", {
+      method: "POST",
+      body: JSON.stringify(mapEntryToApi(changedEntry)),
+    });
+    if (created?.id) changedEntry.id = created.id;
+  } catch {
+    entries = prevEntries;
+    handleBackendUnavailable("后端不可用，无法写入 AI 草稿。");
+    renderAfterEntriesMutated();
+    return;
   }
   showToast("已从 AI 草稿写入一条记录");
   renderAfterEntriesMutated();
@@ -4200,27 +4178,26 @@ function importData(file) {
       const merged = new Map(entries.map((e) => [e.id, e]));
       for (const entry of importedEntries) merged.set(entry.id, entry);
       entries = Array.from(merged.values()).sort((a, b) => new Date(b.at) - new Date(a.at));
-      if (apiReady) {
-        let processed = 0;
-        for (const e of importedEntries) {
-          if (existingIds.has(e.id)) {
-            await apiRequest(`/entries/${e.id}`, {
-              method: "PATCH",
-              body: JSON.stringify(mapEntryToApi(e)),
-            });
-          } else {
-            await apiRequest("/entries", {
-              method: "POST",
-              body: JSON.stringify(mapEntryToApi(e)),
-            });
-          }
-          processed += 1;
-          if (shouldShowProgress && (processed % 5 === 0 || processed === importedEntries.length)) {
-            setImportProgress(processed, importedEntries.length, true);
-          }
+      if (!apiReady) {
+        throw new Error("backend unavailable");
+      }
+      let processed = 0;
+      for (const e of importedEntries) {
+        if (existingIds.has(e.id)) {
+          await apiRequest(`/entries/${e.id}`, {
+            method: "PATCH",
+            body: JSON.stringify(mapEntryToApi(e)),
+          });
+        } else {
+          await apiRequest("/entries", {
+            method: "POST",
+            body: JSON.stringify(mapEntryToApi(e)),
+          });
         }
-      } else {
-        save();
+        processed += 1;
+        if (shouldShowProgress && (processed % 5 === 0 || processed === importedEntries.length)) {
+          setImportProgress(processed, importedEntries.length, true);
+        }
       }
       renderAfterEntriesMutated();
       if (shouldShowProgress) {
@@ -4875,9 +4852,7 @@ async function saveUserAvatar(dataUrl) {
     syncSettingsDialog();
   }
   if (!authState.user) {
-    // Not logged in: nothing to push to the backend.
-    showToast(dataUrl ? "头像已更新" : "头像已移除");
-    return;
+    throw new Error("not authenticated");
   }
   try {
     await apiRequest("/auth/avatar", {
@@ -4893,7 +4868,8 @@ async function saveUserAvatar(dataUrl) {
       syncSettingsDialog();
     }
     console.warn("avatar update failed", err);
-    showToast("头像保存失败");
+    handleBackendUnavailable("后端不可用，头像保存失败。");
+    throw err;
   }
 }
 
@@ -4912,7 +4888,6 @@ async function backendReachable() {
 export async function init() {
   initTheme();
   initSidebarCollapse();
-  loadProfile();
   initAiProjectInMemoryDefaults();
   loadAuth();
   initAuthUi();
@@ -4928,8 +4903,12 @@ export async function init() {
       authState.csrf = "";
       showAuthOverlay("login");
     } else {
-      hideAuthOverlay();
-      await initDataSource();
+      try {
+        await initDataSource();
+        hideAuthOverlay();
+      } catch {
+        showAuthOverlay("login", "无法加载服务端数据，请检查后端服务后刷新页面");
+      }
     }
   }
   syncSidebarAccount();

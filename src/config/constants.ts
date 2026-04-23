@@ -1,7 +1,5 @@
 import type { CategoryDef, VaccineTemplateRow } from "../types/models";
 
-export const STORAGE_KEY = "babylog_entries_v1";
-export const STORAGE_PROFILE_KEY = "babylog_profile_v1";
 export const STORAGE_THEME_KEY = "babylog_theme_mode_v1";
 export const STORAGE_SIDEBAR_COLLAPSED_KEY = "babylog_sidebar_collapsed_v1";
 export const AUTH_CSRF_COOKIE = "babylog_csrf";
