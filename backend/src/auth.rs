@@ -1140,3 +1140,74 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> impl I
     }
     resp
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::{HeaderMap, HeaderValue};
+
+    #[test]
+    fn normalize_username_lowercases_and_trims() {
+        assert_eq!(super::normalize_username("  Alice-01  "), "alice-01");
+    }
+
+    #[test]
+    fn email_validation_basic_cases() {
+        assert!(super::is_valid_email("user@example.com"));
+        assert!(!super::is_valid_email("bad@")); // missing domain
+        assert!(!super::is_valid_email("noatsign")); // missing @
+        assert!(!super::is_valid_email(" spaced@ex.com ")); // spaces invalid
+    }
+
+    #[test]
+    fn enforce_csrf_passes_with_matching_cookie_and_header() {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::header::COOKIE,
+            HeaderValue::from_static("babylog_csrf=abc123"),
+        );
+        h.insert(
+            axum::http::HeaderName::from_static("x-csrf-token"),
+            HeaderValue::from_static("abc123"),
+        );
+        assert!(super::enforce_csrf(&h).is_ok());
+    }
+
+    #[test]
+    fn enforce_csrf_rejects_when_missing_or_mismatch() {
+        // Missing entirely
+        let h = HeaderMap::new();
+        let err = super::enforce_csrf(&h).unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+
+        // Present but mismatched
+        let mut h2 = HeaderMap::new();
+        h2.insert(
+            axum::http::header::COOKIE,
+            HeaderValue::from_static("babylog_csrf=abc"), // cookie value
+        );
+        h2.insert(
+            axum::http::HeaderName::from_static("x-csrf-token"),
+            HeaderValue::from_static("xyz"), // header mismatch
+        );
+        let err2 = super::enforce_csrf(&h2).unwrap_err();
+        assert_eq!(err2.0, StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn bearer_and_cookie_token_parsing() {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer token123"),
+        );
+        assert_eq!(super::bearer_token(&h).as_deref(), Some("token123"));
+
+        let mut h2 = HeaderMap::new();
+        h2.insert(
+            axum::http::header::COOKIE,
+            HeaderValue::from_static("babylog_session=abc; other=1"),
+        );
+        assert_eq!(super::cookie_token(&h2).as_deref(), Some("abc"));
+    }
+}

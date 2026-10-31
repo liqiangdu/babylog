@@ -1258,3 +1258,32 @@ async fn put_vaccine_templates(
             .into_response(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::IntoResponse as _;
+
+    #[tokio::test]
+    async fn health_returns_ok() {
+        let response = health().await.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn sniff_image_ext_detects_common_types() {
+        // JPEG (prefix + padding to meet 12-byte minimum)
+        let mut jpg = vec![0xFF, 0xD8, 0xFF];
+        jpg.resize(12, 0u8);
+        assert!(sniff_image_ext(&jpg).is_some());
+        // GIF
+        assert!(sniff_image_ext(b"GIF89a.......").is_some());
+        assert!(sniff_image_ext(b"GIF87a.......").is_some());
+        // WEBP (RIFF....WEBP)
+        let mut webp = b"RIFF____WEBP".to_vec();
+        webp[4] = 0; webp[5] = 0; webp[6] = 0; webp[7] = 0; // placeholder size bytes
+        assert!(sniff_image_ext(&webp).is_some());
+        // Unknown
+        assert!(sniff_image_ext(b"BM...").is_none());
+    }
+}
